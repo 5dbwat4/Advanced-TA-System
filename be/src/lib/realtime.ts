@@ -119,23 +119,75 @@ type CheckoffSession = {
   state: SlaveCardState
   createdAt: number
   updatedAt: number
+  /** 该会话内存活的 master socket id */
+  masters: Set<string>
+  /** 该会话内存活的 slave socket id */
+  slaves: Set<string>
 }
 
 const SESSION_TTL = 1000 * 60 * 60 * 4
 /** 配对码刷新周期：60 秒 */
 const CODE_PERIOD = 60
 const checkoffSessions = new Map<string, CheckoffSession>()
+/** 每个用户至多一个会话：userId → token */
+const userSessions = new Map<string, string>()
 
-function gcCheckoffSessions() {
+/** 删除会话：踢出房间并通知 slave */
+function purgeSession(session: CheckoffSession): void {
+  checkoffSessions.delete(session.token)
+  if (userSessions.get(session.masterUserId) === session.token) {
+    userSessions.delete(session.masterUserId)
+  }
+  const room = checkoffRoom(session.token)
+  io?.to(room).emit('slave:closed')
+  io?.in(room).socketsLeave(room)
+}
+
+function gcCheckoffSessions(): void {
   const now = Date.now()
-  for (const [key, session] of checkoffSessions) {
-    if (now - session.updatedAt > SESSION_TTL) checkoffSessions.delete(key)
+  for (const session of [...checkoffSessions.values()]) {
+    const expired = now - session.updatedAt > SESSION_TTL
+    const empty = session.masters.size === 0 && session.slaves.size === 0
+    if (expired || empty) purgeSession(session)
   }
 }
 
-/** 6 位配对码无法反查会话，遍历活跃会话用 TOTP 校验 */
+/** 读取用户当前存活的会话 */
+function sessionForUser(userId: string): CheckoffSession | undefined {
+  const token = userSessions.get(userId)
+  if (!token) return undefined
+  const session = checkoffSessions.get(token)
+  if (!session) {
+    userSessions.delete(userId)
+    return undefined
+  }
+  return session
+}
+
+/** socket 离开会话：清空标记；若 master 与 slave 均已离场则删除会话 */
+function leaveSession(socket: Socket): void {
+  const token = socket.data.checkoffToken as string | undefined
+  const role = socket.data.role as string | undefined
+  socket.data.checkoffToken = undefined
+  socket.data.role = undefined
+  if (typeof token !== 'string' || !role) return
+  void socket.leave(checkoffRoom(token))
+  const session = checkoffSessions.get(token)
+  if (!session) return
+  if (role === 'master') session.masters.delete(socket.id)
+  else if (role === 'slave') session.slaves.delete(socket.id)
+  session.updatedAt = Date.now()
+  if (session.masters.size === 0 && session.slaves.size === 0) purgeSession(session)
+}
+
+/** 6 位配对码无法反查会话，遍历活跃会话用 TOTP 校验（顺带清理过期会话） */
 function findSessionByCode(code: string): CheckoffSession | undefined {
-  for (const session of checkoffSessions.values()) {
+  const now = Date.now()
+  for (const session of [...checkoffSessions.values()]) {
+    if (now - session.updatedAt > SESSION_TTL) {
+      purgeSession(session)
+      continue
+    }
     if (verifyTotp(session.secret, code, session.period)) return session
   }
   return undefined
@@ -205,16 +257,25 @@ export function createRealtime(fastify: FastifyInstance): Server {
       const user = socket.data.user as { sub?: string } | undefined
       if (!user?.sub) return ack?.({ error: 'UNAUTHORIZED' })
       gcCheckoffSessions()
-      const session: CheckoffSession = {
-        token: randomUUID(),
-        secret: randomSecret(),
-        period: CODE_PERIOD,
-        masterUserId: user.sub,
-        state: { kind: 'idle', experimentMark: '', experimentTitle: '' },
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+      // 该用户已有存活会话（如 slave 仍在）时直接加入，避免重复建会话
+      let session = sessionForUser(user.sub)
+      if (!session) {
+        session = {
+          token: randomUUID(),
+          secret: randomSecret(),
+          period: CODE_PERIOD,
+          masterUserId: user.sub,
+          state: { kind: 'idle', experimentMark: '', experimentTitle: '' },
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          masters: new Set(),
+          slaves: new Set(),
+        }
+        checkoffSessions.set(session.token, session)
+        userSessions.set(user.sub, session.token)
       }
-      checkoffSessions.set(session.token, session)
+      session.masters.add(socket.id)
+      session.updatedAt = Date.now()
       socket.data.role = 'master'
       socket.data.checkoffToken = session.token
       await socket.join(checkoffRoom(session.token))
@@ -224,6 +285,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
         period: session.period,
         serverTime: Date.now(),
         state: session.state,
+        slaveConnected: session.slaves.size > 0,
       })
     })
 
@@ -234,6 +296,8 @@ export function createRealtime(fastify: FastifyInstance): Server {
         const session = typeof token === 'string' ? checkoffSessions.get(token) : undefined
         if (!user?.sub || !session || session.masterUserId !== user.sub)
           return ack?.({ error: 'FORBIDDEN' })
+        session.masters.add(socket.id)
+        session.updatedAt = Date.now()
         socket.data.role = 'master'
         socket.data.checkoffToken = session.token
         await socket.join(checkoffRoom(session.token))
@@ -243,6 +307,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
           period: session.period,
           serverTime: Date.now(),
           state: session.state,
+          slaveConnected: session.slaves.size > 0,
         })
       },
     )
@@ -288,9 +353,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
     socket.on('master:close', ({ token } = {} as { token?: string }) => {
       if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) return
       if (typeof token !== 'string') return
-      checkoffSessions.delete(token)
-      server.to(checkoffRoom(token)).emit('slave:closed')
-      server.in(checkoffRoom(token)).socketsLeave(checkoffRoom(token))
+      leaveSession(socket)
     })
 
     /* -------- slave -------- */
@@ -310,12 +373,19 @@ export function createRealtime(fastify: FastifyInstance): Server {
         if (!session) return ack?.({ error: 'SESSION_NOT_FOUND' })
         socket.data.role = 'slave'
         socket.data.checkoffToken = session.token
+        session.slaves.add(socket.id)
+        session.updatedAt = Date.now()
         await socket.join(checkoffRoom(session.token))
         ack?.({ token: session.token, state: session.state })
         server.to(checkoffRoom(session.token)).emit('master:slave-joined')
       },
     )
+
+    socket.on('disconnect', () => {
+      leaveSession(socket)
+    })
   })
+
 
   io = server
   return server

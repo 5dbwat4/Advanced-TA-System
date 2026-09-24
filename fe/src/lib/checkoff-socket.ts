@@ -65,6 +65,7 @@ export function useCheckoffMaster(enabled: boolean, masterUserId: string | undef
         secret?: string
         period?: number
         serverTime?: number
+        slaveConnected?: boolean
         error?: string
       }) => {
         if (!res?.token) return
@@ -74,7 +75,7 @@ export function useCheckoffMaster(enabled: boolean, masterUserId: string | undef
           secret: res.secret ?? null,
           period: res.period ?? 60,
           serverTime: res.serverTime ?? null,
-          slaveConnected: false,
+          slaveConnected: res.slaveConnected ?? false,
           ready: true,
         })
       },
