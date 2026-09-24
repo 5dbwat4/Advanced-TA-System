@@ -1,7 +1,10 @@
 import { Button, Input, Modal, Skeleton, Spinner, Tooltip, useOverlayState } from '@heroui/react'
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
 
+import ArrowDown from '~icons/lucide/arrow-down'
+import ArrowUp from '~icons/lucide/arrow-up'
+import ArrowUpDown from '~icons/lucide/arrow-up-down'
 import FlaskConical from '~icons/lucide/flask-conical'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import School from '~icons/lucide/school'
@@ -62,6 +65,87 @@ function formatUpdatedAt(value: string): string {
     minute: '2-digit',
     hour12: false,
   })
+}
+
+type SortDir = 'asc' | 'desc'
+type SortState = { key: string; dir: SortDir }
+
+function SortIndicator({ dir }: { dir: SortDir | null }) {
+  if (dir === 'asc') return <ArrowUp width={12} height={12} className="shrink-0" />
+  if (dir === 'desc') return <ArrowDown width={12} height={12} className="shrink-0" />
+  return (
+    <ArrowUpDown
+      width={12}
+      height={12}
+      className="shrink-0 opacity-30 transition-opacity group-hover/sort:opacity-70"
+    />
+  )
+}
+
+function SortButton({
+  label,
+  columnKey,
+  sort,
+  onToggle,
+}: {
+  label: string
+  columnKey: string
+  sort: SortState | null
+  onToggle: (key: string) => void
+}) {
+  const active = sort?.key === columnKey
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(columnKey)}
+      className="group/sort inline-flex items-center gap-1 rounded-md transition-colors hover:text-fg"
+      aria-label={`按「${label}」排序`}
+    >
+      {label}
+      <SortIndicator dir={active ? sort.dir : null} />
+    </button>
+  )
+}
+
+const STUDENT_SORT_KEY = 'student'
+
+/** 依据排序状态返回排好序的学生列表；无分数的行始终排在末尾 */
+function sortStudents(
+  list: Student[],
+  sort: SortState | null,
+  scores: Map<string, Score>,
+): Student[] {
+  if (!sort) return list
+  const factor = sort.dir === 'asc' ? 1 : -1
+  const [expId, typePart] = sort.key === STUDENT_SORT_KEY ? [] : sort.key.split(':')
+  const type = typePart === undefined ? undefined : Number(typePart)
+  const byName = (a: Student, b: Student) => a.name.localeCompare(b.name, 'zh-Hans-CN')
+  const compare = (a: Student, b: Student): number => {
+    if (!expId || type === undefined) {
+      const cmp = byName(a, b)
+      return cmp !== 0 ? cmp * factor : a.studentNo.localeCompare(b.studentNo)
+    }
+    const va = scores.get(scoreKey(a.stuId, type, expId))?.score ?? null
+    const vb = scores.get(scoreKey(b.stuId, type, expId))?.score ?? null
+    if (va === null || vb === null) {
+      if (va === null && vb === null) return byName(a, b)
+      return va === null ? 1 : -1
+    }
+    return va !== vb ? (va - vb) * factor : byName(a, b)
+  }
+  // 就地构建新数组（不修改入参），避免 React Compiler 将入参判定为可变
+  const out: Student[] = []
+  for (const student of list) {
+    let lo = 0
+    let hi = out.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (compare(out[mid], student) <= 0) lo = mid + 1
+      else hi = mid
+    }
+    out.splice(lo, 0, student)
+  }
+  return out
 }
 
 function ScoreCell({
@@ -161,6 +245,15 @@ export default function Scores() {
   const [loading, setLoading] = useState(true)
   const [rosterBusy, setRosterBusy] = useState(false)
   const [pendingDiff, setPendingDiff] = useState<RosterDiff | null>(null)
+  const [sort, setSort] = useState<SortState | null>(null)
+
+  const toggleSort = useCallback((key: string) => {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' }
+      if (prev.dir === 'asc') return { key, dir: 'desc' }
+      return null
+    })
+  }, [])
 
   const rosterState = useOverlayState({
     onOpenChange: (open) => {
@@ -268,9 +361,21 @@ export default function Scores() {
     [],
   )
 
-  const visibleStudents = currentClass
-    ? students.filter((student) => student.classId === currentClass.id)
-    : []
+  const visibleStudents = useMemo(
+    () => (currentClass ? students.filter((student) => student.classId === currentClass.id) : []),
+    [students, currentClass],
+  )
+
+  const sortedStudents = useMemo(() => sortStudents(visibleStudents, sort, scores), [
+    visibleStudents,
+    sort,
+    scores,
+  ])
+
+  const ariaSort = (key: string): 'ascending' | 'descending' | 'none' => {
+    if (sort?.key !== key) return 'none'
+    return sort.dir === 'asc' ? 'ascending' : 'descending'
+  }
 
   const classExperiments = currentClass
     ? experiments.filter((exp) => exp.classId === currentClass.id)
@@ -486,9 +591,15 @@ export default function Scores() {
                   <tr>
                     <th
                       rowSpan={2}
+                      aria-sort={ariaSort(STUDENT_SORT_KEY)}
                       className="sticky left-0 z-30 border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
                     >
-                      学生
+                      <SortButton
+                        label="学生"
+                        columnKey={STUDENT_SORT_KEY}
+                        sort={sort}
+                        onToggle={toggleSort}
+                      />
                     </th>
                     {classExperiments.map((exp) => (
                       <th
@@ -505,16 +616,22 @@ export default function Scores() {
                       SCORE_TYPES.map((type) => (
                         <th
                           key={`${exp.id}:${type.value}`}
+                          aria-sort={ariaSort(`${exp.id}:${type.value}`)}
                           className="border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
                         >
-                          {type.label}
+                          <SortButton
+                            label={type.label}
+                            columnKey={`${exp.id}:${type.value}`}
+                            sort={sort}
+                            onToggle={toggleSort}
+                          />
                         </th>
                       )),
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleStudents.map((student) => (
+                  {sortedStudents.map((student) => (
                     <tr key={student.stuId} className="transition-colors hover:bg-sunken/40">
                       <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
                         <div className="font-bold">{student.name}</div>
