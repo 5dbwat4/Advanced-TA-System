@@ -1,4 +1,4 @@
-import { Button, Input, Skeleton, Spinner, Tabs } from '@heroui/react'
+import { Button, Input, Modal, Pagination, Skeleton, Spinner, Tabs, useOverlayState } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 
 import Bot from '~icons/lucide/bot'
 import Check from '~icons/lucide/check'
-import ChevronDown from '~icons/lucide/chevron-down'
 import ChevronUp from '~icons/lucide/chevron-up'
 import Copy from '~icons/lucide/copy'
 import Eye from '~icons/lucide/eye'
@@ -50,9 +49,9 @@ function QuestionsPanel() {
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [formOpen, setFormOpen] = useState(false)
+  const formState = useOverlayState()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
@@ -62,7 +61,10 @@ function QuestionsPanel() {
   const [busyId, setBusyId] = useState<string | null>(null)
 
   useEffect(() => {
-    const timer = setTimeout(() => setApplied(query.trim()), 300)
+    const timer = setTimeout(() => {
+      setApplied(query.trim())
+      setPage(1)
+    }, 300)
     return () => clearTimeout(timer)
   }, [query])
 
@@ -71,8 +73,16 @@ function QuestionsPanel() {
     setLoading(true)
     const run = async () => {
       try {
-        const data = await listQuestions({ q: applied, limit: PAGE_SIZE })
+        const data = await listQuestions({
+          q: applied,
+          limit: PAGE_SIZE,
+          offset: (page - 1) * PAGE_SIZE,
+        })
         if (cancelled) return
+        if (data.questions.length === 0 && page > 1) {
+          setPage((p) => p - 1)
+          return
+        }
         setItems(data.questions)
         setTotal(data.total)
       } catch (error) {
@@ -85,25 +95,31 @@ function QuestionsPanel() {
     return () => {
       cancelled = true
     }
-  }, [applied, refreshKey])
+  }, [applied, refreshKey, page])
 
   const refresh = () => setRefreshKey((key) => key + 1)
 
-  const loadMore = async () => {
-    setLoadingMore(true)
-    try {
-      const data = await listQuestions({ q: applied, limit: PAGE_SIZE, offset: items.length })
-      setItems((prev) => [...prev, ...data.questions])
-      setTotal(data.total)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
-    } finally {
-      setLoadingMore(false)
-    }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const goToPage = (next: number) => {
+    setPage(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const pageNumbers = (): (number | 'ellipsis')[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    const pages: (number | 'ellipsis')[] = [1]
+    if (page > 3) pages.push('ellipsis')
+    const start = Math.max(2, page - 1)
+    const end = Math.min(totalPages - 1, page + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (page < totalPages - 2) pages.push('ellipsis')
+    pages.push(totalPages)
+    return pages
   }
 
   const resetForm = () => {
-    setFormOpen(false)
+    formState.close()
     setEditingId(null)
     setQuestion('')
     setAnswer('')
@@ -113,18 +129,17 @@ function QuestionsPanel() {
     setEditingId(null)
     setQuestion('')
     setAnswer('')
-    setFormOpen(true)
+    formState.open()
   }
 
   const openEdit = (item: Question) => {
     setEditingId(item.id)
     setQuestion(item.question)
     setAnswer(item.answer)
-    setFormOpen(true)
+    formState.open()
   }
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const submit = async () => {
     setSaving(true)
     try {
       const body = { question: question.trim(), answer: answer.trim() }
@@ -189,15 +204,8 @@ function QuestionsPanel() {
             aria-label="搜索题目内容"
           />
         </div>
-        <Button
-          variant={formOpen ? 'ghost' : 'primary'}
-          onPress={() => (formOpen ? resetForm() : openCreate())}
-        >
-          {formOpen ? (
-            <X width={16} height={16} className="shrink-0" />
-          ) : (
-            <Plus width={16} height={16} className="shrink-0" />
-          )}
+        <Button variant="primary" onPress={openCreate}>
+          <Plus width={16} height={16} className="shrink-0" />
           新建题目
         </Button>
         <Button
@@ -209,51 +217,6 @@ function QuestionsPanel() {
             <Bot width={16} height={16} className="shrink-0" />
         </Button>
       </div>
-
-      <AnimatePresence>
-        {formOpen && (
-          <motion.form
-            key="form"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            onSubmit={submit}
-            className="mb-6 flex flex-col gap-4 rounded-2xl border border-line bg-elevated p-6"
-          >
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-fg-muted">题目</label>
-              <MarkdownEditor value={question} onChange={setQuestion} />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-fg-muted">答案</label>
-              <MarkdownEditor value={answer} onChange={setAnswer} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onPress={resetForm}>
-                取消
-              </Button>
-              <Button
-                type="submit"
-                isPending={saving}
-                isDisabled={!question.trim() || !answer.trim()}
-                className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
-              >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      <Check width={16} height={16} className="shrink-0" />
-                    )}
-                    {isPending ? '保存中' : editingId ? '保存修改' : '添加题目'}
-                  </>
-                )}
-              </Button>
-            </div>
-          </motion.form>
-        )}
-      </AnimatePresence>
 
       {!loading && (
         <div className="mb-3 text-xs text-fg-subtle">
@@ -384,14 +347,92 @@ function QuestionsPanel() {
         </div>
       )}
 
-      {!loading && items.length < total && (
-        <div className="mt-4 flex justify-center">
-          <Button variant="secondary" isPending={loadingMore} onPress={loadMore}>
-            <ChevronDown width={15} height={15} className="shrink-0" />
-            加载更多（{items.length}/{total}）
-          </Button>
-        </div>
+      {!loading && totalPages > 1 && (
+        <Pagination className="mt-4 justify-center" size="sm">
+          <Pagination.Content>
+            <Pagination.Item>
+              <Pagination.Previous isDisabled={page === 1} onPress={() => goToPage(page - 1)}>
+                <Pagination.PreviousIcon />
+                <span>上一页</span>
+              </Pagination.Previous>
+            </Pagination.Item>
+            {pageNumbers().map((p, i) =>
+              p === 'ellipsis' ? (
+                <Pagination.Item key={`ellipsis-${i}`}>
+                  <Pagination.Ellipsis />
+                </Pagination.Item>
+              ) : (
+                <Pagination.Item key={p}>
+                  <Pagination.Link isActive={p === page} onPress={() => goToPage(p)}>
+                    {p}
+                  </Pagination.Link>
+                </Pagination.Item>
+              ),
+            )}
+            <Pagination.Item>
+              <Pagination.Next
+                isDisabled={page === totalPages}
+                onPress={() => goToPage(page + 1)}
+              >
+                <span>下一页</span>
+                <Pagination.NextIcon />
+              </Pagination.Next>
+            </Pagination.Item>
+          </Pagination.Content>
+        </Pagination>
       )}
+
+      <Modal state={formState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-2xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  {editingId ? (
+                    <Pen width={18} height={18} className="shrink-0" />
+                  ) : (
+                    <Plus width={18} height={18} className="shrink-0" />
+                  )}
+                </Modal.Icon>
+                <Modal.Heading>{editingId ? '编辑题目' : '新建题目'}</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-fg-muted">题目</label>
+                  <MarkdownEditor value={question} onChange={setQuestion} />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-fg-muted">答案</label>
+                  <MarkdownEditor value={answer} onChange={setAnswer} />
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onPress={resetForm}>
+                  取消
+                </Button>
+                <Button
+                  isPending={saving}
+                  isDisabled={!question.trim() || !answer.trim()}
+                  onPress={submit}
+                  className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? (
+                        <Spinner color="current" size="sm" />
+                      ) : (
+                        <Check width={16} height={16} className="shrink-0" />
+                      )}
+                      {isPending ? '保存中' : editingId ? '保存修改' : '添加题目'}
+                    </>
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   )
 }
