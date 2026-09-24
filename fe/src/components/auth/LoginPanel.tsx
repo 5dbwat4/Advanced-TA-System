@@ -70,7 +70,7 @@ export function LoginPanel() {
     setPassword('')
   }
 
-  const useOtherMethod = () => {
+  const continueWithOtherMethod = () => {
     if (!lastUser) return
     setRole(lastUser.role)
     setMethod('password')
@@ -139,7 +139,7 @@ export function LoginPanel() {
       if ((error as Error).name === 'NotAllowedError') return
       if (error instanceof ApiError && error.code === 'CREDENTIAL_NOT_FOUND') {
         toast.error('该通行密钥不可用，请改用密码登录')
-        if (lastUser && !showFull) useOtherMethod()
+        if (lastUser && !showFull) continueWithOtherMethod()
         return
       }
       toast.error(error instanceof Error ? error.message : '登录失败')
@@ -222,7 +222,7 @@ export function LoginPanel() {
               </Button>
             )}
 
-            <Button type="button" fullWidth variant="secondary" onPress={useOtherMethod}>
+            <Button type="button" fullWidth variant="secondary" onPress={continueWithOtherMethod}>
               <Ellipsis width={16} height={16} className="shrink-0" />
               其它登录方式
             </Button>

@@ -14,6 +14,14 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom'],
   },
+  build: {
+    cssCodeSplit: false,
+    rolldownOptions: {
+      output: {
+        codeSplitting: false,
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -4,9 +4,12 @@ const TOKEN_KEY = 'tasaas.token'
 
 export type Role = 'TA' | 'TEACHER'
 
+export type MarkdownEditorId = 'uiw' | 'mdx'
+
 export type UserPreferences = {
   device: 'single' | 'multi'
   draw: 'random' | 'fixed'
+  markdownEditor: MarkdownEditorId
 }
 
 export type ClassInfo = {

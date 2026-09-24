@@ -2,8 +2,15 @@ import type { Class, User } from '@prisma/client'
 
 import { parseCredentials } from './webauthn'
 
+/** 倾向使用的 Markdown 编辑器 */
+export type MarkdownEditorId = 'uiw' | 'mdx'
+
 /** 验收偏好 */
-export type UserPreferences = { device: 'single' | 'multi'; draw: 'random' | 'fixed' }
+export type UserPreferences = {
+  device: 'single' | 'multi'
+  draw: 'random' | 'fixed'
+  markdownEditor: MarkdownEditorId
+}
 
 /** 解析验收偏好 JSON，非法时返回 null（不抛错） */
 export function parsePreferences(raw: string | null | undefined): UserPreferences | null {
@@ -12,11 +19,12 @@ export function parsePreferences(raw: string | null | undefined): UserPreference
   }
 
   try {
-    const value = JSON.parse(raw) as { device?: unknown; draw?: unknown }
+    const value = JSON.parse(raw) as { device?: unknown; draw?: unknown; markdownEditor?: unknown }
     const device = value?.device
     const draw = value?.draw
     if ((device === 'single' || device === 'multi') && (draw === 'random' || draw === 'fixed')) {
-      return { device, draw }
+      const markdownEditor: MarkdownEditorId = value?.markdownEditor === 'mdx' ? 'mdx' : 'uiw'
+      return { device, draw, markdownEditor }
     }
     return null
   } catch {

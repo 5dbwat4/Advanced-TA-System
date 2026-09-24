@@ -141,7 +141,7 @@ export function PreferenceOnboarding({
   const save = async () => {
     setSaving(true)
     try {
-      await onSubmit({ device, draw })
+      await onSubmit({ device, draw, markdownEditor: initial?.markdownEditor ?? 'uiw' })
     } finally {
       setSaving(false)
     }
