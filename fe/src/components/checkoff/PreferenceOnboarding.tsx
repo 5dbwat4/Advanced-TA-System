@@ -1,21 +1,28 @@
 import { Button, Spinner } from '@heroui/react'
 import { useState } from 'react'
 
+import Check from '~icons/lucide/check'
+import Dices from '~icons/lucide/dices'
+import Laptop from '~icons/lucide/laptop'
+import ListChecks from '~icons/lucide/list-checks'
+import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
+import Rocket from '~icons/lucide/rocket'
+import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import type { UserPreferences } from '@/lib/api'
+import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
 function ChoiceCard({
   selected,
-  icon,
+  icon: Ico,
   title,
   desc,
   onSelect,
   showIcon = true,
 }: {
   selected: boolean
-  icon: string
+  icon: IconComponent
   title: string
   desc: string
   onSelect: () => void
@@ -42,14 +49,14 @@ function ChoiceCard({
               : 'bg-sunken text-fg-muted',
           )}
         >
-          <Icon icon={icon} width={19} />
+          <Ico width={19} height={19} className="shrink-0" />
         </span>
       )}
       <span className="text-sm font-bold text-fg">{title}</span>
       <span className="text-xs font-normal text-fg-subtle">{desc}</span>
       {selected && (
         <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-white shadow-md">
-          <Icon icon="lucide:check" width={12} />
+          <Check width={12} height={12} className="shrink-0" />
         </span>
       )}
     </Button>
@@ -76,7 +83,7 @@ export function PreferenceFields({
         <div className="grid gap-3 sm:grid-cols-2">
           <ChoiceCard
             selected={device === 'single'}
-            icon="lucide:laptop"
+            icon={Laptop}
             title="单设备"
             desc="一台设备完成抽题与评分"
             onSelect={() => onDeviceChange('single')}
@@ -84,7 +91,7 @@ export function PreferenceFields({
           />
           <ChoiceCard
             selected={device === 'multi'}
-            icon="lucide:monitor-smartphone"
+            icon={MonitorSmartphone}
             title="多设备"
             desc="分屏协作，一台抽题一台评分"
             onSelect={() => onDeviceChange('multi')}
@@ -98,7 +105,7 @@ export function PreferenceFields({
         <div className="grid gap-3 sm:grid-cols-2">
           <ChoiceCard
             selected={draw === 'random'}
-            icon="lucide:dices"
+            icon={Dices}
             title="随机抽题"
             desc="现场为每位学生随机抽取题目"
             onSelect={() => onDrawChange('random')}
@@ -106,7 +113,7 @@ export function PreferenceFields({
           />
           <ChoiceCard
             selected={draw === 'fixed'}
-            icon="lucide:list-checks"
+            icon={ListChecks}
             title="选择题目"
             desc="从题库中手动挑选题目"
             onSelect={() => onDrawChange('fixed')}
@@ -144,7 +151,7 @@ export function PreferenceOnboarding({
     <Card className="flex flex-col gap-6 p-7">
       <div className="flex items-center gap-3">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500/15 to-amber-500/10 text-brand-600 dark:text-brand-300">
-          <Icon icon="lucide:sliders-horizontal" width={21} />
+          <SlidersHorizontal width={21} height={21} className="shrink-0" />
         </span>
         <div>
           <h2 className="text-lg font-bold text-fg">偏好选择</h2>
@@ -177,7 +184,7 @@ export function PreferenceOnboarding({
               {isPending ? (
                 <Spinner color="current" size="sm" />
               ) : (
-                <Icon icon="lucide:rocket" width={16} />
+                <Rocket width={16} height={16} className="shrink-0" />
               )}
               {initial ? '保存' : '开始验收'}
             </>

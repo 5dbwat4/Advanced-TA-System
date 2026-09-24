@@ -4,7 +4,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import ArrowRight from '~icons/lucide/arrow-right'
+import Check from '~icons/lucide/check'
+import Fingerprint from '~icons/lucide/fingerprint'
+import Plus from '~icons/lucide/plus'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
 import { registerPasskey } from '@/lib/passkey'
@@ -103,7 +106,7 @@ export default function Setup() {
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <Icon icon="lucide:fingerprint" width={18} />
+                  <Fingerprint width={18} height={18} className="shrink-0" />
                 </div>
                 <span className="flex-1 text-xs font-semibold text-fg-muted">Webauthn（选填）</span>
                 <Button
@@ -118,7 +121,11 @@ export default function Setup() {
                       {isPending ? (
                         <Spinner color="current" size="sm" />
                       ) : (
-                        <Icon icon={bound ? 'lucide:check' : 'lucide:plus'} width={16} />
+                        bound ? (
+                          <Check width={16} height={16} className="shrink-0" />
+                        ) : (
+                          <Plus width={16} height={16} className="shrink-0" />
+                        )
                       )}
                       {bound ? '已绑定' : '立即绑定本设备'}
                     </>
@@ -141,7 +148,7 @@ export default function Setup() {
                 {isPending ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <Icon icon="lucide:arrow-right" width={16} />
+                  <ArrowRight width={16} height={16} className="shrink-0" />
                 )}
                 {isPending ? '保存中' : '完成'}
               </>

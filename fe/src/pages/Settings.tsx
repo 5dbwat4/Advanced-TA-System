@@ -2,11 +2,19 @@ import { Button, Input, Modal, Spinner, useOverlayState } from '@heroui/react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import Check from '~icons/lucide/check'
+import Fingerprint from '~icons/lucide/fingerprint'
+import IdCard from '~icons/lucide/id-card'
+import Laptop from '~icons/lucide/laptop'
+import Lock from '~icons/lucide/lock'
+import Pencil from '~icons/lucide/pencil'
+import Plus from '~icons/lucide/plus'
+import Smartphone from '~icons/lucide/smartphone'
+import Trash2 from '~icons/lucide/trash-2'
 import { PreferenceSection } from '@/components/settings/PreferenceSection'
 import { SystemSection } from '@/components/settings/SystemSection'
 import { ZjuamSection } from '@/components/settings/ZjuamSection'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAuth } from '@/lib/auth'
 import { registerPasskey } from '@/lib/passkey'
@@ -94,7 +102,7 @@ export default function Settings() {
       <div className="space-y-4">
         <Card index={0} className="flex flex-col gap-5">
           <div className="flex items-center gap-2 text-sm font-bold">
-            <Icon icon="lucide:id-card" width={16} className="text-brand-600 dark:text-brand-300" />
+            <IdCard width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
             个人信息
           </div>
 
@@ -118,7 +126,7 @@ export default function Settings() {
                   aria-label="修改用户名"
                   onPress={openNameEdit}
                 >
-                  <Icon icon="lucide:pencil" width={14} />
+                  <Pencil width={14} height={14} className="shrink-0" />
                 </Button>
               </div>
             </div>
@@ -137,7 +145,7 @@ export default function Settings() {
           <div className="rounded-xl border border-line p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                <Icon icon="lucide:lock" width={18} />
+                <Lock width={18} height={18} className="shrink-0" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-fg-muted">密码</div>
@@ -187,7 +195,7 @@ export default function Settings() {
                         {isPending ? (
                           <Spinner color="current" size="sm" />
                         ) : (
-                          <Icon icon="lucide:check" width={16} />
+                          <Check width={16} height={16} className="shrink-0" />
                         )}
                         保存
                       </>
@@ -201,7 +209,7 @@ export default function Settings() {
           <div className="rounded-xl border border-line p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                <Icon icon="lucide:fingerprint" width={18} />
+                <Fingerprint width={18} height={18} className="shrink-0" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-fg-muted">通行密钥</div>
@@ -213,7 +221,7 @@ export default function Settings() {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:plus" width={16} />
+                      <Plus width={16} height={16} className="shrink-0" />
                     )}
                     绑定本设备
                   </>
@@ -232,15 +240,11 @@ export default function Settings() {
                     key={passkey.id}
                     className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2.5"
                   >
-                    <Icon
-                      icon={
-                        passkey.deviceType === 'multiDevice'
-                          ? 'lucide:smartphone'
-                          : 'lucide:laptop'
-                      }
-                      width={16}
-                      className="text-fg-muted"
-                    />
+                    {passkey.deviceType === 'multiDevice' ? (
+                      <Smartphone width={16} height={16} className="shrink-0 text-fg-muted" />
+                    ) : (
+                      <Laptop width={16} height={16} className="shrink-0 text-fg-muted" />
+                    )}
                     <div className="min-w-0 flex-1 truncate text-xs text-fg-muted">
                       {passkey.createdAt
                         ? new Date(passkey.createdAt).toLocaleDateString()
@@ -261,7 +265,7 @@ export default function Settings() {
                           {isPending ? (
                             <Spinner color="current" size="sm" />
                           ) : (
-                            <Icon icon="lucide:trash-2" width={16} />
+                            <Trash2 width={16} height={16} className="shrink-0" />
                           )}
                         </>
                       )}
@@ -280,7 +284,7 @@ export default function Settings() {
                 <Modal.CloseTrigger />
                 <Modal.Header>
                   <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                    <Icon icon="lucide:pencil" width={18} />
+                    <Pencil width={18} height={18} className="shrink-0" />
                   </Modal.Icon>
                   <Modal.Heading>修改用户名</Modal.Heading>
                 </Modal.Header>
@@ -316,7 +320,7 @@ export default function Settings() {
                         {isPending ? (
                           <Spinner color="current" size="sm" />
                         ) : (
-                          <Icon icon="lucide:check" width={16} />
+                          <Check width={16} height={16} className="shrink-0" />
                         )}
                         保存
                       </>

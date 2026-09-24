@@ -4,8 +4,14 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import Check from '~icons/lucide/check'
+import ChevronRight from '~icons/lucide/chevron-right'
+import FlaskConical from '~icons/lucide/flask-conical'
+import GraduationCap from '~icons/lucide/graduation-cap'
+import NotebookText from '~icons/lucide/notebook-text'
+import Plus from '~icons/lucide/plus'
+import X from '~icons/lucide/x'
 import { EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { apiFetch, type Experiment } from '@/lib/api'
 import { useCurrentClass } from '@/lib/store'
@@ -81,7 +87,11 @@ export default function Experiments() {
             variant={creating ? 'ghost' : 'primary'}
             onPress={() => setCreating((open) => !open)}
           >
-            <Icon icon={creating ? 'lucide:x' : 'lucide:plus'} width={16} />
+            {creating ? (
+              <X width={16} height={16} className="shrink-0" />
+            ) : (
+              <Plus width={16} height={16} className="shrink-0" />
+            )}
             新建实验
           </Button>
         }
@@ -126,7 +136,7 @@ export default function Experiments() {
             </div>
 
             <div className="flex items-center gap-2 rounded-xl bg-sunken px-4 py-2.5 text-xs text-fg-subtle">
-              <Icon icon="lucide:graduation-cap" width={14} />
+              <GraduationCap width={14} height={14} className="shrink-0" />
               归属课程：{currentClass?.name ?? '未选择课程'}
             </div>
 
@@ -142,7 +152,7 @@ export default function Experiments() {
                   {isPending ? (
                     <Spinner color="current" size="sm" />
                   ) : (
-                    <Icon icon="lucide:check" width={16} />
+                    <Check width={16} height={16} className="shrink-0" />
                   )}
                   {isPending ? '添加中' : '添加实验'}
                 </>
@@ -159,7 +169,7 @@ export default function Experiments() {
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <EmptyState icon="lucide:flask-conical" title="暂无实验" hint="点击右上角新建实验" />
+        <EmptyState icon={FlaskConical} title="暂无实验" hint="点击右上角新建实验" />
       ) : (
         <div className="space-y-3">
           {visible.map((exp, i) => (
@@ -181,13 +191,13 @@ export default function Experiments() {
                   {exp.klass?.name ?? '未绑定课程'}
                 </span>
                 <span className="hidden items-center gap-1 text-xs text-fg-subtle sm:flex">
-                  <Icon icon="lucide:notebook-text" width={13} />
+                  <NotebookText width={13} height={13} className="shrink-0" />
                   {exp.questionBank ? exp.questionBank.name : '未绑定题目集'}
                 </span>
-                <Icon
-                  icon="lucide:chevron-right"
+                <ChevronRight
                   width={18}
-                  className="text-fg-subtle transition-transform group-hover:translate-x-0.5"
+                  height={18}
+                  className="shrink-0 text-fg-subtle transition-transform group-hover:translate-x-0.5"
                 />
               </Link>
             </motion.div>

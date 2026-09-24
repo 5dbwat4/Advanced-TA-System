@@ -5,10 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "predev": "node scripts/gen-icons.mjs",
     "build": "tsc -b && vite build",
-    "prebuild": "node scripts/gen-icons.mjs",
-    "gen:icons": "node scripts/gen-icons.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

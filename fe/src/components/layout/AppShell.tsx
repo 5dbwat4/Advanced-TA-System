@@ -4,25 +4,40 @@ import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import Bot from '~icons/lucide/bot'
+import ChevronDown from '~icons/lucide/chevron-down'
+import CircuitBoard from '~icons/lucide/circuit-board'
+import ClipboardCheck from '~icons/lucide/clipboard-check'
+import Cpu from '~icons/lucide/cpu'
+import FileText from '~icons/lucide/file-text'
+import FlaskConical from '~icons/lucide/flask-conical'
+import LayoutDashboard from '~icons/lucide/layout-dashboard'
+import LogOut from '~icons/lucide/log-out'
+import NotebookText from '~icons/lucide/notebook-text'
+import PanelLeftClose from '~icons/lucide/panel-left-close'
+import PanelLeftOpen from '~icons/lucide/panel-left-open'
+import School from '~icons/lucide/school'
+import Settings2 from '~icons/lucide/settings-2'
+import Table from '~icons/lucide/table'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
+import type { IconComponent } from '@/lib/icon'
 import { useAppStore, useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { getZjuamCredential } from '@/lib/zjuam'
 
-type NavItem = { to: string; label: string; icon: string; end?: boolean }
+type NavItem = { to: string; label: string; icon: IconComponent; end?: boolean }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/console', label: '总览', icon: 'lucide:layout-dashboard', end: true },
-  { to: '/console/checkoff', label: '验收', icon: 'lucide:clipboard-check' },
-  { to: '/console/boards', label: '开发板', icon: 'lucide:circuit-board' },
-  { to: '/console/experiments', label: '实验', icon: 'lucide:flask-conical' },
-  { to: '/console/questions', label: '题库', icon: 'lucide:notebook-text' },
-  { to: '/console/reports', label: '实验报告', icon: 'lucide:file-text' },
-  { to: '/console/scores', label: '分数和名单', icon: 'lucide:table' },
-  { to: '/console/llm-connect', label: 'MCP & Skills', icon: 'lucide:bot' },
-  { to: '/console/settings', label: '设置', icon: 'lucide:settings-2' },
+  { to: '/console', label: '总览', icon: LayoutDashboard, end: true },
+  { to: '/console/checkoff', label: '验收', icon: ClipboardCheck },
+  { to: '/console/boards', label: '开发板', icon: CircuitBoard },
+  { to: '/console/experiments', label: '实验', icon: FlaskConical },
+  { to: '/console/questions', label: '题库', icon: NotebookText },
+  { to: '/console/reports', label: '实验报告', icon: FileText },
+  { to: '/console/scores', label: '分数和名单', icon: Table },
+  { to: '/console/llm-connect', label: 'MCP & Skills', icon: Bot },
+  { to: '/console/settings', label: '设置', icon: Settings2 },
 ]
 
 export function AppShell() {
@@ -75,7 +90,7 @@ export function AppShell() {
           )}
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/25">
-            <Icon icon="lucide:cpu" width={20} />
+            <Cpu width={20} height={20} className="shrink-0" />
           </div>
           {!sidebarCollapsed && (
             <div className="leading-tight">
@@ -111,10 +126,11 @@ export function AppShell() {
                         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                       />
                     )}
-                    <Icon
-                      icon={item.icon}
+                    <item.icon
+                      width={18}
+                      height={18}
                       className={cn(
-                        'relative transition-colors',
+                        'shrink-0 relative transition-colors',
                         isActive ? 'text-brand-600 dark:text-brand-300' : 'group-hover:text-fg',
                       )}
                     />
@@ -163,7 +179,7 @@ export function AppShell() {
                 aria-label="退出登录"
                 onPress={handleLogout}
               >
-                <Icon icon="lucide:log-out" width={16} className="text-fg-muted" />
+                <LogOut width={16} height={16} className="shrink-0 text-fg-muted" />
               </Button>
             </div>
           ) : (
@@ -184,7 +200,7 @@ export function AppShell() {
                 aria-label="退出登录"
                 onPress={handleLogout}
               >
-                <Icon icon="lucide:log-out" width={16} className="text-fg-muted" />
+                <LogOut width={16} height={16} className="shrink-0 text-fg-muted" />
               </Button>
             </div>
           )}
@@ -201,7 +217,7 @@ export function AppShell() {
         <header className="glass sticky top-0 z-30 flex h-16 items-center justify-between border-b border-line px-4 md:px-8">
           <div className="flex items-center gap-3 md:hidden">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white">
-              <Icon icon="lucide:cpu" width={16} />
+              <Cpu width={16} height={16} className="shrink-0" />
             </div>
             <span className="text-sm font-bold">TA 助教台</span>
           </div>
@@ -213,18 +229,18 @@ export function AppShell() {
             aria-label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
             onPress={toggleSidebar}
           >
-            <Icon
-              icon={sidebarCollapsed ? 'lucide:panel-left-open' : 'lucide:panel-left-close'}
-              width={18}
-              className="text-fg-muted"
-            />
+            {sidebarCollapsed ? (
+              <PanelLeftOpen width={18} height={18} className="shrink-0 text-fg-muted" />
+            ) : (
+              <PanelLeftClose width={18} height={18} className="shrink-0 text-fg-muted" />
+            )}
           </Button>
           <div className="flex items-center gap-1">
             {hasXzzd && (
-              <Icon
-                icon="lucide:school"
+              <School
                 width={14}
-                className="text-brand-600 dark:text-brand-300"
+                height={14}
+                className="shrink-0 text-brand-600 dark:text-brand-300"
               />
             )}
             {classes.length === 0 ? (
@@ -240,7 +256,7 @@ export function AppShell() {
                   className="max-w-[10rem] md:max-w-[14rem]"
                 >
                   <span className="truncate">{currentClass?.name ?? '选择班级'}</span>
-                  <Icon icon="lucide:chevron-down" width={14} className="text-fg-subtle" />
+                  <ChevronDown width={14} height={14} className="shrink-0 text-fg-subtle" />
                 </Button>
                 <Dropdown.Popover>
                   <Dropdown.Menu
@@ -270,7 +286,7 @@ export function AppShell() {
               aria-label="退出登录"
               onPress={handleLogout}
             >
-              <Icon icon="lucide:log-out" width={16} />
+              <LogOut width={16} height={16} className="shrink-0" />
             </Button>
           </div>
         </header>
@@ -297,7 +313,7 @@ export function AppShell() {
                       className="absolute -top-px h-0.5 w-10 rounded-full bg-gradient-to-r from-brand-500 to-amber-500"
                     />
                   )}
-                  <Icon icon={item.icon} width={20} />
+                  <item.icon width={20} height={20} className="shrink-0" />
                   {item.label}
                 </>
               )}

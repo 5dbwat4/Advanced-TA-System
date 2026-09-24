@@ -2,8 +2,16 @@ import { Accordion, Button, Checkbox, Input, Modal, Spinner, useOverlayState } f
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import BookOpen from '~icons/lucide/book-open'
+import ChevronDown from '~icons/lucide/chevron-down'
+import Copy from '~icons/lucide/copy'
+import KeyRound from '~icons/lucide/key-round'
+import Plus from '~icons/lucide/plus'
+import ScrollText from '~icons/lucide/scroll-text'
+import Sparkles from '~icons/lucide/sparkles'
+import Trash2 from '~icons/lucide/trash-2'
+import TriangleAlert from '~icons/lucide/triangle-alert'
 import { Card, EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   createToken,
@@ -342,11 +350,11 @@ export default function LlmConnect() {
         <Card index={0} className="flex flex-col gap-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-bold">
-              <Icon icon="lucide:key-round" width={16} className="text-brand-600 dark:text-brand-300" />
+              <KeyRound width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
               访问令牌
             </div>
             <Button size="sm" variant="primary" onPress={createState.open}>
-              <Icon icon="lucide:plus" width={15} />
+              <Plus width={15} height={15} className="shrink-0" />
               新建令牌
             </Button>
           </div>
@@ -357,7 +365,7 @@ export default function LlmConnect() {
               加载中…
             </div>
           ) : tokens.length === 0 ? (
-            <EmptyState icon="lucide:key-round" title="暂无令牌" hint="点击右上角新建一个" />
+            <EmptyState icon={KeyRound} title="暂无令牌" hint="点击右上角新建一个" />
           ) : (
             <div className="flex flex-col gap-2">
               {tokens.map((item) => {
@@ -412,7 +420,7 @@ export default function LlmConnect() {
                               {isPending ? (
                                 <Spinner color="current" size="sm" />
                               ) : (
-                                <Icon icon="lucide:trash-2" width={14} />
+                                <Trash2 width={14} height={14} className="shrink-0" />
                               )}
                               撤销
                             </>
@@ -429,7 +437,7 @@ export default function LlmConnect() {
 
         <Card index={1} className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-sm font-bold">
-            <Icon icon="lucide:scroll-text" width={16} className="text-brand-600 dark:text-brand-300" />
+            <ScrollText width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
             审计日志
           </div>
 
@@ -439,7 +447,7 @@ export default function LlmConnect() {
               加载中…
             </div>
           ) : auditLogs.length === 0 ? (
-            <EmptyState icon="lucide:scroll-text" title="暂无调用记录" />
+            <EmptyState icon={ScrollText} title="暂无调用记录" />
           ) : (
             <div className="flex flex-col gap-2">
               {auditLogs.map((log) => (
@@ -477,7 +485,7 @@ export default function LlmConnect() {
 
         <Card index={2} className="flex flex-col gap-4">
           <div className="flex items-center gap-2 text-sm font-bold">
-            <Icon icon="lucide:book-open" width={16} className="text-brand-600 dark:text-brand-300" />
+            <BookOpen width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
             使用说明
           </div>
         </Card>
@@ -490,7 +498,11 @@ export default function LlmConnect() {
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <Icon icon={newToken ? 'lucide:sparkles' : 'lucide:key-round'} width={18} />
+                  {newToken ? (
+                    <Sparkles width={18} height={18} className="shrink-0" />
+                  ) : (
+                    <KeyRound width={18} height={18} className="shrink-0" />
+                  )}
                 </Modal.Icon>
                 <Modal.Heading>{newToken ? '令牌已创建' : '新建访问令牌'}</Modal.Heading>
               </Modal.Header>
@@ -499,7 +511,7 @@ export default function LlmConnect() {
                   <>
                     <div className="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4">
                       <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-brand-600 dark:text-brand-300">
-                        <Icon icon="lucide:triangle-alert" width={14} />
+                        <TriangleAlert width={14} height={14} className="shrink-0" />
                         此令牌只显示一次，请立即复制保存
                       </div>
                       <div className="flex items-center gap-2">
@@ -513,7 +525,7 @@ export default function LlmConnect() {
                           aria-label="复制令牌"
                           onPress={() => copyText(newToken, '令牌')}
                         >
-                          <Icon icon="lucide:copy" width={15} />
+                          <Copy width={15} height={15} className="shrink-0" />
                         </Button>
                       </div>
                     </div>
@@ -531,7 +543,7 @@ export default function LlmConnect() {
                           aria-label="复制提示词"
                           onPress={() => copyText(agentPrompt, '提示词')}
                         >
-                          <Icon icon="lucide:copy" width={14} />
+                                      <Copy width={14} height={14} className="shrink-0" />
                         </Button>
                       </div>
                     </div>
@@ -545,7 +557,7 @@ export default function LlmConnect() {
                               <Accordion.Trigger>
                                 {guide.name}
                                 <Accordion.Indicator>
-                                  <Icon icon="lucide:chevron-down" width={16} />
+                                   <ChevronDown width={16} height={16} className="shrink-0" />
                                 </Accordion.Indicator>
                               </Accordion.Trigger>
                             </Accordion.Heading>
@@ -563,7 +575,7 @@ export default function LlmConnect() {
                                     variant="ghost"
                                     onPress={() => copyText(guide.code, `${guide.name} 配置`)}
                                   >
-                                    <Icon icon="lucide:copy" width={14} />
+                                    <Copy width={14} height={14} className="shrink-0" />
                                     复制
                                   </Button>
                                 </div>
@@ -587,7 +599,7 @@ export default function LlmConnect() {
                                       aria-label="复制命令"
                                       onPress={() => copyText(guide.extra ?? '', '命令')}
                                     >
-                                      <Icon icon="lucide:copy" width={14} />
+                          <Copy width={14} height={14} className="shrink-0" />
                                     </Button>
                                   </div>
                                 )}
@@ -681,7 +693,7 @@ export default function LlmConnect() {
                           {isPending ? (
                             <Spinner color="current" size="sm" />
                           ) : (
-                            <Icon icon="lucide:key-round" width={15} />
+                             <KeyRound width={15} height={15} className="shrink-0" />
                           )}
                           创建令牌
                         </>

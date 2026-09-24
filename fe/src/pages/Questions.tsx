@@ -4,9 +4,23 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import Bot from '~icons/lucide/bot'
+import Check from '~icons/lucide/check'
+import ChevronDown from '~icons/lucide/chevron-down'
+import ChevronUp from '~icons/lucide/chevron-up'
+import Copy from '~icons/lucide/copy'
+import Eye from '~icons/lucide/eye'
+import EyeOff from '~icons/lucide/eye-off'
+import Library from '~icons/lucide/library'
+import NotebookText from '~icons/lucide/notebook-text'
+import Pen from '~icons/lucide/pen'
+import Plus from '~icons/lucide/plus'
+import Search from '~icons/lucide/search'
+import Settings2 from '~icons/lucide/settings-2'
+import Trash2 from '~icons/lucide/trash-2'
+import X from '~icons/lucide/x'
 import { SetQuestionsEditor } from '@/components/questions/SetQuestionsEditor'
 import { EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { Markdown } from '@/components/ui/Markdown'
 import { MarkdownEditor } from '@/components/ui/MarkdownEditor'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -161,10 +175,10 @@ function QuestionsPanel() {
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[16rem] flex-1">
-          <Icon
-            icon="lucide:search"
+          <Search
             width={15}
-            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-subtle"
+            height={15}
+            className="shrink-0 pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-subtle"
           />
           <Input
             fullWidth
@@ -179,7 +193,11 @@ function QuestionsPanel() {
           variant={formOpen ? 'ghost' : 'primary'}
           onPress={() => (formOpen ? resetForm() : openCreate())}
         >
-          <Icon icon={formOpen ? 'lucide:x' : 'lucide:plus'} width={16} />
+          {formOpen ? (
+            <X width={16} height={16} className="shrink-0" />
+          ) : (
+            <Plus width={16} height={16} className="shrink-0" />
+          )}
           新建题目
         </Button>
         <Button
@@ -188,7 +206,7 @@ function QuestionsPanel() {
           aria-label="连接你的Agent"
           onPress={() => navigate('/console/llm-connect')}
         >
-          <Icon icon="lucide:bot" width={16} />
+            <Bot width={16} height={16} className="shrink-0" />
         </Button>
       </div>
 
@@ -226,7 +244,7 @@ function QuestionsPanel() {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:check" width={16} />
+                      <Check width={16} height={16} className="shrink-0" />
                     )}
                     {isPending ? '保存中' : editingId ? '保存修改' : '添加题目'}
                   </>
@@ -251,7 +269,7 @@ function QuestionsPanel() {
         </div>
       ) : items.length === 0 ? (
         <EmptyState
-          icon="lucide:notebook-text"
+          icon={NotebookText}
           title={applied ? '没有匹配的题目' : '暂无题目'}
           hint={applied ? '换个关键词试试' : '点击右上角新建题目'}
         />
@@ -283,7 +301,7 @@ function QuestionsPanel() {
                   >
                     {isOwner ? (
                       <Button size="sm" variant="ghost" onPress={() => openEdit(item)}>
-                        <Icon icon="lucide:pen" width={14} />
+                        <Pen width={14} height={14} className="shrink-0" />
                         编辑
                       </Button>
                     ) : (
@@ -293,7 +311,7 @@ function QuestionsPanel() {
                         isPending={busyId === item.id}
                         onPress={() => duplicate(item.id)}
                       >
-                        <Icon icon="lucide:copy" width={14} />
+                        <Copy width={14} height={14} className="shrink-0" />
                         复制并编辑
                       </Button>
                     )}
@@ -311,7 +329,7 @@ function QuestionsPanel() {
                                 {isPending ? (
                                   <Spinner color="current" size="sm" />
                                 ) : (
-                                  <Icon icon="lucide:trash-2" width={14} />
+                                  <Trash2 width={14} height={14} className="shrink-0" />
                                 )}
                                 确认删除
                               </>
@@ -323,7 +341,7 @@ function QuestionsPanel() {
                         </>
                       ) : (
                         <Button size="sm" variant="ghost" onPress={() => setConfirmingId(item.id)}>
-                          <Icon icon="lucide:trash-2" width={14} />
+                          <Trash2 width={14} height={14} className="shrink-0" />
                           删除
                         </Button>
                       ))}
@@ -336,7 +354,11 @@ function QuestionsPanel() {
 
                 <div className="mt-3">
                   <Button size="sm" variant="ghost" onPress={() => setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }))}>
-                    <Icon icon={expanded[item.id] ? 'lucide:eye-off' : 'lucide:eye'} width={14} />
+                    {expanded[item.id] ? (
+                      <EyeOff width={14} height={14} className="shrink-0" />
+                    ) : (
+                      <Eye width={14} height={14} className="shrink-0" />
+                    )}
                     {expanded[item.id] ? '隐藏答案' : '显示答案'}
                   </Button>
                 </div>
@@ -365,7 +387,7 @@ function QuestionsPanel() {
       {!loading && items.length < total && (
         <div className="mt-4 flex justify-center">
           <Button variant="secondary" isPending={loadingMore} onPress={loadMore}>
-            <Icon icon="lucide:chevron-down" width={15} />
+            <ChevronDown width={15} height={15} className="shrink-0" />
             加载更多（{items.length}/{total}）
           </Button>
         </div>
@@ -488,7 +510,11 @@ function SetsPanel() {
             variant={creating ? 'ghost' : 'primary'}
             onPress={() => setCreating((open) => !open)}
           >
-            <Icon icon={creating ? 'lucide:x' : 'lucide:plus'} width={16} />
+            {creating ? (
+              <X width={16} height={16} className="shrink-0" />
+            ) : (
+              <Plus width={16} height={16} className="shrink-0" />
+            )}
             新建题目集
           </Button>
           <Button
@@ -497,7 +523,7 @@ function SetsPanel() {
             aria-label="连接你的Agent"
             onPress={() => navigate('/console/llm-connect')}
           >
-            <Icon icon="lucide:bot" width={16} />
+          <Bot width={16} height={16} className="shrink-0" />
           </Button>
         </div>
       </div>
@@ -537,7 +563,7 @@ function SetsPanel() {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:check" width={16} />
+                      <Check width={16} height={16} className="shrink-0" />
                     )}
                     {isPending ? '创建中' : '创建题目集'}
                   </>
@@ -555,7 +581,7 @@ function SetsPanel() {
           ))}
         </div>
       ) : banks.length === 0 ? (
-        <EmptyState icon="lucide:library" title="暂无题目集" hint="点击右上角新建题目集" />
+        <EmptyState icon={Library} title="暂无题目集" hint="点击右上角新建题目集" />
       ) : (
         <div className="space-y-3">
           {banks.map((bank, i) => {
@@ -610,7 +636,7 @@ function SetsPanel() {
                         setRenameValue(bank.name)
                       }}
                     >
-                      <Icon icon="lucide:pen" width={14} />
+                      <Pen width={14} height={14} className="shrink-0" />
                       重命名
                     </Button>
                     <Button
@@ -619,7 +645,7 @@ function SetsPanel() {
                       isPending={busyId === bank.id}
                       onPress={() => duplicate(bank.id)}
                     >
-                      <Icon icon="lucide:copy" width={14} />
+                      <Copy width={14} height={14} className="shrink-0" />
                       复制
                     </Button>
                     {confirmingId === bank.id ? (
@@ -635,7 +661,7 @@ function SetsPanel() {
                               {isPending ? (
                                 <Spinner color="current" size="sm" />
                               ) : (
-                                <Icon icon="lucide:trash-2" width={14} />
+                                <Trash2 width={14} height={14} className="shrink-0" />
                               )}
                               确认删除
                             </>
@@ -647,7 +673,7 @@ function SetsPanel() {
                       </>
                     ) : (
                       <Button size="sm" variant="ghost" onPress={() => setConfirmingId(bank.id)}>
-                        <Icon icon="lucide:trash-2" width={14} />
+                        <Trash2 width={14} height={14} className="shrink-0" />
                         删除
                       </Button>
                     )}
@@ -660,7 +686,11 @@ function SetsPanel() {
                     variant="secondary"
                     onPress={() => setExpandedId(expanded ? null : bank.id)}
                   >
-                    <Icon icon={expanded ? 'lucide:chevron-up' : 'lucide:settings-2'} width={14} />
+                    {expanded ? (
+                      <ChevronUp width={14} height={14} className="shrink-0" />
+                    ) : (
+                      <Settings2 width={14} height={14} className="shrink-0" />
+                    )}
                     {expanded ? '收起' : '管理题目'}
                   </Button>
                   {!isOwner && (

@@ -1,9 +1,16 @@
 import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 
+import Activity from '~icons/lucide/activity'
+import ArrowUpRight from '~icons/lucide/arrow-up-right'
+import ClipboardCheck from '~icons/lucide/clipboard-check'
+import ClipboardList from '~icons/lucide/clipboard-list'
+import CircuitBoard from '~icons/lucide/circuit-board'
+import FlaskConical from '~icons/lucide/flask-conical'
+import ShieldCheck from '~icons/lucide/shield-check'
+import Table from '~icons/lucide/table'
 import { StatCard } from '@/components/console/StatCard'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { ProgressRing } from '@/components/ui/ProgressRing'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
@@ -11,21 +18,21 @@ import { cn } from '@/lib/utils'
 const QUICK_ACTIONS = [
   {
     to: '/console/checkoff',
-    icon: 'lucide:clipboard-check',
+    icon: ClipboardCheck,
     title: '开始验收',
     desc: '抽题 · 评分 · 记录检查点',
     tone: 'from-brand-600 to-brand-700 shadow-brand-600/25',
   },
   {
     to: '/console/boards',
-    icon: 'lucide:circuit-board',
+    icon: CircuitBoard,
     title: '开发板管理',
     desc: '借出 / 归还硬件开发板',
     tone: 'from-amber-500 to-amber-600 shadow-amber-600/25',
   },
   {
     to: '/console/scores',
-    icon: 'lucide:table',
+    icon: Table,
     title: '分数和名单',
     desc: '功能测试 / 验收问答 / 报告分',
     tone: 'from-emerald-600 to-emerald-700 shadow-emerald-600/25',
@@ -52,9 +59,9 @@ export default function Dashboard() {
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard icon="lucide:clipboard-list" label="待验收" value={0} suffix="人" tone="brand" index={0} />
-        <StatCard icon="lucide:circuit-board" label="未归还开发板" value={0} tone="amber" index={1} />
-        <StatCard icon="lucide:flask-conical" label="实验项目" value={0} tone="success" index={2} />
+        <StatCard icon={ClipboardList} label="待验收" value={0} suffix="人" tone="brand" index={0} />
+        <StatCard icon={CircuitBoard} label="未归还开发板" value={0} tone="amber" index={1} />
+        <StatCard icon={FlaskConical} label="实验项目" value={0} tone="success" index={2} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_2fr]">
@@ -87,15 +94,15 @@ export default function Dashboard() {
                 )}
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-                  <Icon icon={action.icon} width={22} />
+                  <action.icon width={22} height={22} className="shrink-0" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 font-bold">
                     {action.title}
-                    <Icon
-                      icon="lucide:arrow-up-right"
+                    <ArrowUpRight
                       width={14}
-                      className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                      height={14}
+                      className="shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
                     />
                   </div>
                   <div className="truncate text-xs text-white/80">{action.desc}</div>
@@ -109,14 +116,14 @@ export default function Dashboard() {
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card index={0}>
           <div className="mb-4 flex items-center gap-2 text-sm font-bold">
-            <Icon icon="lucide:activity" width={16} className="text-brand-600 dark:text-brand-300" />
+            <Activity width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
             最近动态
           </div>
           <div className="py-10 text-center text-sm text-fg-subtle">暂无动态</div>
         </Card>
         <Card index={1}>
           <div className="mb-4 flex items-center gap-2 text-sm font-bold">
-            <Icon icon="lucide:shield-check" width={16} className="text-amber-500" />
+            <ShieldCheck width={16} height={16} className="shrink-0 text-amber-500" />
             系统状态
           </div>
           <div className="py-10 text-center text-sm text-fg-subtle">一切正常</div>

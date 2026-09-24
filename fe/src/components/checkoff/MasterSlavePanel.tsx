@@ -3,7 +3,9 @@ import { motion } from 'motion/react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import Check from '~icons/lucide/check'
+import Copy from '~icons/lucide/copy'
+import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import { useTotp } from '@/lib/totp'
 import { cn } from '@/lib/utils'
 
@@ -78,7 +80,7 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
       <div className="flex flex-wrap items-center gap-4 px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500/15 text-brand-600 dark:text-brand-300">
-            <Icon icon="lucide:monitor-smartphone" width={22} />
+            <MonitorSmartphone width={22} height={22} className="shrink-0" />
             <motion.span
               className={cn(
                 'absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full',
@@ -107,7 +109,11 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
         </div>
 
         <Button size="sm" variant="secondary" onPress={copy}>
-          <Icon icon={copied ? 'lucide:check' : 'lucide:copy'} width={14} />
+          {copied ? (
+            <Check width={14} height={14} className="shrink-0" />
+          ) : (
+            <Copy width={14} height={14} className="shrink-0" />
+          )}
           {copied ? '已复制' : '复制链接'}
         </Button>
 

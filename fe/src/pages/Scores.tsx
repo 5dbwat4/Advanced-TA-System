@@ -2,8 +2,12 @@ import { Button, Input, Modal, Skeleton, Spinner, Tooltip, useOverlayState } fro
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
 
+import FlaskConical from '~icons/lucide/flask-conical'
+import RefreshCw from '~icons/lucide/refresh-cw'
+import School from '~icons/lucide/school'
+import UserRoundPlus from '~icons/lucide/user-round-plus'
+import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
@@ -339,7 +343,7 @@ export default function Scores() {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:user-round-plus" width={15} />
+                      <UserRoundPlus width={15} height={15} className="shrink-0" />
                     )}
                     {rosterLabel}
                   </>
@@ -347,7 +351,7 @@ export default function Scores() {
               </Button>
             )}
             <Button size="sm" variant="ghost" isDisabled={loading} onPress={reload}>
-              <Icon icon="lucide:refresh-cw" width={15} />
+              <RefreshCw width={15} height={15} className="shrink-0" />
               刷新
             </Button>
           </>
@@ -361,7 +365,7 @@ export default function Scores() {
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Icon className="bg-danger/10 text-danger">
-                  <Icon icon="lucide:user-round-plus" width={18} />
+                  <UserRoundPlus width={18} height={18} className="shrink-0" />
                 </Modal.Icon>
                 <Modal.Heading>更新名单</Modal.Heading>
               </Modal.Header>
@@ -458,7 +462,7 @@ export default function Scores() {
           ))}
         </div>
       ) : !currentClass ? (
-        <EmptyState icon="lucide:school" title="尚未绑定班级" hint="请先在设置中绑定班级" />
+        <EmptyState icon={School} title="尚未绑定班级" hint="请先在设置中绑定班级" />
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -472,9 +476,9 @@ export default function Scores() {
           </div>
 
           {classExperiments.length === 0 ? (
-            <EmptyState icon="lucide:flask-conical" title="暂无实验" hint="请先在实验页创建实验" />
+            <EmptyState icon={FlaskConical} title="暂无实验" hint="请先在实验页创建实验" />
           ) : students.length === 0 ? (
-            <EmptyState icon="lucide:users" title="暂无学生" hint="请先导入学生名单" />
+            <EmptyState icon={Users} title="暂无学生" hint="请先导入学生名单" />
           ) : (
             <div className="max-h-[70vh] overflow-auto rounded-2xl border border-line">
               <table className="w-full border-separate border-spacing-0 text-sm">

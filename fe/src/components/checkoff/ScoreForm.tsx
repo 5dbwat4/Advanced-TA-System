@@ -2,15 +2,18 @@ import { Button, Input, Slider, Spinner } from '@heroui/react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import Check from '~icons/lucide/check'
+import ClipboardCheck from '~icons/lucide/clipboard-check'
+import Info from '~icons/lucide/info'
+import MessageCircleQuestion from '~icons/lucide/message-circle-question'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { submitCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
 import { SCORE_MAX } from '@/lib/scores'
 
 /** 计入总分的两类，权重 功能测试 : 验收问答 = 2 : 5（报告不计入） */
 const SCORED_TYPES = [
-  { value: 0, label: '功能测试', icon: 'lucide:clipboard-check', weight: 2 },
-  { value: 1, label: '验收问答', icon: 'lucide:message-circle-question', weight: 5 },
+  { value: 0, label: '功能测试', icon: ClipboardCheck, weight: 2 },
+  { value: 1, label: '验收问答', icon: MessageCircleQuestion, weight: 5 },
 ] as const
 
 const DEFAULT_SCORE = 100
@@ -97,7 +100,7 @@ export function ScoreForm({
             <div key={type.value} className="rounded-2xl border border-line bg-elevated p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <label className="flex items-center gap-2 text-sm font-semibold text-fg-muted">
-                  <Icon icon={type.icon} width={15} />
+                  <type.icon width={15} height={15} className="shrink-0" />
                   {type.label}
                   <span className="tabular rounded-md bg-sunken px-1.5 py-0.5 text-[11px] font-semibold text-fg-subtle">
                     ×{type.weight}
@@ -152,7 +155,7 @@ export function ScoreForm({
             <div className="tabular mt-1 text-sm text-white/60">/ {SCORE_MAX}</div>
           </div>
           <div className="relative mt-6 flex items-center gap-2 border-t border-white/10 pt-4 text-xs text-white/50">
-            <Icon icon="lucide:info" width={13} />
+            <Info width={13} height={13} className="shrink-0" />
             功能测试 ×2 · 验收问答 ×5（占比 2 : 5）
           </div>
         </div>
@@ -175,7 +178,7 @@ export function ScoreForm({
               {isPending ? (
                 <Spinner color="current" size="sm" />
               ) : (
-                <Icon icon="lucide:check" width={16} />
+                <Check width={16} height={16} className="shrink-0" />
               )}
               保存并下一位
             </>

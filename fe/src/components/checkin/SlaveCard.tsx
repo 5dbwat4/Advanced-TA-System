@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 
-import { Icon } from '@/components/ui/Icon'
+import Cpu from '~icons/lucide/cpu'
 import { Markdown } from '@/components/ui/Markdown'
 import type { SlaveCardState } from '@/lib/checkoff-socket'
 
@@ -26,7 +26,7 @@ function IdleCard({ mark, title }: { mark: string; title: string }) {
         transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
         className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-600/10 text-brand-600 dark:text-brand-300"
       >
-        <Icon icon="lucide:cpu" width={30} />
+        <Cpu width={30} height={30} className="shrink-0" />
       </motion.div>
       <div className="text-4xl font-bold tracking-tight text-fg md:text-5xl">此处可验收</div>
       {mark.length > 0 && (

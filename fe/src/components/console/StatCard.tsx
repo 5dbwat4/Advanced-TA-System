@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
 
-import { Icon } from '@/components/ui/Icon'
+import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
 const TONES = {
@@ -11,14 +11,14 @@ const TONES = {
 } as const
 
 export function StatCard({
-  icon,
+  icon: Ico,
   label,
   value,
   suffix,
   tone = 'brand',
   index = 0,
 }: {
-  icon: string
+  icon: IconComponent
   label: string
   value: number
   suffix?: string
@@ -33,7 +33,7 @@ export function StatCard({
       className="rounded-2xl border border-line bg-elevated p-5 transition-shadow hover:shadow-lg hover:shadow-brand-500/5"
     >
       <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', TONES[tone])}>
-        <Icon icon={icon} width={19} />
+        <Ico width={19} height={19} className="shrink-0" />
       </div>
       <div className="mt-3 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
         {label}

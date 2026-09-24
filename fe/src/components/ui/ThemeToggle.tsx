@@ -2,7 +2,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 
-import { Icon } from '@/components/ui/Icon'
+import Moon from '~icons/lucide/moon'
+import Sun from '~icons/lucide/sun'
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
@@ -28,7 +29,11 @@ export function ThemeToggle() {
           transition={{ type: 'spring', stiffness: 380, damping: 26 }}
           className="flex"
         >
-          <Icon icon={isDark ? 'lucide:moon' : 'lucide:sun'} width={18} />
+          {isDark ? (
+            <Moon width={18} height={18} className="shrink-0" />
+          ) : (
+            <Sun width={18} height={18} className="shrink-0" />
+          )}
         </motion.span>
       </AnimatePresence>
     </button>

@@ -2,27 +2,42 @@ import { Button, Spinner } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 
-import { Icon } from '@/components/ui/Icon'
+import ArrowRight from '~icons/lucide/arrow-right'
+import Check from '~icons/lucide/check'
+import ChevronLeft from '~icons/lucide/chevron-left'
+import ChevronRight from '~icons/lucide/chevron-right'
+import Dices from '~icons/lucide/dices'
+import Eye from '~icons/lucide/eye'
+import EyeOff from '~icons/lucide/eye-off'
+import HelpCircle from '~icons/lucide/help-circle'
+import Minus from '~icons/lucide/minus'
+import Shuffle from '~icons/lucide/shuffle'
+import SkipForward from '~icons/lucide/skip-forward'
+import X from '~icons/lucide/x'
 import type { CheckoffQuestion, CheckoffStudent } from '@/lib/api'
+import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
 export type QuestionMark = 'correct' | 'partial' | 'wrong'
 
-const MARK_META: Record<QuestionMark, { icon: string; label: string; className: string; activeClass: string }> = {
+const MARK_META: Record<
+  QuestionMark,
+  { icon: IconComponent; label: string; className: string; activeClass: string }
+> = {
   correct: {
-    icon: 'lucide:check',
+    icon: Check,
     label: '对',
     className: 'border-line text-fg-muted hover:border-emerald-500/50 hover:text-emerald-500',
     activeClass: 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   },
   partial: {
-    icon: 'lucide:minus',
+    icon: Minus,
     label: '半对',
     className: 'border-line text-fg-muted hover:border-amber-500/50 hover:text-amber-500',
     activeClass: 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400',
   },
   wrong: {
-    icon: 'lucide:x',
+    icon: X,
     label: '错',
     className: 'border-line text-fg-muted hover:border-red-500/50 hover:text-red-500',
     activeClass: 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400',
@@ -63,7 +78,7 @@ function MarkButtons({
               active ? meta.activeClass : meta.className,
             )}
           >
-            <Icon icon={meta.icon} width={13} />
+            <meta.icon width={13} height={13} className="shrink-0" />
             {meta.label}
           </motion.button>
         )
@@ -86,7 +101,11 @@ function AnswerReveal({
   return (
     <div className="flex flex-col gap-2">
       <Button size="sm" variant="ghost" onPress={() => onToggle(questionId)}>
-        <Icon icon={revealed[questionId] ? 'lucide:eye-off' : 'lucide:eye'} width={14} />
+        {revealed[questionId] ? (
+          <EyeOff width={14} height={14} className="shrink-0" />
+        ) : (
+          <Eye width={14} height={14} className="shrink-0" />
+        )}
         {revealed[questionId] ? '隐藏答案' : '显示答案'}
       </Button>
       <AnimatePresence initial={false}>
@@ -176,7 +195,7 @@ export function QuestionDrawer({
           onPress={() => goToQuestion(Math.max(0, questionIndex - 1))}
           aria-label="上一题"
         >
-          <Icon icon="lucide:chevron-left" width={15} />
+          <ChevronLeft width={15} height={15} className="shrink-0" />
         </Button>
         <div className="flex gap-1.5">
           {drawn.map((question, i) => (
@@ -200,7 +219,7 @@ export function QuestionDrawer({
           onPress={() => goToQuestion(Math.min(drawn.length - 1, questionIndex + 1))}
           aria-label="下一题"
         >
-          <Icon icon="lucide:chevron-right" width={15} />
+          <ChevronRight width={15} height={15} className="shrink-0" />
         </Button>
       </div>
     ) : null
@@ -208,7 +227,7 @@ export function QuestionDrawer({
   const footer = (
     <div className="mt-5 flex items-center justify-between gap-3">
       <Button size="sm" variant="ghost" onPress={onSkip}>
-        <Icon icon="lucide:skip-forward" width={14} />
+        <SkipForward width={14} height={14} className="shrink-0" />
         跳过抽题
       </Button>
       <Button
@@ -217,7 +236,7 @@ export function QuestionDrawer({
         className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
       >
         录入成绩
-        <Icon icon="lucide:arrow-right" width={16} />
+        <ArrowRight width={16} height={16} className="shrink-0" />
       </Button>
     </div>
   )
@@ -245,7 +264,7 @@ export function QuestionDrawer({
         <>
           <div className="rounded-2xl border border-dashed border-line p-12 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-fg-subtle">
-              <Icon icon="lucide:help-circle" width={20} />
+              <HelpCircle width={20} height={20} className="shrink-0" />
             </div>
             <div className="mt-3 text-sm font-semibold text-fg">该实验暂无题目</div>
             <div className="mt-1 text-xs text-fg-subtle">可跳过抽题，直接录入成绩</div>
@@ -267,7 +286,7 @@ export function QuestionDrawer({
                 transition={{ duration: 0.6, repeat: drawing ? Infinity : 0 }}
                 className="rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-4 text-white shadow-lg shadow-brand-600/30"
               >
-                <Icon icon="lucide:dices" width={28} />
+                <Dices width={28} height={28} className="shrink-0" />
               </motion.div>
               <span className="text-sm font-semibold text-fg-muted">
                 {drawing ? '抽取中…' : '现场抽题'}
@@ -318,7 +337,7 @@ export function QuestionDrawer({
             <div className={cn('mt-4 flex', pager ? 'items-center justify-between' : 'justify-end')}>
               {pager}
               <Button variant="ghost" size="sm" isPending={drawing} onPress={draw}>
-                <Icon icon="lucide:shuffle" width={14} />
+                <Shuffle width={14} height={14} className="shrink-0" />
                 重新抽题
               </Button>
             </div>
@@ -352,7 +371,7 @@ export function QuestionDrawer({
                           : 'border-line bg-elevated text-transparent',
                       )}
                     >
-                      <Icon icon="lucide:check" width={12} />
+                      <Check width={12} height={12} className="shrink-0" />
                     </span>
                     <span className="flex-1 text-sm leading-relaxed text-fg">
                       {question.question}

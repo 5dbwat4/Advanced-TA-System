@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import ChevronRight from '~icons/lucide/chevron-right'
+import ScanSearch from '~icons/lucide/scan-search'
 import { fetchCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
 import { matchStudent } from '@/lib/pinyin'
 
@@ -77,10 +78,10 @@ export function StudentFinder({
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         className="relative"
       >
-        <Icon
-          icon="lucide:scan-search"
+        <ScanSearch
           width={18}
-          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-fg-subtle"
+          height={18}
+          className="shrink-0 pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-fg-subtle"
         />
         <Input
           ref={inputRef}
@@ -130,7 +131,7 @@ export function StudentFinder({
                     {summary}
                   </Chip>
                 ) : (
-                  <Icon icon="lucide:chevron-right" width={18} className="text-fg-subtle" />
+                  <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
                 )}
               </motion.button>
             )

@@ -3,8 +3,12 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import CloudUpload from '~icons/lucide/cloud-upload'
+import HardDrive from '~icons/lucide/hard-drive'
+import Lock from '~icons/lucide/lock'
+import School from '~icons/lucide/school'
+import Trash2 from '~icons/lucide/trash-2'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAppStore } from '@/lib/store'
@@ -107,14 +111,14 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
   return (
     <Card index={index} className="flex flex-col gap-5">
       <div className="flex items-center gap-2 text-sm font-bold">
-        <Icon icon="lucide:school" width={16} className="text-brand-600 dark:text-brand-300" />
+        <School width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
         浙大统一身份认证信息管理
       </div>
 
       <div className="rounded-xl border border-line p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-            <Icon icon="lucide:lock" width={18} />
+            <Lock width={18} height={18} className="shrink-0" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold text-fg-muted">密码：</div>
@@ -173,7 +177,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:hard-drive" width={16} />
+                      <HardDrive width={16} height={16} className="shrink-0" />
                     )}
                     仅保存在本地
                   </>
@@ -190,7 +194,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:cloud-upload" width={16} />
+                      <CloudUpload width={16} height={16} className="shrink-0" />
                     )}
                     保存在远端
                   </>
@@ -223,7 +227,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
                 {isPending ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <Icon icon="lucide:trash-2" width={16} />
+                  <Trash2 width={16} height={16} className="shrink-0" />
                 )}
                 从远端删除
               </>
@@ -236,7 +240,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
                 {isPending ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <Icon icon="lucide:cloud-upload" width={16} />
+                  <CloudUpload width={16} height={16} className="shrink-0" />
                 )}
                 保存到远端
               </>

@@ -3,8 +3,8 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import Check from '~icons/lucide/check'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { createClass } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -106,7 +106,7 @@ export default function NewCourse() {
                 {isPending ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <Icon icon="lucide:check" width={16} />
+                  <Check width={16} height={16} className="shrink-0" />
                 )}
                 {isPending ? '保存中' : '保存'}
               </>

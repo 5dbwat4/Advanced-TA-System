@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { Icon } from '@/components/ui/Icon'
+import ArrowLeft from '~icons/lucide/arrow-left'
 import { Markdown } from '@/components/ui/Markdown'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { TERMS_MARKDOWN } from '@/content/terms'
@@ -13,7 +13,7 @@ export default function Terms() {
           to="/login"
           className="inline-flex items-center gap-2 text-sm font-medium text-fg-muted transition-colors hover:text-fg"
         >
-          <Icon icon="lucide:arrow-left" width={16} />
+          <ArrowLeft width={16} height={16} className="shrink-0" />
           返回
         </Link>
         <ThemeToggle />

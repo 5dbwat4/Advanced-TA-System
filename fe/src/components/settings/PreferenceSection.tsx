@@ -2,9 +2,10 @@ import { Button, Spinner } from '@heroui/react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import Check from '~icons/lucide/check'
+import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { PreferenceFields } from '@/components/checkoff/PreferenceOnboarding'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { useAuth } from '@/lib/auth'
 
 export function PreferenceSection({ index = 0 }: { index?: number }) {
@@ -31,10 +32,10 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
   return (
     <Card index={index} className="flex flex-col gap-5">
       <div className="flex items-center gap-2 text-sm font-bold">
-        <Icon
-          icon="lucide:sliders-horizontal"
+        <SlidersHorizontal
           width={16}
-          className="text-brand-600 dark:text-brand-300"
+          height={16}
+          className="shrink-0 text-brand-600 dark:text-brand-300"
         />
         偏好设置
       </div>
@@ -54,7 +55,7 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
               {isPending ? (
                 <Spinner color="current" size="sm" />
               ) : (
-                <Icon icon="lucide:check" width={16} />
+                <Check width={16} height={16} className="shrink-0" />
               )}
               保存偏好
             </>

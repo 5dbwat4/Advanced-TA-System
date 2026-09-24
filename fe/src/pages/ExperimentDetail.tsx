@@ -3,8 +3,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import ArrowLeft from '~icons/lucide/arrow-left'
+import FlaskConical from '~icons/lucide/flask-conical'
+import NotebookText from '~icons/lucide/notebook-text'
+import Table from '~icons/lucide/table'
+import TriangleAlert from '~icons/lucide/triangle-alert'
+import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
@@ -101,7 +106,7 @@ export default function ExperimentDetail() {
   if (!experiment) {
     return (
       <div className="mx-auto max-w-4xl">
-        <EmptyState icon="lucide:flask-conical" title="实验不存在" hint="它可能已被删除" />
+        <EmptyState icon={FlaskConical} title="实验不存在" hint="它可能已被删除" />
       </div>
     )
   }
@@ -117,7 +122,7 @@ export default function ExperimentDetail() {
         to="/console/experiments"
         className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-fg-subtle transition-colors hover:text-fg-muted"
       >
-        <Icon icon="lucide:arrow-left" width={14} />
+        <ArrowLeft width={14} height={14} className="shrink-0" />
         返回实验列表
       </Link>
 
@@ -126,10 +131,10 @@ export default function ExperimentDetail() {
       <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <Icon
-              icon="lucide:notebook-text"
+            <NotebookText
               width={16}
-              className="text-brand-600 dark:text-brand-300"
+              height={16}
+              className="shrink-0 text-brand-600 dark:text-brand-300"
             />
             <span className="text-sm font-bold">抽题题目集</span>
           </div>
@@ -173,21 +178,21 @@ export default function ExperimentDetail() {
         </div>
         {!bank && (
           <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-            <Icon icon="lucide:triangle-alert" width={13} />
+            <TriangleAlert width={13} height={13} className="shrink-0" />
             未绑定题目集时，验收抽题将没有题目。
           </p>
         )}
       </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-        <Icon icon="lucide:table" width={16} />
+        <Table width={16} height={16} className="shrink-0" />
         学生得分
         <span className="tabular text-xs font-normal text-fg-subtle">{students.length} 人</span>
       </div>
 
       {students.length === 0 ? (
         <EmptyState
-          icon="lucide:users"
+          icon={Users}
           title="暂无学生"
           hint="请先到「分数和名单」导入学生名单"
         />

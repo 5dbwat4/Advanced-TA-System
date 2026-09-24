@@ -5,10 +5,19 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import ArrowRight from '~icons/lucide/arrow-right'
+import BookOpenCheck from '~icons/lucide/book-open-check'
+import Cpu from '~icons/lucide/cpu'
+import Ellipsis from '~icons/lucide/ellipsis'
+import Fingerprint from '~icons/lucide/fingerprint'
+import KeyRound from '~icons/lucide/key-round'
+import ShieldCheck from '~icons/lucide/shield-check'
+import University from '~icons/lucide/university'
+import Users from '~icons/lucide/users'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import type { IconComponent } from '@/lib/icon'
 import { clearLastUser, getLastUser, lastUserIdentifier, type LastUser } from '@/lib/last-user'
 import { getAuthenticationOptions } from '@/lib/passkey'
 import { cn } from '@/lib/utils'
@@ -16,14 +25,14 @@ import { cn } from '@/lib/utils'
 type Role = 'TA' | 'TEACHER'
 type Method = 'password' | 'zjuam'
 
-const ROLES: { key: Role; icon: string; label: string }[] = [
-  { key: 'TA', icon: 'lucide:shield-check', label: '助教' },
-  { key: 'TEACHER', icon: 'lucide:book-open-check', label: '教师' },
+const ROLES: { key: Role; icon: IconComponent; label: string }[] = [
+  { key: 'TA', icon: ShieldCheck, label: '助教' },
+  { key: 'TEACHER', icon: BookOpenCheck, label: '教师' },
 ]
 
-const METHODS: { key: Method; icon: string; label: string }[] = [
-  { key: 'password', icon: 'lucide:key-round', label: '账号密码' },
-  { key: 'zjuam', icon: 'lucide:university', label: '统一身份认证' },
+const METHODS: { key: Method; icon: IconComponent; label: string }[] = [
+  { key: 'password', icon: KeyRound, label: '账号密码' },
+  { key: 'zjuam', icon: University, label: '统一身份认证' },
 ]
 
 export function LoginPanel() {
@@ -154,7 +163,7 @@ export function LoginPanel() {
         {/* mobile logo */}
         <div className="mb-8 flex items-center gap-3 lg:hidden">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/25">
-            <Icon icon="lucide:cpu" width={20} />
+            <Cpu width={20} height={20} className="shrink-0" />
           </div>
           <div>
             <div className="font-bold tracking-tight">欢迎回来</div>
@@ -176,10 +185,11 @@ export function LoginPanel() {
           >
             <div className="flex items-center gap-3 rounded-2xl border border-line bg-sunken p-4">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                <Icon
-                  icon={lastUser.role === 'TEACHER' ? 'lucide:book-open-check' : 'lucide:shield-check'}
-                  width={20}
-                />
+                {lastUser.role === 'TEACHER' ? (
+                  <BookOpenCheck width={20} height={20} className="shrink-0" />
+                ) : (
+                  <ShieldCheck width={20} height={20} className="shrink-0" />
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-fg">{lastUser.name}</div>
@@ -204,7 +214,7 @@ export function LoginPanel() {
                     {isPending ? (
                       <Spinner color="current" size="sm" />
                     ) : (
-                      <Icon icon="lucide:fingerprint" width={16} />
+                        <Fingerprint width={16} height={16} className="shrink-0" />
                     )}
                     {isPending ? '验证中' : '使用通行密钥继续'}
                   </>
@@ -213,12 +223,12 @@ export function LoginPanel() {
             )}
 
             <Button type="button" fullWidth variant="secondary" onPress={useOtherMethod}>
-              <Icon icon="lucide:ellipsis" width={16} />
+              <Ellipsis width={16} height={16} className="shrink-0" />
               其它登录方式
             </Button>
 
             <Button type="button" fullWidth variant="secondary" onPress={switchAccount}>
-              <Icon icon="lucide:users" width={16} />
+              <Users width={16} height={16} className="shrink-0" />
               切换账号
             </Button>
           </motion.div>
@@ -245,10 +255,10 @@ export function LoginPanel() {
                         transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                       />
                     )}
-                    <Icon
-                      icon={item.icon}
+                    <item.icon
                       width={18}
-                      className={cn('relative', active && 'text-brand-600 dark:text-brand-300')}
+                      height={18}
+                      className={cn('shrink-0', 'relative', active && 'text-brand-600 dark:text-brand-300')}
                     />
                     <span className="relative">{item.label}</span>
                   </button>
@@ -280,10 +290,10 @@ export function LoginPanel() {
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <Icon
-                          icon={item.icon}
+                        <item.icon
                           width={16}
-                          className={cn('relative', active && 'text-brand-600 dark:text-brand-300')}
+                          height={16}
+                          className={cn('shrink-0', 'relative', active && 'text-brand-600 dark:text-brand-300')}
                         />
                         <span className="relative">{item.label}</span>
                       </button>
@@ -356,7 +366,7 @@ export function LoginPanel() {
                       {isPending ? (
                         <Spinner color="current" size="sm" />
                       ) : (
-                        <Icon icon="lucide:arrow-right" width={16} />
+                        <ArrowRight width={16} height={16} className="shrink-0" />
                       )}
                       {isPending ? '登录中' : '登录'}
                     </>
@@ -386,7 +396,7 @@ export function LoginPanel() {
                       {isPending ? (
                         <Spinner color="current" size="sm" />
                       ) : (
-                        <Icon icon="lucide:fingerprint" width={16} />
+                      <Fingerprint width={16} height={16} className="shrink-0" />
                       )}
                       {isPending ? '验证中' : '使用通行密钥登录'}
                     </>

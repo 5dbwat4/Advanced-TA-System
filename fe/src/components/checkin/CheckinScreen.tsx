@@ -1,8 +1,10 @@
 import { Spinner } from '@heroui/react'
 import type { ReactNode } from 'react'
 
+import CircleCheck from '~icons/lucide/circle-check'
+import Cpu from '~icons/lucide/cpu'
+import SearchX from '~icons/lucide/search-x'
 import { SlaveCard } from '@/components/checkin/SlaveCard'
-import { Icon } from '@/components/ui/Icon'
 import { useCheckoffSlave } from '@/lib/checkoff-socket'
 
 const statusCardClass =
@@ -28,14 +30,14 @@ export function CheckinScreen({ token, code }: { token?: string; code?: string }
   if (closed) {
     content = (
       <StatusCard>
-        <Icon icon="lucide:circle-check" width={28} className="text-fg-subtle" />
+        <CircleCheck width={28} height={28} className="shrink-0 text-fg-subtle" />
         <div className="text-sm font-semibold text-fg">会话已结束</div>
       </StatusCard>
     )
   } else if (error === 'SESSION_NOT_FOUND') {
     content = (
       <StatusCard>
-        <Icon icon="lucide:search-x" width={28} className="text-fg-subtle" />
+        <SearchX width={28} height={28} className="shrink-0 text-fg-subtle" />
         <div className="text-sm font-semibold text-fg">会话不存在或已结束</div>
       </StatusCard>
     )
@@ -49,7 +51,7 @@ export function CheckinScreen({ token, code }: { token?: string; code?: string }
     <div className="flex min-h-screen items-center justify-center bg-[#0a0f1e] px-5 py-10 [background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0px,rgba(255,255,255,0.035)_1px,transparent_1px,transparent_14px)]">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/50">
-          <Icon icon="lucide:cpu" width={15} />
+          <Cpu width={15} height={15} className="shrink-0" />
           CS-II Checkoff
         </div>
         {content}

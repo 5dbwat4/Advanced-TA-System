@@ -1,15 +1,21 @@
 import { Button } from '@heroui/react'
 import { motion } from 'motion/react'
 
-import { Icon } from '@/components/ui/Icon'
+import Check from '~icons/lucide/check'
+import FlaskConical from '~icons/lucide/flask-conical'
+import HelpCircle from '~icons/lucide/help-circle'
+import MonitorPlay from '~icons/lucide/monitor-play'
+import PenLine from '~icons/lucide/pen-line'
+import UserSearch from '~icons/lucide/user-search'
+import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
-const STEPS: { label: string; icon: string }[] = [
-  { label: '选择实验', icon: 'lucide:flask-conical' },
-  { label: '定位学生', icon: 'lucide:user-search' },
-  { label: '展示 demo', icon: 'lucide:monitor-play' },
-  { label: '现场抽题', icon: 'lucide:help-circle' },
-  { label: '录入成绩', icon: 'lucide:pen-line' },
+const STEPS: { label: string; icon: IconComponent }[] = [
+  { label: '选择实验', icon: FlaskConical },
+  { label: '定位学生', icon: UserSearch },
+  { label: '展示 demo', icon: MonitorPlay },
+  { label: '现场抽题', icon: HelpCircle },
+  { label: '录入成绩', icon: PenLine },
 ]
 
 export function StepIndicator({
@@ -60,11 +66,11 @@ export function StepIndicator({
                 transition={{ type: 'spring', stiffness: 450, damping: 35 }}
               />
             )}
-            <Icon
-              icon={done && !active ? 'lucide:check' : meta.icon}
-              width={15}
-              className="relative"
-            />
+            {done && !active ? (
+              <Check width={15} height={15} className="shrink-0 relative" />
+            ) : (
+              <meta.icon width={15} height={15} className="shrink-0 relative" />
+            )}
             <span className="relative hidden sm:inline">{meta.label}</span>
           </Button>
         )

@@ -1,7 +1,7 @@
 import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
 
-import { Icon } from '@/components/ui/Icon'
+import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
 export function Card({
@@ -31,11 +31,19 @@ export function Card({
   )
 }
 
-export function EmptyState({ icon, title, hint }: { icon: string; title: string; hint?: string }) {
+export function EmptyState({
+  icon: Ico,
+  title,
+  hint,
+}: {
+  icon: IconComponent
+  title: string
+  hint?: string
+}) {
   return (
     <div className="rounded-2xl border border-dashed border-line p-12 text-center">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sunken text-fg-subtle">
-        <Icon icon={icon} width={20} />
+        <Ico width={20} height={20} className="shrink-0" />
       </div>
       <div className="mt-3 text-sm font-semibold text-fg">{title}</div>
       {hint && <div className="mt-1 text-xs text-fg-subtle">{hint}</div>}

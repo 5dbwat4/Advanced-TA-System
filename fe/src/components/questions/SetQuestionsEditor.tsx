@@ -2,7 +2,10 @@ import { Button, Checkbox, Input, Spinner } from '@heroui/react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Icon } from '@/components/ui/Icon'
+import Check from '~icons/lucide/check'
+import ChevronDown from '~icons/lucide/chevron-down'
+import ListChecks from '~icons/lucide/list-checks'
+import X from '~icons/lucide/x'
 import {
   fetchBankQuestions,
   listQuestions,
@@ -132,7 +135,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
       {/* 已选 */}
       <div className="rounded-xl border border-line bg-sunken p-3">
         <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-fg-muted">
-          <Icon icon="lucide:list-checks" width={14} />
+          <ListChecks width={14} height={14} className="shrink-0" />
           已选 {selected.length} 题
           {dirty && <span className="text-amber-600 dark:text-amber-400">· 未保存</span>}
         </div>
@@ -155,7 +158,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
                     onClick={() => toggle(item)}
                     className="shrink-0 text-fg-subtle transition-colors hover:text-danger"
                   >
-                    <Icon icon="lucide:x" width={14} />
+                    <X width={14} height={14} className="shrink-0" />
                   </button>
                 </div>
               )
@@ -219,7 +222,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
 
       {results.length < total && (
         <Button size="sm" variant="ghost" isPending={loadingMore} onPress={loadMore}>
-          <Icon icon="lucide:chevron-down" width={14} />
+          <ChevronDown width={14} height={14} className="shrink-0" />
           加载更多（{results.length}/{total}）
         </Button>
       )}
@@ -236,7 +239,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
         <Button size="sm" variant="primary" isPending={saving} isDisabled={!dirty} onPress={save}>
           {({ isPending }) => (
             <>
-              {isPending ? <Spinner color="current" size="sm" /> : <Icon icon="lucide:check" width={15} />}
+              {isPending ? <Spinner color="current" size="sm" /> : <Check width={15} height={15} className="shrink-0" />}
               保存题目集
             </>
           )}

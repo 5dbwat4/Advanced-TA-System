@@ -11,8 +11,9 @@ import { QuestionDrawer, type QuestionMark } from '@/components/checkoff/Questio
 import { ScoreForm } from '@/components/checkoff/ScoreForm'
 import { StepIndicator } from '@/components/checkoff/StepIndicator'
 import { StudentFinder } from '@/components/checkoff/StudentFinder'
+import School from '~icons/lucide/school'
+import Settings2 from '~icons/lucide/settings-2'
 import { EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   fetchCheckoff,
@@ -213,7 +214,7 @@ export default function Checkoff() {
     return (
       <div className="mx-auto max-w-4xl">
         <PageHeader title="验收" />
-        <EmptyState icon="lucide:school" title="尚未绑定班级" hint="请先在设置中绑定班级" />
+        <EmptyState icon={School} title="尚未绑定班级" hint="请先在设置中绑定班级" />
       </div>
     )
   }
@@ -238,7 +239,7 @@ export default function Checkoff() {
         title="验收"
         actions={
           <Button size="sm" variant="ghost" onPress={prefsState.open}>
-            <Icon icon="lucide:settings-2" width={15} />
+            <Settings2 width={15} height={15} className="shrink-0" />
             偏好
           </Button>
         }

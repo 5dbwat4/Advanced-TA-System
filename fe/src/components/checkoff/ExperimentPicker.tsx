@@ -1,7 +1,8 @@
 import { motion } from 'motion/react'
 
+import FlaskConical from '~icons/lucide/flask-conical'
+import HelpCircle from '~icons/lucide/help-circle'
 import { EmptyState } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import type { CheckoffExperiment } from '@/lib/api'
 
 export function ExperimentPicker({
@@ -14,7 +15,7 @@ export function ExperimentPicker({
   if (experiments.length === 0) {
     return (
       <EmptyState
-        icon="lucide:flask-conical"
+        icon={FlaskConical}
         title="暂无可验收实验"
         hint="请先在实验页创建实验"
       />
@@ -42,7 +43,7 @@ export function ExperimentPicker({
             </span>
             <h3 className="mt-3 truncate text-base font-bold leading-snug text-fg">{exp.title}</h3>
             <div className="mt-3 flex items-center gap-1.5 text-xs text-fg-muted">
-              <Icon icon="lucide:help-circle" width={13} />
+              <HelpCircle width={13} height={13} className="shrink-0" />
               <span className="tabular">{exp.questionCount} 题</span>
             </div>
           </div>

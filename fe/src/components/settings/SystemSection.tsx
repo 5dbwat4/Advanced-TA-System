@@ -3,8 +3,11 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import ChevronRight from '~icons/lucide/chevron-right'
+import GraduationCap from '~icons/lucide/graduation-cap'
+import Settings2 from '~icons/lucide/settings-2'
+import UserPlus from '~icons/lucide/user-plus'
 import { Card } from '@/components/ui/Card'
-import { Icon } from '@/components/ui/Icon'
 import {
   addTa,
   apiFetch,
@@ -119,14 +122,14 @@ export function SystemSection({ index = 0 }: { index?: number }) {
   return (
     <Card index={index} className="flex flex-col gap-4 border-danger/50">
       <div className="flex items-center gap-2">
-        <Icon icon="lucide:settings-2" width={16} className="text-danger" />
+        <Settings2 width={16} height={16} className="shrink-0 text-danger" />
         <span className="text-sm font-bold text-danger">系统设置</span>
       </div>
 
       <Modal state={courseState}>
         <Modal.Trigger className="flex w-full items-center gap-3 rounded-xl border border-line bg-sunken px-4 py-3 text-left transition-colors hover:border-danger/40">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger/10 text-danger">
-            <Icon icon="lucide:graduation-cap" width={18} />
+                  <GraduationCap width={18} height={18} className="shrink-0" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">助教绑定课程</div>
@@ -134,7 +137,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
               从“学在浙大”获取并绑定当前账号的课程
             </div>
           </div>
-          <Icon icon="lucide:chevron-right" width={18} className="text-fg-subtle" />
+          <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
         </Modal.Trigger>
         <Modal.Backdrop>
           <Modal.Container>
@@ -142,7 +145,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Icon className="bg-danger/10 text-danger">
-                  <Icon icon="lucide:graduation-cap" width={18} />
+            <GraduationCap width={18} height={18} className="shrink-0" />
                 </Modal.Icon>
                 <Modal.Heading>助教绑定课程</Modal.Heading>
               </Modal.Header>
@@ -161,7 +164,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                   </div>
                 ) : courses === null ? (
                   <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line py-10 text-center">
-                    <Icon icon="lucide:graduation-cap" width={24} className="text-fg-subtle" />
+                    <GraduationCap width={24} height={24} className="shrink-0 text-fg-subtle" />
                     <div className="text-sm font-semibold text-fg-muted">尚未获取课程</div>
                     <div className="text-xs text-fg-subtle">点击下方按钮开始获取</div>
                   </div>
@@ -211,7 +214,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                             </>
                           )}
                           {clickable && (
-                            <Icon icon="lucide:chevron-right" width={16} className="text-fg-subtle" />
+                            <ChevronRight width={16} height={16} className="shrink-0 text-fg-subtle" />
                           )}
                           <span className="tabular text-[11px] text-fg-subtle">{course.id}</span>
                         </>
@@ -276,7 +279,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       <Modal state={taState}>
         <Modal.Trigger className="flex w-full items-center gap-3 rounded-xl border border-line bg-sunken px-4 py-3 text-left transition-colors hover:border-danger/40">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger/10 text-danger">
-            <Icon icon="lucide:user-plus" width={18} />
+                  <UserPlus width={18} height={18} className="shrink-0" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">添加新助教</div>
@@ -284,7 +287,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
               输入助教学号，将其加入系统；新助教需等待首次登录后解封
             </div>
           </div>
-          <Icon icon="lucide:chevron-right" width={18} className="text-fg-subtle" />
+          <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
         </Modal.Trigger>
         <Modal.Backdrop>
           <Modal.Container>
@@ -292,7 +295,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Icon className="bg-danger/10 text-danger">
-                  <Icon icon="lucide:user-plus" width={18} />
+            <UserPlus width={18} height={18} className="shrink-0" />
                 </Modal.Icon>
                 <Modal.Heading>添加新助教</Modal.Heading>
               </Modal.Header>
