@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 用户表: 助教 / 教师
+/// role 取值仅限 TA | TEACHER
+model User {
+  id        String  @id @default(uuid(4))
+  name      String
+  role      String // TA | TEACHER
+
+  studentId String? @unique
+  username  String?
+
+  /// bcrypt 哈希后的登录密码
+  password String?
+
+  /// WebAuthn 凭据（JSON 编码，后续实现通行密钥时使用）
+  webauthn String?
+
+  /// 统一身份认证（ZJUAM）账号
+  zjuamAccount String?
+  /// 加密后的浙大统一身份认证密码（AES-256-GCM）
+  zjuamPassword String?
+  /// ZJU person id
+  zjuPersonId Int?
+  /// 最近一次统一身份认证同步时间
+  zjuSyncedAt DateTime?
+
+  /// 验收偏好（JSON 字符串）：{ device: 'single'|'multi', draw: 'random'|'fixed' }
+  preferences String?
+
+  /// 所属班级（首次登录时按学在浙大课程自动绑定，可属于多个班级）
+  classes Class[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions Question[]
+  banks     QuestionBank[]
+  tokens    PersonalAccessToken[]
+  gradedScores Score[] @relation("ScoreGrader")
+}
+
+/// 实验
+model Experiment {
+  id     String @id @default(uuid(4))
+  /// 实验编号，例如 "Lab 0"
+  mark   String
+  /// 实验标题，例如 "五级流水线"
+  title  String
+  /// 所属课程
+  classId String
+  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  /// 绑定的题库（抽题范围）
+  questionBankId String?
+  questionBank   QuestionBank? @relation(fields: [questionBankId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  scores Score[]
+
+  @@unique([classId, mark])
+  @@index([questionBankId])
+}
+
+/// 题目（独立实体，可被多个题库引用）
+model Question {
+  id        String   @id @default(uuid(4))
+  /// 题目（Markdown）
+  question  String
+  /// 答案（Markdown）
+  answer    String
+  /// 题目提供者
+  provider  String
+  user      User     @relation(fields: [provider], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([provider])
+}
+
+/// 题库（id → 题目 id 列表 JSON；可绑定到多个实验，实现题目与实验的 M:N）
+model QuestionBank {
+  id        String   @id @default(uuid(4))
+  /// 题库名称
+  name      String
+  /// 题库管理者
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// 题目 id 列表（JSON 字符串数组，保序）
+  questions String   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  experiments Experiment[]
+
+  @@index([ownerId])
+}
+
+/// 班级
+model Class {
+  id          String  @id @default(uuid(4))
+  name        String
+  /// 2026-sys1 | 2026-sys2 | 2026-sys3
+  type        String
+  /// 学在浙大 课程 / 班级 id（系统II 硬编码为 100199）
+  xzzdClassId String?
+  /// 最近一次获取 / 更新学生名单的时间
+  lastRosterSyncAt DateTime?
+  students    Student[]
+  tas         User[]
+  experiments Experiment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// 学生（一条记录 = 某学生属于某班级；同一学号可在不同班出现多行）
+model Student {
+  /// 唯一主键（合成，不代表学号）
+  stuId     String @id @default(uuid(4))
+  /// 姓名
+  name      String
+  /// 学号
+  studentNo String
+  /// 所属班级
+  classId   String
+  klass     Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scores    Score[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentNo])
+  @@index([classId])
+}
+
+/// 分数（每个学生每个项目独立的分数，0~100）
+model Score {
+  /// 学生（Student.stuId）
+  stuId   String
+  student Student @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
+  /// 0=功能测试 1=验收问答 2=报告 3=其它
+  type    Int
+  /// 标识符：type 0-2 时为实验 id；type 3 时为自定义标识
+  indId   String
+  /// 实验外键（仅 type 0-2 填写）
+  labId   String?
+  lab     Experiment? @relation(fields: [labId], references: [id], onDelete: Cascade)
+  /// 分数 0~100
+  score   Float
+
+  /// 最后提交该分数的助教 / 教师（账号删除时置空）
+  graderId String?
+  grader   User?   @relation("ScoreGrader", fields: [graderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([stuId, type, indId])
+  @@index([labId])
+  @@index([graderId])
+}
+
+/// 个人访问令牌（MCP / API）：仅存 sha256(secret)，明文只展示一次
+model PersonalAccessToken {
+  id        String    @id @default(uuid(4))
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 备注名
+  name      String
+  /// 展示用前缀（token 形如 tasaas_<prefix>_<secret>）
+  prefix    String
+  /// sha256(secret) 十六进制
+  tokenHash String    @unique
+  /// 授权范围（JSON 字符串数组）
+  scopes    String    @default("[]")
+  expiresAt DateTime?
+  revokedAt DateTime?
+  lastUsedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// MCP 工具调用审计日志
+model McpAuditLog {
+  id        String   @id @default(uuid(4))
+  userId    String?
+  tokenId   String?
+  tool      String
+  scope     String?
+  ok        Boolean
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

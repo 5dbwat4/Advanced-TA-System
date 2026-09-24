@@ -1,0 +1,47 @@
+{
+  "name": "fe",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "predev": "node scripts/gen-icons.mjs",
+    "build": "tsc -b && vite build",
+    "prebuild": "node scripts/gen-icons.mjs",
+    "gen:icons": "node scripts/gen-icons.mjs",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@heroui/react": "^3.2.6",
+    "@heroui/styles": "^3.2.6",
+    "@iconify-json/lucide": "^1.2.136",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@uiw/react-md-editor": "^4.1.2",
+    "clsx": "^2.1.1",
+    "motion": "^13.4.1",
+    "next-themes": "^0.4.6",
+    "pinyin-pro": "^3.29.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4",
+    "socket.io-client": "^4.8.3",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.7.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@svgr/core": "^8.1.0",
+    "@svgr/plugin-jsx": "^8.1.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "unplugin-icons": "^24.0.0",
+    "vite": "^8.3.0"
+  }
+}

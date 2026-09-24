@@ -1,0 +1,327 @@
+import { randomUUID } from 'node:crypto'
+
+import type { FastifyInstance } from 'fastify'
+import { Server, type Socket } from 'socket.io'
+
+import { prisma } from './prisma'
+import { isStaff } from './roles'
+import type { ScoreDto } from './score'
+import { randomSecret, verifyTotp } from './totp'
+
+/** 成绩变更事件（按班级广播） */
+export type ScoreChangeEvent =
+  | {
+      action: 'upsert'
+      classId: string
+      score: ScoreDto
+    }
+  | { action: 'delete'; classId: string; stuId: string; type: number; indId: string }
+
+/** 验收开始事件（按班级验收房间广播，仅打开验收页的用户收到） */
+export type CheckoffStartedEvent = {
+  classId: string
+  userName: string
+  studentName: string
+  at: number
+}
+
+let io: Server | null = null
+
+/** 班级房间名 */
+export function roomName(classId: string): string {
+  return `class:${classId}`
+}
+
+/** 验收房间名（仅当前打开验收页的用户加入） */
+function watchRoom(classId: string): string {
+  return `checkoff-watch:${classId}`
+}
+
+/** 从握手信息中提取 JWT（auth → Authorization → query） */
+function extractToken(socket: Socket): string | null {
+  const { auth, headers, query } = socket.handshake
+
+  const authToken = auth?.token
+  if (typeof authToken === 'string' && authToken.length > 0) {
+    return authToken
+  }
+
+  const authorization = headers.authorization
+  if (typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
+    const bearer = authorization.slice('Bearer '.length).trim()
+    if (bearer.length > 0) {
+      return bearer
+    }
+  }
+
+  const queryToken = query.token
+  if (typeof queryToken === 'string' && queryToken.length > 0) {
+    return queryToken
+  }
+
+  return null
+}
+
+/** 读取指定用户的班级 id 列表 */
+async function loadClassIds(userId: string): Promise<string[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { classes: true },
+  })
+  return (me?.classes ?? []).map((c) => c.id)
+}
+
+/** 读取验收广播所需的用户信息（姓名 / 角色 / 所属班级） */
+async function loadBroadcastContext(
+  userId: string,
+): Promise<{ name: string; role: string; classIds: string[] } | null> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, role: true, classes: { select: { id: true } } },
+  })
+  if (!me) return null
+  return { name: me.name, role: me.role, classIds: me.classes.map((c) => c.id) }
+}
+
+/** 将 socket 加入其所属班级房间并回传班级列表（失败时回退为空列表） */
+async function syncRooms(socket: Socket): Promise<void> {
+  try {
+    const userId = socket.data.user?.sub as string | undefined
+    if (!userId) {
+      socket.emit('scores:ready', { classIds: [] })
+      return
+    }
+
+    const classIds = await loadClassIds(userId)
+    for (const classId of classIds) {
+      await socket.join(roomName(classId))
+    }
+    socket.emit('scores:ready', { classIds })
+  } catch {
+    socket.emit('scores:ready', { classIds: [] })
+  }
+}
+
+export type SlaveCardState =
+  | { kind: 'idle'; experimentMark: string; experimentTitle: string }
+  | { kind: 'ask_name' }
+  | { kind: 'ask_demo' }
+  | { kind: 'ask_question'; studentName: string; index: number; total: number; content: string }
+  | { kind: 'thank'; studentName?: string }
+
+type CheckoffSession = {
+  token: string
+  /** TOTP 密钥（base32），配对码每分钟由其推导 */
+  secret: string
+  /** 配对码刷新周期（秒） */
+  period: number
+  masterUserId: string
+  state: SlaveCardState
+  createdAt: number
+  updatedAt: number
+}
+
+const SESSION_TTL = 1000 * 60 * 60 * 4
+/** 配对码刷新周期：60 秒 */
+const CODE_PERIOD = 60
+const checkoffSessions = new Map<string, CheckoffSession>()
+
+function gcCheckoffSessions() {
+  const now = Date.now()
+  for (const [key, session] of checkoffSessions) {
+    if (now - session.updatedAt > SESSION_TTL) checkoffSessions.delete(key)
+  }
+}
+
+/** 6 位配对码无法反查会话，遍历活跃会话用 TOTP 校验 */
+function findSessionByCode(code: string): CheckoffSession | undefined {
+  for (const session of checkoffSessions.values()) {
+    if (verifyTotp(session.secret, code, session.period)) return session
+  }
+  return undefined
+}
+
+function checkoffRoom(token: string): string {
+  return `checkoff:${token}`
+}
+
+/** 创建并绑定 Socket.IO 实时服务（模块单例） */
+export function createRealtime(fastify: FastifyInstance): Server {
+  const server = new Server(fastify.server, { cors: { origin: true } })
+
+  server.use((socket, next) => {
+    const token = extractToken(socket)
+    if (token) {
+      try {
+        socket.data.user = fastify.jwt.verify<{ sub: string; role: string }>(token)
+      } catch {
+        // ignore invalid token — unauthenticated (slave) connections are allowed
+      }
+    }
+    next()
+  })
+
+  server.on('connection', (socket) => {
+    void syncRooms(socket)
+    socket.on('scores:subscribe', () => {
+      void syncRooms(socket)
+    })
+
+    /* -------- 验收房间（仅打开验收页的用户加入） -------- */
+    socket.on('checkoff:watch', async ({ classId } = {} as { classId?: string }) => {
+      const user = socket.data.user as { sub?: string } | undefined
+      if (!user?.sub || typeof classId !== 'string') return
+      const ctx = await loadBroadcastContext(user.sub)
+      if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
+      await socket.join(watchRoom(classId))
+    })
+
+    socket.on('checkoff:unwatch', ({ classId } = {} as { classId?: string }) => {
+      if (typeof classId !== 'string') return
+      void socket.leave(watchRoom(classId))
+    })
+
+    socket.on(
+      'checkoff:notify',
+      async ({ classId, studentName } = {} as { classId?: string; studentName?: string }) => {
+        const user = socket.data.user as { sub?: string } | undefined
+        if (!user?.sub || typeof classId !== 'string') return
+        const name = (studentName ?? '').trim()
+        if (!name) return
+        const ctx = await loadBroadcastContext(user.sub)
+        if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
+        const payload: CheckoffStartedEvent = {
+          classId,
+          userName: ctx.name,
+          studentName: name,
+          at: Date.now(),
+        }
+        socket.to(watchRoom(classId)).emit('checkoff:started', payload)
+      },
+    )
+
+    /* -------- master -------- */
+    socket.on('master:create', async (_payload: unknown, ack?: (res: unknown) => void) => {
+      const user = socket.data.user as { sub?: string } | undefined
+      if (!user?.sub) return ack?.({ error: 'UNAUTHORIZED' })
+      gcCheckoffSessions()
+      const session: CheckoffSession = {
+        token: randomUUID(),
+        secret: randomSecret(),
+        period: CODE_PERIOD,
+        masterUserId: user.sub,
+        state: { kind: 'idle', experimentMark: '', experimentTitle: '' },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+      checkoffSessions.set(session.token, session)
+      socket.data.role = 'master'
+      socket.data.checkoffToken = session.token
+      await socket.join(checkoffRoom(session.token))
+      ack?.({
+        token: session.token,
+        secret: session.secret,
+        period: session.period,
+        serverTime: Date.now(),
+        state: session.state,
+      })
+    })
+
+    socket.on(
+      'master:attach',
+      async ({ token } = {} as { token?: string }, ack?: (res: unknown) => void) => {
+        const user = socket.data.user as { sub?: string } | undefined
+        const session = typeof token === 'string' ? checkoffSessions.get(token) : undefined
+        if (!user?.sub || !session || session.masterUserId !== user.sub)
+          return ack?.({ error: 'FORBIDDEN' })
+        socket.data.role = 'master'
+        socket.data.checkoffToken = session.token
+        await socket.join(checkoffRoom(session.token))
+        ack?.({
+          token: session.token,
+          secret: session.secret,
+          period: session.period,
+          serverTime: Date.now(),
+          state: session.state,
+        })
+      },
+    )
+
+    socket.on(
+      'master:state',
+      ({ token, state } = {} as { token?: string; state?: SlaveCardState }) => {
+        if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) return
+        const session = typeof token === 'string' ? checkoffSessions.get(token) : undefined
+        if (!session || !state) return
+        session.state = state
+        session.updatedAt = Date.now()
+        server.to(checkoffRoom(session.token)).emit('slave:state', { state: session.state })
+      },
+    )
+
+    socket.on(
+      'switch_question',
+      (
+        { token, studentName, index, total, content } = {} as {
+          token?: string
+          studentName?: string
+          index?: number
+          total?: number
+          content?: string
+        },
+      ) => {
+        if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) return
+        const session = typeof token === 'string' ? checkoffSessions.get(token) : undefined
+        if (!session) return
+        session.state = {
+          kind: 'ask_question',
+          studentName: String(studentName ?? ''),
+          index: Number(index) || 0,
+          total: Number(total) || 0,
+          content: String(content ?? ''),
+        }
+        session.updatedAt = Date.now()
+        server.to(checkoffRoom(session.token)).emit('slave:state', { state: session.state })
+      },
+    )
+
+    socket.on('master:close', ({ token } = {} as { token?: string }) => {
+      if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) return
+      if (typeof token !== 'string') return
+      checkoffSessions.delete(token)
+      server.to(checkoffRoom(token)).emit('slave:closed')
+      server.in(checkoffRoom(token)).socketsLeave(checkoffRoom(token))
+    })
+
+    /* -------- slave -------- */
+    socket.on(
+      'slave:join',
+      async (
+        { token, code } = {} as { token?: string; code?: string },
+        ack?: (res: unknown) => void,
+      ) => {
+        gcCheckoffSessions()
+        const session =
+          typeof token === 'string'
+            ? checkoffSessions.get(token)
+            : typeof code === 'string'
+              ? findSessionByCode(code)
+              : undefined
+        if (!session) return ack?.({ error: 'SESSION_NOT_FOUND' })
+        socket.data.role = 'slave'
+        socket.data.checkoffToken = session.token
+        await socket.join(checkoffRoom(session.token))
+        ack?.({ token: session.token, state: session.state })
+        server.to(checkoffRoom(session.token)).emit('master:slave-joined')
+      },
+    )
+  })
+
+  io = server
+  return server
+}
+
+/** 向指定班级广播成绩变更 */
+export function emitScoreChange(classId: string, payload: ScoreChangeEvent): void {
+  io?.to(roomName(classId)).emit('score:change', payload)
+}
