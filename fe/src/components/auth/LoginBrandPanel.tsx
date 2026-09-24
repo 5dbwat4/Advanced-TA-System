@@ -61,25 +61,6 @@ export function LoginBrandPanel() {
         >
           计算机系统 II 助教综合管理系统
         </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="mt-10 flex flex-wrap gap-2"
-        >
-          {['Checkoff', 'FPGA Boards', 'Grading', 'Passkey'].map((label, i) => (
-            <motion.span
-              key={label}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5 + i * 0.08, type: 'spring', stiffness: 300, damping: 20 }}
-              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/70 backdrop-blur"
-            >
-              {label}
-            </motion.span>
-          ))}
-        </motion.div>
       </div>
 
       <motion.div
