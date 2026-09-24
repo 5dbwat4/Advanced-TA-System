@@ -219,6 +219,18 @@ body {
   opacity: 0.5;
 }
 
+/* 验收/签到全屏斜线背景（底色与斜线均随亮暗模式切换） */
+.diagonal-bg {
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--line) 0,
+    var(--line) 1px,
+    transparent 1px,
+    transparent 14px
+  );
+}
+
 /* ---------------------------------- */
 /* Scrollbar                           */
 /* ---------------------------------- */

@@ -1,6 +1,7 @@
-import { Spinner } from '@heroui/react'
+import { Button, Spinner } from '@heroui/react'
 import type { ReactNode } from 'react'
 
+import ArrowLeft from '~icons/lucide/arrow-left'
 import CircleCheck from '~icons/lucide/circle-check'
 import Cpu from '~icons/lucide/cpu'
 import SearchX from '~icons/lucide/search-x'
@@ -14,6 +15,15 @@ function StatusCard({ children }: { children: ReactNode }) {
   return <div className={statusCardClass}>{children}</div>
 }
 
+function BackButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Button variant="secondary" size="sm" onPress={onPress}>
+      <ArrowLeft width={14} height={14} className="shrink-0" />
+      返回
+    </Button>
+  )
+}
+
 function ConnectingCard() {
   return (
     <StatusCard>
@@ -23,7 +33,15 @@ function ConnectingCard() {
   )
 }
 
-export function CheckinScreen({ token, code }: { token?: string; code?: string }) {
+export function CheckinScreen({
+  token,
+  code,
+  onBack,
+}: {
+  token?: string
+  code?: string
+  onBack?: () => void
+}) {
   const { state, connected, closed, error } = useCheckoffSlave({ token, code })
 
   let content: ReactNode
@@ -32,6 +50,7 @@ export function CheckinScreen({ token, code }: { token?: string; code?: string }
       <StatusCard>
         <CircleCheck width={28} height={28} className="shrink-0 text-fg-subtle" />
         <div className="text-sm font-semibold text-fg">会话已结束</div>
+        {onBack && <BackButton onPress={onBack} />}
       </StatusCard>
     )
   } else if (error === 'SESSION_NOT_FOUND') {
@@ -39,6 +58,7 @@ export function CheckinScreen({ token, code }: { token?: string; code?: string }
       <StatusCard>
         <SearchX width={28} height={28} className="shrink-0 text-fg-subtle" />
         <div className="text-sm font-semibold text-fg">会话不存在或已结束</div>
+        {onBack && <BackButton onPress={onBack} />}
       </StatusCard>
     )
   } else if (!connected || !state) {
@@ -48,9 +68,9 @@ export function CheckinScreen({ token, code }: { token?: string; code?: string }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0f1e] px-5 py-10 [background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0px,rgba(255,255,255,0.035)_1px,transparent_1px,transparent_14px)]">
+    <div className="diagonal-bg flex min-h-screen items-center justify-center px-5 py-10">
       <div className="w-full max-w-lg">
-        <div className="mb-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/50">
+        <div className="mb-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
           <Cpu width={15} height={15} className="shrink-0" />
           CS-II Checkoff
         </div>
