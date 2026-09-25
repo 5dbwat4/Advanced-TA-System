@@ -7,6 +7,8 @@ const MY_COURSES_URL = 'https://courses.zju.edu.cn/api/my-courses'
 
 const ENROLLMENTS_URL = 'https://courses.zju.edu.cn/api/course'
 
+const ACTIVITIES_URL = 'https://courses.zju.edu.cn/api/courses'
+
 const ENROLLMENTS_FIELDS =
   'id,user(id,email,name,nickname,user_no,comment,grade(id,name),klass(id,name,code),department(id,name,code),org(id,name),program(id,name),user_attributes(tag,children_names,education)),roles,aliases,retake_status,seat_number,data,imported_from,imported_track_id'
 
@@ -82,6 +84,29 @@ interface EnrollmentsResponse {
 }
 
 export type ZjuamEnrollment = { studentNo: string; name: string }
+
+/** 学在浙大作业（activity type = "homework"）摘要 */
+export type ZjuamHomeworkActivity = {
+  /** activity id（绑定到 Experiment 的值） */
+  id: number
+  title: string
+  uniqueKey: string
+  endTime: string | null
+  isClosed: boolean
+  hasScoreCount: number
+}
+
+interface ActivitiesResponse {
+  activities?: Array<{
+    id?: unknown
+    title?: unknown
+    unique_key?: unknown
+    type?: unknown
+    end_time?: unknown
+    is_closed?: unknown
+    has_score_count?: unknown
+  }>
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -261,5 +286,53 @@ export async function listEnrollments(
         name: String(entry.user?.name ?? '').trim(),
       }))
       .filter((entry) => entry.studentNo.length > 0 && entry.name.length > 0)
+  })
+}
+
+/**
+ * 拉取指定学在浙大课程（courseId = Class.xzzdClassId）的作业列表。
+ * 接口返回该课程全部 activities，这里只保留 type === "homework" 的条目。
+ */
+export async function listHomeworkActivities(
+  account: string,
+  password: string,
+  courseId: string,
+): Promise<ZjuamHomeworkActivity[]> {
+  return withCourses(account, password, async (client) => {
+    const response = await client
+      .fetch(`${ACTIVITIES_URL}/${courseId}/activities`, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json, text/plain, */*',
+        },
+      })
+      .catch((error: unknown) => {
+        throw toZjuamError(error)
+      })
+
+    if (response.status === 401 || response.status === 403) {
+      throw new ZjuamError('ZJUAM_AUTH_FAILED', '统一身份认证账号或密码错误')
+    }
+    if (!response.ok) {
+      throw new ZjuamError('ZJUAM_UNAVAILABLE', `课程服务返回 ${response.status}`)
+    }
+
+    const payload = (await response.json().catch(() => {
+      throw new ZjuamError('ZJUAM_UNAVAILABLE', '无法解析课程服务响应')
+    })) as ActivitiesResponse
+
+    const activities = Array.isArray(payload.activities) ? payload.activities : []
+
+    return activities
+      .filter((activity) => activity.type === 'homework')
+      .map((activity) => ({
+        id: Number(activity.id),
+        title: String(activity.title ?? '').trim(),
+        uniqueKey: String(activity.unique_key ?? '').trim(),
+        endTime: typeof activity.end_time === 'string' ? activity.end_time : null,
+        isClosed: activity.is_closed === true,
+        hasScoreCount: Number(activity.has_score_count ?? 0),
+      }))
+      .filter((activity) => Number.isFinite(activity.id) && activity.title.length > 0)
   })
 }

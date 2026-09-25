@@ -1,10 +1,25 @@
-import { ListBox, Select, Skeleton, Spinner } from '@heroui/react'
-import { useCallback, useEffect, useState } from 'react'
+import {
+  Button,
+  ListBox,
+  Modal,
+  Select,
+  Skeleton,
+  Spinner,
+  Tooltip,
+  useOverlayState,
+} from '@heroui/react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import ArrowDown from '~icons/lucide/arrow-down'
 import ArrowLeft from '~icons/lucide/arrow-left'
+import ArrowUp from '~icons/lucide/arrow-up'
+import Check from '~icons/lucide/check'
+import ChevronRight from '~icons/lucide/chevron-right'
+import ExternalLink from '~icons/lucide/external-link'
 import FlaskConical from '~icons/lucide/flask-conical'
+import GraduationCap from '~icons/lucide/graduation-cap'
 import NotebookText from '~icons/lucide/notebook-text'
 import Table from '~icons/lucide/table'
 import TriangleAlert from '~icons/lucide/triangle-alert'
@@ -14,11 +29,13 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
   fetchCheckoff,
+  fetchExperimentHomeworks,
   listBanks,
   updateExperiment,
   type CheckoffStudent,
   type Experiment,
   type QuestionBank,
+  type ZjuamHomework,
 } from '@/lib/api'
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
 
@@ -30,6 +47,30 @@ export default function ExperimentDetail() {
   const [scores, setScores] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
+
+  const [homeworks, setHomeworks] = useState<ZjuamHomework[]>([])
+  const [homeworksLoading, setHomeworksLoading] = useState(false)
+  const [homeworksError, setHomeworksError] = useState<string | null>(null)
+  const [checkoutDraft, setCheckoutDraft] = useState<string | null>(null)
+  const [reportDraft, setReportDraft] = useState<string | null>(null)
+  const [savingXzzd, setSavingXzzd] = useState(false)
+  const [xzzdMode, setXzzdMode] = useState<'view' | 'bind'>('bind')
+
+  const xzzdState = useOverlayState()
+
+  const loadHomeworks = useCallback(async () => {
+    if (!id) return
+    setHomeworksLoading(true)
+    setHomeworksError(null)
+    try {
+      const { homeworks: list } = await fetchExperimentHomeworks(id)
+      setHomeworks(list)
+    } catch (error) {
+      setHomeworksError(error instanceof Error ? error.message : '获取学在浙大作业失败')
+    } finally {
+      setHomeworksLoading(false)
+    }
+  }, [id])
 
   const load = useCallback(async (experimentId: string) => {
     const [detail, bankData] = await Promise.all([
@@ -116,6 +157,45 @@ export default function ExperimentDetail() {
     ? (banks.find((item) => item.id === bank.id)?.questions.length ?? null)
     : null
 
+  const xzzdBoundCount = [experiment.xzzdBindIdCheckout, experiment.xzzdBindIdReport].filter(
+    Boolean,
+  ).length
+
+  const openXzzd = () => {
+    setCheckoutDraft(experiment.xzzdBindIdCheckout)
+    setReportDraft(experiment.xzzdBindIdReport)
+    if (xzzdBoundCount > 0) {
+      // 已绑定：不发学在浙大请求，直接展示已绑定的作业与同步时间。
+      setXzzdMode('view')
+    } else {
+      setXzzdMode('bind')
+      void loadHomeworks()
+    }
+    xzzdState.open()
+  }
+
+  const rebindXzzd = () => {
+    setXzzdMode('bind')
+    void loadHomeworks()
+  }
+
+  const saveXzzdBind = async () => {
+    setSavingXzzd(true)
+    try {
+      const { experiment: updated } = await updateExperiment(experiment.id, {
+        xzzdBindIdCheckout: checkoutDraft,
+        xzzdBindIdReport: reportDraft,
+      })
+      setExperiment(updated)
+      toast.success('已保存学在浙大作业绑定')
+      setXzzdMode('view')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setSavingXzzd(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <Link
@@ -184,6 +264,23 @@ export default function ExperimentDetail() {
         )}
       </div>
 
+      <button
+        type="button"
+        onClick={openXzzd}
+        className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-line bg-elevated p-5 text-left transition-colors hover:border-brand-500/40 hover:bg-sunken/40"
+      >
+        <GraduationCap
+          width={16}
+          height={16}
+          className="shrink-0 text-brand-600 dark:text-brand-300"
+        />
+        <span className="text-sm font-bold">学在浙大作业</span>
+        <span className="ml-auto text-xs text-fg-subtle">
+          {xzzdBoundCount === 0 ? '未绑定' : `已绑定 ${xzzdBoundCount}/2`}
+        </span>
+        <ChevronRight width={16} height={16} className="shrink-0 text-fg-subtle" />
+      </button>
+
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">
         <Table width={16} height={16} className="shrink-0" />
         学生得分
@@ -246,6 +343,228 @@ export default function ExperimentDetail() {
           </table>
         </div>
       )}
+
+      <Modal state={xzzdState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <GraduationCap width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>学在浙大作业</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                {xzzdMode === 'view' ? (
+                  <>
+                    <div className="rounded-2xl border border-line p-4">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-fg-muted">验收</span>
+                          <HomeworkTag
+                            id={experiment.xzzdBindIdCheckout}
+                            courseId={experiment.klass?.xzzdClassId ?? null}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-fg-muted">报告</span>
+                          <HomeworkTag
+                            id={experiment.xzzdBindIdReport}
+                            courseId={experiment.klass?.xzzdClassId ?? null}
+                          />
+                        </div>
+                        <div className="flex justify-end pt-1">
+                          <Button size="sm" variant="secondary" onPress={rebindXzzd}>
+                            重新绑定
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-line p-4">
+                      <p className="mb-3 text-xs font-semibold text-fg-muted">上次同步时间</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <SyncButton
+                          icon={<ArrowUp width={14} height={14} className="shrink-0" />}
+                          tooltip="向上游提交分数信息"
+                          time={formatSync(experiment.lastXzzdUpSyncAt)}
+                          onPress={() => toast('同步功能开发中')}
+                        />
+                        <SyncButton
+                          icon={<ArrowDown width={14} height={14} className="shrink-0" />}
+                          tooltip="从上游同步提交情况"
+                          time={formatSync(experiment.lastXzzdDownSyncAt)}
+                          onPress={() => toast('同步功能开发中')}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : homeworksLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-fg-muted">
+                    <Spinner size="sm" />
+                    正在从学在浙大获取作业…
+                  </div>
+                ) : homeworksError ? (
+                  <div className="flex flex-col items-start gap-3 py-1">
+                    <p className="text-sm text-danger">{homeworksError}</p>
+                    <Button size="sm" variant="secondary" onPress={() => void loadHomeworks()}>
+                      重试
+                    </Button>
+                  </div>
+                ) : homeworks.length === 0 ? (
+                  <p className="py-1 text-sm text-fg-muted">该课程暂无可绑定的作业。</p>
+                ) : (
+                  <>
+                    <HomeworkSelect
+                      label="验收作业"
+                      value={checkoutDraft}
+                      homeworks={homeworks}
+                      disabled={savingXzzd}
+                      onChange={setCheckoutDraft}
+                    />
+                    <HomeworkSelect
+                      label="报告作业"
+                      value={reportDraft}
+                      homeworks={homeworks}
+                      disabled={savingXzzd}
+                      onChange={setReportDraft}
+                    />
+                    <p className="text-[11px] text-fg-subtle">
+                      验收与报告是两个不同的学在浙大作业，可分别绑定；不绑定可点击右侧清除。
+                    </p>
+                  </>
+                )}
+              </Modal.Body>
+              <Modal.Footer>
+                {xzzdMode === 'view' ? (
+                  <Button slot="close" variant="secondary">
+                    关闭
+                  </Button>
+                ) : (
+                  <>
+                    <Button slot="close" variant="secondary">
+                      取消
+                    </Button>
+                    <Button
+                      isPending={savingXzzd}
+                      isDisabled={homeworksLoading || Boolean(homeworksError)}
+                      onPress={saveXzzdBind}
+                    >
+                      {({ isPending }) => (
+                        <>
+                          {isPending ? (
+                            <Spinner color="current" size="sm" />
+                          ) : (
+                            <Check width={16} height={16} className="shrink-0" />
+                          )}
+                          保存
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </div>
+  )
+}
+
+function formatSync(value: string | null): string {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+function HomeworkTag({ id, courseId }: { id: string | null; courseId: string | null }) {
+  if (!id) return <span className="text-xs text-fg-subtle">未绑定</span>
+  const className =
+    'tabular inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-300'
+  if (!courseId) {
+    return <span className={className}>学在浙大 #{id}</span>
+  }
+  return (
+    <a
+      href={`https://courses.zju.edu.cn/course/${courseId}/learning-activity/full-screen#/${id}`}
+      target="_blank"
+      rel="noreferrer"
+      className={`${className} transition-colors hover:bg-brand-500/20`}
+    >
+      学在浙大 #{id}
+      <ExternalLink width={11} height={11} className="shrink-0" />
+    </a>
+  )
+}
+
+type SyncButtonProps = {
+  icon: ReactNode
+  tooltip: string
+  time: string
+  onPress: () => void
+}
+
+function SyncButton({ icon, tooltip, time, onPress }: SyncButtonProps) {
+  return (
+    <Tooltip delay={0}>
+      <Tooltip.Trigger className="inline-flex">
+        <Button size="sm" variant="ghost" className="justify-start gap-2" onPress={onPress}>
+          {icon}
+          <span className="tabular text-xs">{time}</span>
+        </Button>
+      </Tooltip.Trigger>
+      <Tooltip.Content placement="top" showArrow>
+        {tooltip}
+      </Tooltip.Content>
+    </Tooltip>
+  )
+}
+
+type HomeworkSelectProps = {
+  label: string
+  value: string | null
+  homeworks: ZjuamHomework[]
+  disabled: boolean
+  onChange: (value: string | null) => void
+}
+
+function HomeworkSelect({ label, value, homeworks, disabled, onChange }: HomeworkSelectProps) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-fg-muted">{label}</label>
+      <Select
+        className="w-full"
+        aria-label={label}
+        isDisabled={disabled}
+        value={value}
+        placeholder="未绑定"
+        onChange={(key) => onChange(key == null ? null : String(key))}
+        onClear={() => onChange(null)}
+      >
+        <Select.Trigger>
+          <Select.Value />
+          <Select.ClearButton />
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            {homeworks.map((homework) => (
+              <ListBox.Item key={homework.id} id={String(homework.id)} textValue={homework.title}>
+                {homework.title}
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            ))}
+          </ListBox>
+        </Select.Popover>
+      </Select>
     </div>
   )
 }

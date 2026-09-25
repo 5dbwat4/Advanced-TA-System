@@ -62,6 +62,16 @@ model Experiment {
   questionBankId String?
   questionBank   QuestionBank? @relation(fields: [questionBankId], references: [id], onDelete: SetNull)
 
+  /// 绑定的学在浙大「验收」作业 id（homework activity id）
+  xzzdBindIdCheckout String?
+  /// 绑定的学在浙大「报告」作业 id（homework activity id）
+  xzzdBindIdReport   String?
+
+  /// 上次「向下同步」时间：从学在浙大拉取提交情况等（细则以上游为准）
+  lastXzzdDownSyncAt DateTime?
+  /// 上次「向上同步」时间：把本地评分推送到学在浙大（评分以本地为准）
+  lastXzzdUpSyncAt   DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -115,9 +125,12 @@ model Class {
   xzzdClassId String?
   /// 最近一次获取 / 更新学生名单的时间
   lastRosterSyncAt DateTime?
+  /// 课程级设置（JSON 字符串），如 { checkpointEnabled, checkpointRule }
+  settings    String  @default("{}")
   students    Student[]
   tas         User[]
   experiments Experiment[]
+  checkpointClaims CheckpointClaimed[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -135,6 +148,7 @@ model Student {
   classId   String
   klass     Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
   scores    Score[]
+  checkpointClaims CheckpointClaimed[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -168,6 +182,28 @@ model Score {
   @@id([stuId, type, indId])
   @@index([labId])
   @@index([graderId])
+}
+
+/// Checkpoint 认领记录（某课程某学生的规则应用情况）
+model CheckpointClaimed {
+  id String @id @default(uuid(4))
+
+  /// 课程
+  classId String
+  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  /// 学生（Student.stuId）
+  stuId   String
+  student Student @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
+
+  /// 已应用的规则位标志（Int，当前统一置为 0）
+  appliedRules Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classId, stuId])
+  @@index([classId])
+  @@index([stuId])
 }
 
 /// 个人访问令牌（MCP / API）：仅存 sha256(secret)，明文只展示一次

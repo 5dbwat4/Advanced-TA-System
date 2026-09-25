@@ -87,7 +87,11 @@ export type Experiment = {
   title: string
   classId: string
   questionBankId: string | null
-  klass: { id: string; name: string } | null
+  xzzdBindIdCheckout: string | null
+  xzzdBindIdReport: string | null
+  lastXzzdDownSyncAt: string | null
+  lastXzzdUpSyncAt: string | null
+  klass: { id: string; name: string; xzzdClassId: string | null } | null
   questionBank: { id: string; name: string } | null
   createdAt: string
   updatedAt: string
@@ -318,12 +322,38 @@ export function removeBankQuestions(
 
 export function updateExperiment(
   id: string,
-  body: { mark?: string; title?: string; questionBankId?: string | null },
+  body: {
+    mark?: string
+    title?: string
+    questionBankId?: string | null
+    xzzdBindIdCheckout?: string | null
+    xzzdBindIdReport?: string | null
+  },
 ): Promise<{ experiment: Experiment }> {
   return apiFetch<{ experiment: Experiment }>(`/api/experiments/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   })
+}
+
+export type ZjuamHomework = {
+  id: number
+  title: string
+  uniqueKey: string
+  endTime: string | null
+  isClosed: boolean
+  hasScoreCount: number
+}
+
+export function fetchExperimentHomeworks(
+  experimentId: string,
+): Promise<{ homeworks: ZjuamHomework[] }> {
+  const local = getZjuamCredential()
+  const body = local ? { account: local.account, password: local.password } : {}
+  return apiFetch<{ homeworks: ZjuamHomework[] }>(
+    `/api/experiments/${experimentId}/xzzd-homeworks`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
 }
 
 export async function createClass(body: {
@@ -362,6 +392,40 @@ export async function applyRoster(
       body: JSON.stringify(diff),
     },
   )
+}
+
+export type ClassSettings = {
+  checkpointEnabled?: boolean
+  checkpointRule?: string | null
+  [key: string]: unknown
+}
+
+export function fetchClassSettings(classId: string): Promise<{ settings: ClassSettings }> {
+  return apiFetch<{ settings: ClassSettings }>(`/api/classes/${classId}/settings`)
+}
+
+export function updateClassSettings(
+  classId: string,
+  body: { checkpointEnabled?: boolean; checkpointRule?: string | null },
+): Promise<{ settings: ClassSettings }> {
+  return apiFetch<{ settings: ClassSettings }>(`/api/classes/${classId}/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export type CheckpointClaim = {
+  id: string
+  classId: string
+  stuId: string
+  appliedRules: number
+  createdAt: string
+  updatedAt: string
+  student: { name: string; studentNo: string } | null
+}
+
+export function fetchCheckpointClaims(classId: string): Promise<{ claims: CheckpointClaim[] }> {
+  return apiFetch<{ claims: CheckpointClaim[] }>(`/api/classes/${classId}/checkpoints`)
 }
 
 export function fetchCheckoff(params: {

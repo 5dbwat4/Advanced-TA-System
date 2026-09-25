@@ -34,11 +34,29 @@ const rosterApplySchema = z.object({
   removed: z.array(z.string().trim().min(1)),
 })
 
+const classSettingsPatchSchema = z.object({
+  checkpointEnabled: z.boolean().optional(),
+  checkpointRule: z.string().trim().max(64).nullable().optional(),
+})
+
 export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 当前登录用户是否为助教 / 教师 */
   function requireStaff(request: FastifyRequest): boolean {
     const payload = request.user as { role?: string }
     return isStaff(payload.role ?? '')
+  }
+
+  /** 解析课程设置 JSON 字符串（损坏时按空对象处理） */
+  function parseClassSettings(raw: string | null): Record<string, unknown> {
+    if (!raw) return {}
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
   }
 
   /** 加载班级并校验归属：不存在 404，不属于当前用户 403 */
@@ -277,4 +295,64 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       })
     },
   )
+
+  /** 读取课程设置 */
+  fastify.get('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const parsed = classParamsSchema.safeParse(request.params)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const klass = await resolveOwnedClass(request, reply, parsed.data.id)
+    if (!klass) return reply
+
+    return reply.send({ settings: parseClassSettings(klass.settings) })
+  })
+
+  /** 更新课程设置（局部合并） */
+  fastify.patch('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
+    }
+
+    const parsedParams = classParamsSchema.safeParse(request.params)
+    if (!parsedParams.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+    if (!klass) return reply
+
+    const parsedBody = classSettingsPatchSchema.safeParse(request.body ?? {})
+    if (!parsedBody.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const settings = { ...parseClassSettings(klass.settings), ...parsedBody.data }
+    const updated = await prisma.class.update({
+      where: { id: klass.id },
+      data: { settings: JSON.stringify(settings) },
+    })
+
+    return reply.send({ settings: parseClassSettings(updated.settings) })
+  })
+
+  /** Checkpoint 认领记录列表 */
+  fastify.get('/:id/checkpoints', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const parsed = classParamsSchema.safeParse(request.params)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const klass = await resolveOwnedClass(request, reply, parsed.data.id)
+    if (!klass) return reply
+
+    const claims = await prisma.checkpointClaimed.findMany({
+      where: { classId: klass.id },
+      include: { student: { select: { name: true, studentNo: true } } },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return reply.send({ claims })
+  })
 }

@@ -7,6 +7,8 @@ import Boards from '@/pages/Boards'
 import Checkin from '@/pages/Checkin'
 import CheckinSession from '@/pages/CheckinSession'
 import Checkoff from '@/pages/Checkoff'
+import Checkpoints from '@/pages/Checkpoints'
+import CourseSettings from '@/pages/CourseSettings'
 import Dashboard from '@/pages/Dashboard'
 import ExperimentDetail from '@/pages/ExperimentDetail'
 import Experiments from '@/pages/Experiments'
@@ -40,6 +42,8 @@ export default function App() {
           <Route path="llm-connect" element={<LlmConnect />} />
           <Route path="scores" element={<Scores />} />
           <Route path="courses/new" element={<NewCourse />} />
+          <Route path="courses/settings" element={<CourseSettings />} />
+          <Route path="courses/checkpoints" element={<Checkpoints />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Route>

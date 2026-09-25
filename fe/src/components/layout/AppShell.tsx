@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import BookOpen from '~icons/lucide/book-open'
 import Bot from '~icons/lucide/bot'
 import ChevronDown from '~icons/lucide/chevron-down'
 import CircuitBoard from '~icons/lucide/circuit-board'
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/console/reports', label: '实验报告', icon: FileText },
   { to: '/console/scores', label: '分数和名单', icon: Table },
   { to: '/console/llm-connect', label: 'MCP & Skills', icon: Bot },
+  { to: '/console/courses/settings', label: '课程设置', icon: BookOpen },
   { to: '/console/settings', label: '设置', icon: Settings2 },
 ]
 
