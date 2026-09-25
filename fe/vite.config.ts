@@ -4,10 +4,16 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import Icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vite'
+import progressBar from 'vite-plugin-load-with-progress-bar'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false })],
+  plugins: [
+    react(),
+    tailwindcss(),
+    Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false }),
+    progressBar(),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

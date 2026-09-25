@@ -44,6 +44,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "unplugin-icons": "^24.0.0",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vite-plugin-load-with-progress-bar": "file:../../load-with-progress-bar/plugin"
   }
 }
