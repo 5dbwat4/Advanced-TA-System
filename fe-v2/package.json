@@ -1,0 +1,37 @@
+{
+  "name": "fe-v2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "nuxt": "^4.5.2",
+    "@iconify-json/lucide": "^1.2.136",
+    "@internationalized/date": "^3.12.4",
+    "@nuxt/ui": "^4.11.2",
+    "@nuxtjs/color-mode": "^4.0.1",
+    "@pinia/nuxt": "^1.0.2",
+    "@simplewebauthn/browser": "^14.0.0",
+    "clsx": "^2.1.1",
+    "katex": "^0.16.47",
+    "md-editor-v3": "^7.1.0",
+    "motion-v": "^2.5.1",
+    "pinia": "^4.0.3",
+    "pinyin-pro": "^3.29.4",
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "unplugin-icons": "^24.0.0",
+    "vite-plugin-load-with-progress-bar": "file:../../load-with-progress-bar/plugin"
+  }
+}

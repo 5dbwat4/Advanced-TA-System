@@ -350,16 +350,23 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 
 ### Phase A — 地基
 
-- [ ] `fe-v2/` 脚手架：Nuxt 4 + `@nuxt/ui` + Tailwind v4 + `unplugin-icons`(vue) + `vite-plugin-load-with-progress-bar`；`package.json` / `tsconfig` / `npm install`
-- [ ] `nuxt.config.ts`：`ssr: false`、`css: ['~/assets/css/main.css']`、`vite.plugins`、`vite.server.proxy`（`/api`、`/socket.io`(ws)、`/mcp` → `localhost:3001`）、`colorMode: { classSuffix: '', preference: 'system' }`
-- [ ] `app/assets/css/main.css`：逐字搬运 `fe/src/index.css`（见 4.2），Nuxt UI CSS 在前、自定义 `@theme inline` 在后
-- [ ] `app.config.ts`：`ui.colors.primary='brand'`（复用 `--color-brand-*`）、`ui.toast` 玻璃拟态覆盖
-- [ ] 字体自托管（Manrope / Noto Sans SC / JetBrains Mono → woff2 + `@font-face`）
-- [ ] 兼容层前 6 个：`AppButton` `AppInput` `AppChip` `AppTooltip` `AppSwitch` `AppLabel`
-- [ ] `app/layouts/console.vue`（← `AppShell.tsx`）+ `app/layouts/default.vue`
-- [ ] `app/middleware/auth.global.ts`（← `RequireAuth` + `RedirectIfAuthed`，白名单 `/terms` `/checkin*`，回跳 `?redirect=`）
-- [ ] 路由骨架：`index` / `login` / `setup` / `terms` / `console/*` / `checkin/*` 空壳页（先只有标题）
-- [ ] `app.vue`：`aurora` + `grid-overlay` + `<UToaster />`
+> 进度：**A1 已完成**（脚手架 / 配置 / CSS 地基 / 路由骨架 / 守卫 / stores / lib 搬运），A2（兼容层）、A3（AppShell + Login）待做。
+> 复核记录：`api.ts` 563 行导出符号与旧版完全一致；`main.css` 的 `:root` / `.dark` / `@theme inline` 三块逐字一致（已用脚本比对）。
+
+- [x] `fe-v2/` 脚手架：Nuxt 4 + `@nuxt/ui` + Tailwind v4 + `unplugin-icons`(vue) + `vite-plugin-load-with-progress-bar`；`package.json` / `tsconfig` / `public/` / `.gitignore` / `README.md`（**`npm install` 由用户在 Windows 侧执行**）
+- [x] `nuxt.config.ts`：`ssr: false`、`css`、`vite.plugins`、`vite.server.proxy`（`/api`、`/socket.io`(ws)、`/mcp` → `localhost:3001`）、`colorMode: { classSuffix: '' }`、`icon.clientBundle.scan`、`fonts`、devServer 5173
+- [x] `app/assets/css/main.css`：逐字搬运 `fe/src/index.css`（Nuxt UI CSS 在前、自定义 `@theme inline` 在后；`.score-slider` / `.mdx-editor-content` 不带过去）；末尾追加全局焦点环 + 按压反馈兜底（`:where()` + `@layer utilities`，支持 `data-no-press` 退出）
+- [x] `app.config.ts`：`ui.colors.primary='brand'`、`ui.toast` 玻璃拟态（追加合并写法）、`ui.skeleton` 换 shimmer
+- [x] 字体：`@nuxt/fonts` 配置三套字体的自托管（替代 Google Fonts `<link>`）—— 待用户 `npm run dev` 后确认实际生效
+- [ ] 兼容层前 6 个：`AppButton` `AppInput` `AppChip` `AppTooltip` `AppSwitch` `AppLabel`（A2）
+- [ ] `app/layouts/console.vue` 完整实现（← `AppShell.tsx`，A3；当前只有最小容器）+ `app/layouts/default.vue`（已完成）
+- [x] `app/middleware/auth.global.ts`（← `RequireAuth` + `RedirectIfAuthed`，白名单 `/terms` `/checkin*`，回跳 `?redirect=`）
+- [x] 路由骨架：`index` / `[...all]` / `login` / `setup` / `terms` / `console/*` / `checkin/*` 空壳页
+- [x] `app/app.vue`：`<UApp :toaster="{ position: 'bottom-right' }">` + `aurora` + `grid-overlay`（`UApp` 内部已渲染 `UToaster`，不要重复挂）
+- [x] `app/stores/{auth,app}.ts` + `plugins/app-store-persist.client.ts`（localStorage key `tasaas.app`，结构与 zustand persist 兼容）
+- [x] `app/composables/{useCurrentClass,useHasXzzdPermission}.ts`、`app/lib/{api,zjuam,last-user,pinyin,utils,nav}.ts`
+- [ ] A2：兼容层 6 个组件 + `components/ui/{Card,PageHeader,ThemeToggle}.vue`
+- [ ] A3：`AppShell` 完整移植 + `More` + `Login` + `Setup` + `Terms`
 
 **验收点**：① 明/暗两套主题下按钮、输入框、卡片、侧栏与旧版气质一致；② 未登录访问 `/console/scores` → 跳 `/login?redirect=/console/scores`，登录后回跳；③ `/terms`、`/checkin` 不被守卫拦截；④ 未知路径回落 `/console`；⑤ 桌面/移动两套导航都出现且高亮正确；⑥ **动效基线**：`aurora` 背景漂移、`.glass` 顶栏、导航激活块的 `layoutId` 滑动、按钮按压反馈、focus-visible 焦点环、骨架 shimmer 全部到位。
 
@@ -389,6 +396,7 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 ### Phase D — 内容与收尾
 
 - [ ] `ui/Markdown.tsx`（只读渲染 + KaTeX，基于 `md-editor-v3`）+ `ui/MarkdownEditor.tsx`（可编辑）+ `.md-editor` 亮暗主题覆盖（精调一版，不能是「默认丑」）
+  - ⚠️ 开工前先确认 `md-editor-v3` 的 KaTeX 依赖形态（内置 `katex` prop / 需要 `katex` / `@vscode/katex`），再决定 `package.json` 补哪个包（旧版的 `remark-math` + `rehype-katex` 可能不再需要）
 - [ ] `content/terms.ts`
 - [ ] 全站走查：逐页明/暗主题对照清单；`tabular`、滚动条、`env(safe-area-inset-bottom)`、focus-visible 等细节
 - [ ] **§4.4 体验资产清单逐条签收**：A~I 每项确认落地
