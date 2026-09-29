@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import AlertTriangle from '~icons/lucide/alert-triangle'
 import Bot from '~icons/lucide/bot'
 import Check from '~icons/lucide/check'
 import ChevronUp from '~icons/lucide/chevron-up'
@@ -448,6 +449,14 @@ function SetsPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [pendingRename, setPendingRename] = useState<{ bank: QuestionBank; next: string } | null>(
+    null,
+  )
+  const renameState = useOverlayState({
+    onOpenChange: (open) => {
+      if (!open) setPendingRename(null)
+    },
+  })
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -495,16 +504,7 @@ function SetsPanel() {
     }
   }
 
-  const submitRename = async (bank: QuestionBank) => {
-    const next = renameValue.trim()
-    if (!next || next === bank.name) {
-      setRenamingId(null)
-      return
-    }
-    const isOwner = bank.owner.id === user?.id
-    if (!isOwner && !window.confirm('你不是该题目集的管理者，修改会影响所有使用它的实验。确定继续？')) {
-      return
-    }
+  const performRename = async (bank: QuestionBank, next: string) => {
     try {
       await renameBank(bank.id, next)
       toast.success('已重命名')
@@ -513,6 +513,29 @@ function SetsPanel() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '重命名失败')
     }
+  }
+
+  const submitRename = async (bank: QuestionBank) => {
+    if (pendingRename) return
+    const next = renameValue.trim()
+    if (!next || next === bank.name) {
+      setRenamingId(null)
+      return
+    }
+    const isOwner = bank.owner.id === user?.id
+    if (!isOwner) {
+      setPendingRename({ bank, next })
+      renameState.open()
+      return
+    }
+    await performRename(bank, next)
+  }
+
+  const confirmRename = async () => {
+    if (!pendingRename) return
+    const { bank, next } = pendingRename
+    renameState.close()
+    await performRename(bank, next)
   }
 
   const duplicate = async (id: string) => {
@@ -759,6 +782,35 @@ function SetsPanel() {
           })}
         </div>
       )}
+
+      <Modal state={renameState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>重命名题目集</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="text-sm text-fg-muted">
+                  你不是该题目集的管理者，修改会影响所有使用它的实验。确定继续吗？
+                </p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  取消
+                </Button>
+                <Button variant="primary" onPress={() => void confirmRename()}>
+                  确定继续
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   )
 }

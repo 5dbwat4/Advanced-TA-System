@@ -6,9 +6,10 @@ import Check from '~icons/lucide/check'
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { PreferenceFields } from '@/components/checkoff/PreferenceOnboarding'
 import { MarkdownEditorChoice } from '@/components/settings/MarkdownEditorChoice'
+import { MarkdownStyleChoice } from '@/components/settings/MarkdownStyleChoice'
 import { Card } from '@/components/ui/Card'
 import { useAuth } from '@/lib/auth'
-import type { MarkdownEditorId } from '@/lib/api'
+import type { MarkdownEditorId, MarkdownStyleId } from '@/lib/api'
 
 export function PreferenceSection({ index = 0 }: { index?: number }) {
   const { user, updatePreferences } = useAuth()
@@ -18,18 +19,24 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
   const [markdownEditor, setMarkdownEditor] = useState<MarkdownEditorId>(
     saved?.markdownEditor ?? 'uiw',
   )
+  const [markdownStyle, setMarkdownStyle] = useState<MarkdownStyleId>(
+    saved?.markdownStyle ?? 'github',
+  )
+  const [drawCount, setDrawCount] = useState<number>(saved?.drawCount ?? 3)
   const [saving, setSaving] = useState(false)
 
   const dirty =
     saved == null ||
     device !== saved.device ||
     draw !== saved.draw ||
-    markdownEditor !== saved.markdownEditor
+    markdownEditor !== saved.markdownEditor ||
+    markdownStyle !== saved.markdownStyle ||
+    drawCount !== saved.drawCount
 
   const save = async () => {
     setSaving(true)
     try {
-      await updatePreferences({ device, draw, markdownEditor })
+      await updatePreferences({ device, draw, markdownEditor, markdownStyle, drawCount })
       toast.success('偏好已保存')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
@@ -52,12 +59,17 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
       <PreferenceFields
         device={device}
         draw={draw}
+        drawCount={drawCount}
         onDeviceChange={setDevice}
         onDrawChange={setDraw}
+        onDrawCountChange={setDrawCount}
         showIcon={false}
+        layout="rows"
       />
 
       <MarkdownEditorChoice value={markdownEditor} onChange={setMarkdownEditor} />
+
+      <MarkdownStyleChoice value={markdownStyle} onChange={setMarkdownStyle} />
 
       <div className="flex justify-end">
         <Button size="sm" isDisabled={!dirty} isPending={saving} onPress={save}>

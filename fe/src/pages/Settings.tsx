@@ -16,8 +16,16 @@ import { SystemSection } from '@/components/settings/SystemSection'
 import { ZjuamSection } from '@/components/settings/ZjuamSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
 import { useAuth } from '@/lib/auth'
 import { registerPasskey } from '@/lib/passkey'
+
+const SECTIONS: TocItem[] = [
+  { id: 'profile', label: '个人信息' },
+  { id: 'zjuam', label: '统一身份认证' },
+  { id: 'preferences', label: '偏好设置' },
+  { id: 'system', label: '系统设置' },
+]
 
 export default function Settings() {
   const { user, refresh, updateSettings } = useAuth()
@@ -97,10 +105,12 @@ export default function Settings() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-4xl">
       <PageHeader title="设置" />
-      <div className="space-y-4">
-        <Card index={0} className="flex flex-col gap-5">
+      <div className="flex items-start gap-8">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <section id="profile" className="scroll-mt-24">
+            <Card index={0} className="flex flex-col gap-5">
           <div className="flex items-center gap-2 text-sm font-bold">
             <IdCard width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
             个人信息
@@ -275,9 +285,10 @@ export default function Settings() {
               )}
             </div>
           </div>
-        </Card>
+            </Card>
+          </section>
 
-        <Modal state={nameState}>
+          <Modal state={nameState}>
           <Modal.Backdrop>
             <Modal.Container>
               <Modal.Dialog className="sm:max-w-md">
@@ -332,11 +343,20 @@ export default function Settings() {
           </Modal.Backdrop>
         </Modal>
 
-        <ZjuamSection index={1} />
+        <section id="zjuam" className="scroll-mt-24">
+          <ZjuamSection index={1} />
+        </section>
 
-        <PreferenceSection index={2} />
+        <section id="preferences" className="scroll-mt-24">
+          <PreferenceSection index={2} />
+        </section>
 
-        <SystemSection index={3} />
+        <section id="system" className="scroll-mt-24">
+          <SystemSection index={3} />
+        </section>
+        </div>
+
+        <TableOfContents items={SECTIONS} />
       </div>
     </div>
   )

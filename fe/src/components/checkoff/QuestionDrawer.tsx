@@ -14,6 +14,7 @@ import Minus from '~icons/lucide/minus'
 import Shuffle from '~icons/lucide/shuffle'
 import SkipForward from '~icons/lucide/skip-forward'
 import X from '~icons/lucide/x'
+import { Markdown } from '@/components/ui/Markdown'
 import type { CheckoffQuestion, CheckoffStudent } from '@/lib/api'
 import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
@@ -117,8 +118,8 @@ function AnswerReveal({
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="rounded-xl bg-sunken p-4 text-sm leading-relaxed text-fg-muted">
-              {answer}
+            <div className="rounded-xl bg-sunken p-4">
+              <Markdown source={answer} />
             </div>
           </motion.div>
         )}
@@ -141,6 +142,7 @@ export function QuestionDrawer({
   questionIndex = 0,
   onQuestionIndex,
   showPager = false,
+  drawCount = 3,
 }: {
   mode: 'random' | 'fixed'
   questions: CheckoffQuestion[]
@@ -155,6 +157,7 @@ export function QuestionDrawer({
   questionIndex?: number
   onQuestionIndex?: (index: number) => void
   showPager?: boolean
+  drawCount?: number
 }) {
   const [drawing, setDrawing] = useState(false)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
@@ -168,7 +171,7 @@ export function QuestionDrawer({
     if (questions.length === 0) return
     setDrawing(true)
     timer.current = setTimeout(() => {
-      const count = Math.min(3, questions.length)
+      const count = Math.min(drawCount, questions.length)
       onDrawnChange(shuffle(questions).slice(0, count))
       setDrawing(false)
     }, 600)
@@ -316,7 +319,9 @@ export function QuestionDrawer({
                       <span className="tabular mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-brand-500/15 to-amber-500/10 text-xs font-bold text-brand-600 dark:text-brand-300">
                         {i + 1}
                       </span>
-                      <p className="flex-1 text-sm leading-relaxed text-fg">{question.question}</p>
+                      <div className="min-w-0 flex-1 text-sm leading-relaxed text-fg">
+                        <Markdown source={question.question} />
+                      </div>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2 pl-9">
                       <MarkButtons id={question.id} marks={marks} onMark={onMark} />
@@ -373,8 +378,8 @@ export function QuestionDrawer({
                     >
                       <Check width={12} height={12} className="shrink-0" />
                     </span>
-                    <span className="flex-1 text-sm leading-relaxed text-fg">
-                      {question.question}
+                    <span className="min-w-0 flex-1 text-sm leading-relaxed text-fg">
+                      <Markdown source={question.question} />
                     </span>
                     {selected && (
                       <span className="tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-brand-500/15 to-amber-500/10 text-xs font-bold text-brand-600 dark:text-brand-300">

@@ -1,6 +1,10 @@
+import { Button, Modal, useOverlayState } from '@heroui/react'
 import type { ReactNode, SVGProps } from 'react'
 
 import Check from '~icons/lucide/check'
+import ChevronDown from '~icons/lucide/chevron-down'
+import Settings2 from '~icons/lucide/settings-2'
+import { PreferenceRow } from '@/components/settings/PreferenceRow'
 import type { MarkdownEditorId } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -77,25 +81,63 @@ export function MarkdownEditorChoice({
   value: MarkdownEditorId
   onChange: (value: MarkdownEditorId) => void
 }) {
+  const state = useOverlayState()
+  const isMdx = value === 'mdx'
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className="text-sm font-semibold text-fg">倾向使用的 Markdown 编辑器？</div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <EditorChoice
-          selected={value === 'uiw'}
-          logo={<UiwLogo width={26} height={26} className="shrink-0" />}
-          title="@uiw/react-md-editor"
-          desc="分栏实时预览，Markdown 源码编辑"
-          onSelect={() => onChange('uiw')}
-        />
-        <EditorChoice
-          selected={value === 'mdx'}
-          logo={<MdxEditorLogo width={150} height={24} className="shrink-0" />}
-          title="@mdxeditor/editor"
-          desc="所见即所得的富文本编辑体验"
-          onSelect={() => onChange('mdx')}
-        />
-      </div>
-    </div>
+    <>
+      <PreferenceRow
+        title="倾向使用的 Markdown 编辑器？"
+        hint={isMdx ? '所见即所得的富文本编辑体验' : '分栏实时预览，Markdown 源码编辑'}
+      >
+        <Button size="sm" variant="secondary" onPress={state.open}>
+          {isMdx ? '@mdxeditor/editor' : '@uiw/react-md-editor'}
+          <ChevronDown width={14} height={14} className="shrink-0" />
+        </Button>
+      </PreferenceRow>
+
+      <Modal state={state}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-3xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <Settings2 width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>选择 Markdown 编辑器</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                <p className="text-xs text-fg-subtle">
+                  选择你偏好的 Markdown 编辑方式，仅影响题目 / 答案的编辑体验。
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EditorChoice
+                    selected={value === 'uiw'}
+                    logo={<UiwLogo width={26} height={26} className="shrink-0" />}
+                    title="@uiw/react-md-editor"
+                    desc="分栏实时预览，Markdown 源码编辑"
+                    onSelect={() => {
+                      onChange('uiw')
+                      state.close()
+                    }}
+                  />
+                  <EditorChoice
+                    selected={value === 'mdx'}
+                    logo={<MdxEditorLogo width={150} height={24} className="shrink-0" />}
+                    title="@mdxeditor/editor"
+                    desc="所见即所得的富文本编辑体验"
+                    onSelect={() => {
+                      onChange('mdx')
+                      state.close()
+                    }}
+                  />
+                </div>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </>
   )
 }

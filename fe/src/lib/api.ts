@@ -6,10 +6,14 @@ export type Role = 'TA' | 'TEACHER'
 
 export type MarkdownEditorId = 'uiw' | 'mdx'
 
+export type MarkdownStyleId = 'github' | 'prose'
+
 export type UserPreferences = {
   device: 'single' | 'multi'
   draw: 'random' | 'fixed'
   markdownEditor: MarkdownEditorId
+  markdownStyle: MarkdownStyleId
+  drawCount: number
 }
 
 export type ClassInfo = {

@@ -1,4 +1,4 @@
-import { Button, Spinner } from '@heroui/react'
+import { Button, NumberField, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react'
 import { useState } from 'react'
 
 import Check from '~icons/lucide/check'
@@ -8,6 +8,7 @@ import ListChecks from '~icons/lucide/list-checks'
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import Rocket from '~icons/lucide/rocket'
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
+import { PreferenceRow } from '@/components/settings/PreferenceRow'
 import { Card } from '@/components/ui/Card'
 import type { UserPreferences } from '@/lib/api'
 import type { IconComponent } from '@/lib/icon'
@@ -63,19 +64,104 @@ function ChoiceCard({
   )
 }
 
+function DrawCountField({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <NumberField
+      aria-label="自定义抽题数目"
+      variant="secondary"
+      minValue={1}
+      maxValue={10}
+      value={value}
+      onChange={(next) => onChange(next ?? 1)}
+    >
+      <NumberField.Group>
+        <NumberField.DecrementButton />
+        <NumberField.Input className="w-14 text-center tabular-nums" />
+        <NumberField.IncrementButton />
+      </NumberField.Group>
+    </NumberField>
+  )
+}
+
 export function PreferenceFields({
   device,
   draw,
+  drawCount,
   onDeviceChange,
   onDrawChange,
+  onDrawCountChange,
   showIcon = true,
+  layout = 'cards',
 }: {
   device: 'single' | 'multi'
   draw: 'random' | 'fixed'
+  drawCount: number
   onDeviceChange: (value: 'single' | 'multi') => void
   onDrawChange: (value: 'random' | 'fixed') => void
+  onDrawCountChange: (value: number) => void
   showIcon?: boolean
+  layout?: 'cards' | 'rows'
 }) {
+  if (layout === 'rows') {
+    return (
+      <div className="flex flex-col gap-3">
+        <PreferenceRow
+          title="是否打算使用多台设备？"
+          hint={device === 'single' ? '一台设备完成抽题与评分' : '分屏协作，一台抽题一台评分'}
+        >
+          <ToggleButtonGroup
+            selectionMode="single"
+            disallowEmptySelection
+            size="sm"
+            selectedKeys={new Set([device])}
+            onSelectionChange={(keys) => {
+              const first = keys.values().next().value
+              if (first != null) onDeviceChange(String(first) as 'single' | 'multi')
+            }}
+          >
+            <ToggleButton id="single">单设备</ToggleButton>
+            <ToggleButton id="multi">
+              <ToggleButtonGroup.Separator />
+              多设备
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </PreferenceRow>
+
+        <PreferenceRow
+          title="希望随机抽题还是固定选题？"
+          hint={draw === 'random' ? '现场为每位学生随机抽取题目' : '从题库中手动挑选题目'}
+        >
+          <ToggleButtonGroup
+            selectionMode="single"
+            disallowEmptySelection
+            size="sm"
+            selectedKeys={new Set([draw])}
+            onSelectionChange={(keys) => {
+              const first = keys.values().next().value
+              if (first != null) onDrawChange(String(first) as 'random' | 'fixed')
+            }}
+          >
+            <ToggleButton id="random">随机抽题</ToggleButton>
+            <ToggleButton id="fixed">
+              <ToggleButtonGroup.Separator />
+              选择题目
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </PreferenceRow>
+
+        <PreferenceRow title="自定义抽题数目" hint="现场随机抽题时抽取的题目数量">
+          <DrawCountField value={drawCount} onChange={onDrawCountChange} />
+        </PreferenceRow>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="flex flex-col gap-3">
@@ -121,6 +207,10 @@ export function PreferenceFields({
           />
         </div>
       </div>
+
+      <PreferenceRow title="自定义抽题数目" hint="现场随机抽题时抽取的题目数量">
+        <DrawCountField value={drawCount} onChange={onDrawCountChange} />
+      </PreferenceRow>
     </>
   )
 }
@@ -129,19 +219,28 @@ export function PreferenceOnboarding({
   initial,
   onSubmit,
   onCancel,
+  layout = 'cards',
 }: {
   initial: UserPreferences | null
   onSubmit: (prefs: UserPreferences) => Promise<void>
   onCancel?: () => void
+  layout?: 'cards' | 'rows'
 }) {
   const [device, setDevice] = useState<'single' | 'multi'>(initial?.device ?? 'single')
   const [draw, setDraw] = useState<'random' | 'fixed'>(initial?.draw ?? 'random')
+  const [drawCount, setDrawCount] = useState<number>(initial?.drawCount ?? 3)
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
     setSaving(true)
     try {
-      await onSubmit({ device, draw, markdownEditor: initial?.markdownEditor ?? 'uiw' })
+      await onSubmit({
+        device,
+        draw,
+        markdownEditor: initial?.markdownEditor ?? 'uiw',
+        markdownStyle: initial?.markdownStyle ?? 'github',
+        drawCount,
+      })
     } finally {
       setSaving(false)
     }
@@ -162,8 +261,11 @@ export function PreferenceOnboarding({
       <PreferenceFields
         device={device}
         draw={draw}
+        drawCount={drawCount}
         onDeviceChange={setDevice}
         onDrawChange={setDraw}
+        onDrawCountChange={setDrawCount}
+        layout={layout}
       />
 
       <div className="flex justify-end gap-2">

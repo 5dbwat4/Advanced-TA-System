@@ -109,6 +109,14 @@ export type SlaveCardState =
   | { kind: 'ask_question'; studentName: string; index: number; total: number; content: string }
   | { kind: 'thank'; studentName?: string }
 
+/** master 的展示偏好，随状态一起透传到 slave */
+export type CheckoffMeta = {
+  markdownStyle: 'github' | 'prose'
+  theme: 'light' | 'dark'
+}
+
+const DEFAULT_META: CheckoffMeta = { markdownStyle: 'github', theme: 'light' }
+
 type CheckoffSession = {
   token: string
   /** TOTP 密钥（base32），配对码每分钟由其推导 */
@@ -117,6 +125,8 @@ type CheckoffSession = {
   period: number
   masterUserId: string
   state: SlaveCardState
+  /** master 的展示偏好（Markdown 样式 / 亮暗模式） */
+  meta: CheckoffMeta
   createdAt: number
   updatedAt: number
   /** 该会话内存活的 master socket id */
@@ -197,6 +207,14 @@ function checkoffRoom(token: string): string {
   return `checkoff:${token}`
 }
 
+/** 向会话房间广播当前状态与 master 透传的展示偏好 */
+function emitSlaveState(session: CheckoffSession): void {
+  io?.to(checkoffRoom(session.token)).emit('slave:state', {
+    state: session.state,
+    meta: session.meta,
+  })
+}
+
 /** 创建并绑定 Socket.IO 实时服务（模块单例） */
 export function createRealtime(fastify: FastifyInstance): Server {
   const server = new Server(fastify.server, { cors: { origin: true } })
@@ -266,6 +284,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
           period: CODE_PERIOD,
           masterUserId: user.sub,
           state: { kind: 'idle', experimentMark: '', experimentTitle: '' },
+          meta: { ...DEFAULT_META },
           createdAt: Date.now(),
           updatedAt: Date.now(),
           masters: new Set(),
@@ -285,6 +304,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
         period: session.period,
         serverTime: Date.now(),
         state: session.state,
+        meta: session.meta,
         slaveConnected: session.slaves.size > 0,
       })
     })
@@ -307,6 +327,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
           period: session.period,
           serverTime: Date.now(),
           state: session.state,
+          meta: session.meta,
           slaveConnected: session.slaves.size > 0,
         })
       },
@@ -314,13 +335,23 @@ export function createRealtime(fastify: FastifyInstance): Server {
 
     socket.on(
       'master:state',
-      ({ token, state } = {} as { token?: string; state?: SlaveCardState }) => {
+      ({ token, state, meta } = {} as {
+        token?: string
+        state?: SlaveCardState
+        meta?: Partial<CheckoffMeta>
+      }) => {
         if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) return
         const session = typeof token === 'string' ? checkoffSessions.get(token) : undefined
         if (!session || !state) return
+        if (meta?.markdownStyle === 'github' || meta?.markdownStyle === 'prose') {
+          session.meta.markdownStyle = meta.markdownStyle
+        }
+        if (meta?.theme === 'light' || meta?.theme === 'dark') {
+          session.meta.theme = meta.theme
+        }
         session.state = state
         session.updatedAt = Date.now()
-        server.to(checkoffRoom(session.token)).emit('slave:state', { state: session.state })
+        emitSlaveState(session)
       },
     )
 
@@ -346,7 +377,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
           content: String(content ?? ''),
         }
         session.updatedAt = Date.now()
-        server.to(checkoffRoom(session.token)).emit('slave:state', { state: session.state })
+        emitSlaveState(session)
       },
     )
 
@@ -376,7 +407,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
         session.slaves.add(socket.id)
         session.updatedAt = Date.now()
         await socket.join(checkoffRoom(session.token))
-        ack?.({ token: session.token, state: session.state })
+        ack?.({ token: session.token, state: session.state, meta: session.meta })
         server.to(checkoffRoom(session.token)).emit('master:slave-joined')
       },
     )

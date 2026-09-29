@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 
-import { getToken } from '@/lib/api'
+import { getToken, type MarkdownStyleId } from '@/lib/api'
 
 /** slave 卡片状态（master 推送 / slave 只读） */
 export type SlaveCardState =
@@ -10,6 +10,12 @@ export type SlaveCardState =
   | { kind: 'ask_demo' }
   | { kind: 'ask_question'; studentName: string; index: number; total: number; content: string }
   | { kind: 'thank'; studentName?: string }
+
+/** master 透传到 slave 的展示偏好（Markdown 样式 / 亮暗模式） */
+export type CheckoffMeta = {
+  markdownStyle: MarkdownStyleId
+  theme: 'light' | 'dark'
+}
 
 let socket: Socket | null = null
 
@@ -97,9 +103,9 @@ export function useCheckoffMaster(enabled: boolean, masterUserId: string | undef
     }
   }, [enabled, masterUserId])
 
-  const pushState = useCallback((state: SlaveCardState) => {
+  const pushState = useCallback((state: SlaveCardState, meta?: CheckoffMeta) => {
     const token = tokenRef.current
-    if (token) getCheckoffSocket().emit('master:state', { token, state })
+    if (token) getCheckoffSocket().emit('master:state', { token, state, meta })
   }, [])
 
   const switchQuestion = useCallback(
@@ -165,6 +171,7 @@ export function notifyCheckoffStarted(payload: { classId: string; studentName: s
 /** slave 端：按 token 或 6 位 pin 加入；断线重连时自动重新 join 获取当前 state。 */
 export function useCheckoffSlave(join: { token?: string; code?: string }) {
   const [state, setState] = useState<SlaveCardState | null>(null)
+  const [meta, setMeta] = useState<CheckoffMeta | null>(null)
   const [connected, setConnected] = useState(false)
   const [closed, setClosed] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -177,8 +184,10 @@ export function useCheckoffSlave(join: { token?: string; code?: string }) {
     const s = getCheckoffSocket()
     let cancelled = false
 
-    const onState = (payload: { state: SlaveCardState }) => {
-      if (!cancelled && payload?.state) setState(payload.state)
+    const onState = (payload: { state: SlaveCardState; meta?: CheckoffMeta }) => {
+      if (cancelled || !payload?.state) return
+      setState(payload.state)
+      if (payload.meta) setMeta(payload.meta)
     }
     const onClosed = () => {
       if (!cancelled) setClosed(true)
@@ -187,12 +196,13 @@ export function useCheckoffSlave(join: { token?: string; code?: string }) {
       s.emit(
         'slave:join',
         join.token ? { token: join.token } : { code: join.code },
-        (res: { token?: string; state?: SlaveCardState; error?: string }) => {
+        (res: { token?: string; state?: SlaveCardState; meta?: CheckoffMeta; error?: string }) => {
           if (cancelled) return
           setConnected(true)
           setError(res?.error ?? null)
           if (res?.token) setSessionToken(res.token)
           if (res?.state) setState(res.state)
+          if (res?.meta) setMeta(res.meta)
         },
       )
     }
@@ -210,5 +220,5 @@ export function useCheckoffSlave(join: { token?: string; code?: string }) {
     }
   }, [joinKey, join.token, join.code])
 
-  return { state, connected, closed, error, sessionToken }
+  return { state, meta, connected, closed, error, sessionToken }
 }

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -426,3 +427,68 @@ body {
 .mdx-editor-content strong { font-weight: 700; }
 .mdx-editor-content em { font-style: italic; }
 .mdx-editor-content del { text-decoration: line-through; }
+
+/* ---------------------------------- */
+/* Markdown 渲染 (github-markdown-css)  */
+/* ---------------------------------- */
+/* 默认库依赖 prefers-color-scheme 切换主题，这里改由项目的 .dark class 控制，
+   并把默认背景改为 transparent，使其融入所在容器。变量值取自 github-markdown-css。 */
+:root:not(.dark) .markdown-body {
+  color-scheme: light;
+  --bgColor-default: #ffffff;
+  --bgColor-muted: #f6f8fa;
+  --bgColor-neutral-muted: #818b981f;
+  --bgColor-attention-muted: #fff8c5;
+  --borderColor-default: #d1d9e0;
+  --borderColor-muted: #d1d9e0b3;
+  --borderColor-neutral-muted: var(--borderColor-muted);
+  --borderColor-accent-emphasis: #0969da;
+  --borderColor-attention-emphasis: #9a6700;
+  --borderColor-danger-emphasis: #cf222e;
+  --borderColor-done-emphasis: #8250df;
+  --borderColor-success-emphasis: #1a7f37;
+  --fgColor-default: #1f2328;
+  --fgColor-muted: #59636e;
+  --fgColor-accent: #0969da;
+  --fgColor-attention: #9a6700;
+  --fgColor-danger: #d1242f;
+  --fgColor-done: #8250df;
+  --fgColor-success: #1a7f37;
+  --focus-outlineColor: var(--borderColor-accent-emphasis);
+  background-color: transparent;
+}
+
+.dark .markdown-body {
+  color-scheme: dark;
+  --bgColor-default: #0d1117;
+  --bgColor-muted: #151b23;
+  --bgColor-neutral-muted: #656c7633;
+  --bgColor-attention-muted: #bb800926;
+  --borderColor-default: #3d444d;
+  --borderColor-muted: #3d444db3;
+  --borderColor-neutral-muted: var(--borderColor-muted);
+  --borderColor-accent-emphasis: #1f6feb;
+  --borderColor-attention-emphasis: #9e6a03;
+  --borderColor-danger-emphasis: #da3633;
+  --borderColor-done-emphasis: #8957e5;
+  --borderColor-success-emphasis: #238636;
+  --fgColor-default: #f0f6fc;
+  --fgColor-muted: #9198a1;
+  --fgColor-accent: #4493f8;
+  --fgColor-attention: #d29922;
+  --fgColor-danger: #f85149;
+  --fgColor-done: #ab7df8;
+  --fgColor-success: #3fb950;
+  --focus-outlineColor: var(--borderColor-accent-emphasis);
+  background-color: transparent;
+}
+
+/* Tailwind preflight 清除了 ul/ol 的 marker，这里恢复 */
+.markdown-body ul { list-style: disc; }
+.markdown-body ul ul { list-style: circle; }
+.markdown-body ol { list-style: decimal; }
+
+/* 编辑器实时预览（.wmde-markdown）同样恢复 marker */
+.wmde-markdown ul { list-style: disc; }
+.wmde-markdown ul ul { list-style: circle; }
+.wmde-markdown ol { list-style: decimal; }

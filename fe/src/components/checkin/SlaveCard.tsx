@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 
 import Cpu from '~icons/lucide/cpu'
 import { Markdown } from '@/components/ui/Markdown'
+import type { MarkdownStyleId } from '@/lib/api'
 import type { SlaveCardState } from '@/lib/checkoff-socket'
 
 const variants = {
@@ -52,11 +53,13 @@ function QuestionCard({
   index,
   total,
   content,
+  markdownStyle,
 }: {
   studentName: string
   index: number
   total: number
   content: string
+  markdownStyle?: MarkdownStyleId
 }) {
   return (
     <div>
@@ -71,12 +74,12 @@ function QuestionCard({
           问题 {index} / {total}
         </span>
       </div>
-      <Markdown source={content} />
+      <Markdown source={content} style={markdownStyle} />
     </div>
   )
 }
 
-function CardBody({ state }: { state: SlaveCardState }) {
+function CardBody({ state, markdownStyle }: { state: SlaveCardState; markdownStyle?: MarkdownStyleId }) {
   switch (state.kind) {
     case 'idle':
       return <IdleCard mark={state.experimentMark} title={state.experimentTitle} />
@@ -91,6 +94,7 @@ function CardBody({ state }: { state: SlaveCardState }) {
           index={state.index}
           total={state.total}
           content={state.content}
+          markdownStyle={markdownStyle}
         />
       )
     case 'thank':
@@ -103,7 +107,7 @@ function CardBody({ state }: { state: SlaveCardState }) {
   }
 }
 
-export function SlaveCard({ state }: { state: SlaveCardState }) {
+export function SlaveCard({ state, markdownStyle }: { state: SlaveCardState; markdownStyle?: MarkdownStyleId }) {
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -116,7 +120,7 @@ export function SlaveCard({ state }: { state: SlaveCardState }) {
         style={{ transformPerspective: 1000 }}
         className="rounded-3xl border border-line bg-elevated/80 p-8 shadow-2xl backdrop-blur-xl transition-shadow duration-300 hover:shadow-2xl hover:shadow-brand-600/20"
       >
-        <CardBody state={state} />
+        <CardBody state={state} markdownStyle={markdownStyle} />
       </motion.div>
     </AnimatePresence>
   )

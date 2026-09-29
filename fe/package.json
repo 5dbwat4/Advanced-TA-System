@@ -19,6 +19,7 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@uiw/react-md-editor": "^4.1.2",
     "clsx": "^2.1.1",
+    "github-markdown-css": "^5.9.0",
     "katex": "^0.16.47",
     "motion": "^13.4.1",
     "next-themes": "^0.4.6",
@@ -27,6 +28,7 @@
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",
     "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.8",
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@svgr/core": "^8.1.0",
     "@svgr/plugin-jsx": "^8.1.0",
+    "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

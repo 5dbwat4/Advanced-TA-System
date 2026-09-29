@@ -32,7 +32,7 @@ model User {
   /// 最近一次统一身份认证同步时间
   zjuSyncedAt DateTime?
 
-  /// 验收偏好（JSON 字符串）：{ device: 'single'|'multi', draw: 'random'|'fixed' }
+  /// 验收偏好（JSON 字符串）：{ device: 'single'|'multi', draw: 'random'|'fixed', markdownEditor: 'uiw'|'mdx', markdownStyle: 'github'|'prose', drawCount: number }
   preferences String?
 
   /// 所属班级（首次登录时按学在浙大课程自动绑定，可属于多个班级）

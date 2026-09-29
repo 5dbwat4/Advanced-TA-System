@@ -3,7 +3,14 @@ import { z } from 'zod'
 
 import { hashPassword } from '../lib/password'
 import { prisma } from '../lib/prisma'
-import { parsePreferences, publicUser, type UserPreferences } from '../lib/user'
+import {
+  DRAW_COUNT_DEFAULT,
+  DRAW_COUNT_MAX,
+  DRAW_COUNT_MIN,
+  parsePreferences,
+  publicUser,
+  type UserPreferences,
+} from '../lib/user'
 import { parseCredentials, serializeCredentials } from '../lib/webauthn'
 
 const settingsSchema = z.discriminatedUnion('action', [
@@ -82,6 +89,8 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     device: z.enum(['single', 'multi']),
     draw: z.enum(['random', 'fixed']),
     markdownEditor: z.enum(['uiw', 'mdx']).optional(),
+    markdownStyle: z.enum(['github', 'prose']).optional(),
+    drawCount: z.number().int().min(DRAW_COUNT_MIN).max(DRAW_COUNT_MAX).optional(),
   })
 
   /** 更新验收偏好（未提交的字段沿用已有值） */
@@ -98,6 +107,8 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       device: parsed.data.device,
       draw: parsed.data.draw,
       markdownEditor: parsed.data.markdownEditor ?? existing?.markdownEditor ?? 'uiw',
+      markdownStyle: parsed.data.markdownStyle ?? existing?.markdownStyle ?? 'github',
+      drawCount: parsed.data.drawCount ?? existing?.drawCount ?? DRAW_COUNT_DEFAULT,
     }
     const updated = await prisma.user.update({
       where: { id: sub },

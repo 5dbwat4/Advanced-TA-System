@@ -1,5 +1,6 @@
 import { Button, Modal, Spinner, toast as herouiToast, useOverlayState } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
+import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -56,6 +57,10 @@ export default function Checkoff() {
 
   const isMulti = user?.preferences?.device === 'multi'
   const master = useCheckoffMaster(isMulti, user?.id)
+  const { resolvedTheme } = useTheme()
+
+  const markdownStyle = user?.preferences?.markdownStyle ?? 'github'
+  const theme: 'light' | 'dark' = resolvedTheme === 'dark' ? 'dark' : 'light'
 
   const handleCheckoffStarted = useCallback((event: CheckoffStartedEvent) => {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
@@ -185,8 +190,20 @@ export default function Checkoff() {
     } else {
       state = { kind: 'thank', studentName: student?.name }
     }
-    master.pushState(state)
-  }, [isMulti, step, nameAsked, experiment, student, drawn, questionIndex])
+    master.pushState(state, { markdownStyle, theme })
+  }, [
+    isMulti,
+    step,
+    nameAsked,
+    experiment,
+    student,
+    drawn,
+    questionIndex,
+    markdownStyle,
+    theme,
+    master.session.token,
+    master.pushState,
+  ])
 
   const savePreferences = useCallback(
     async (prefs: UserPreferences) => {
@@ -297,6 +314,7 @@ export default function Checkoff() {
                 onDrawnChange={setDrawn}
                 marks={marks}
                 onMark={mark}
+                drawCount={preferences.drawCount}
                 onNext={() => setStep(4)}
                 onSkip={() => setStep(4)}
                 student={student}
@@ -322,13 +340,14 @@ export default function Checkoff() {
       <Modal state={prefsState}>
         <Modal.Backdrop>
           <Modal.Container>
-            <Modal.Dialog className="sm:max-w-xl">
+            <Modal.Dialog className="sm:max-w-3xl">
               <Modal.CloseTrigger />
               <Modal.Body>
                 <PreferenceOnboarding
                   initial={preferences}
                   onSubmit={savePreferences}
                   onCancel={prefsState.close}
+                  layout="rows"
                 />
               </Modal.Body>
             </Modal.Dialog>
