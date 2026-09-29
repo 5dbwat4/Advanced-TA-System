@@ -16,17 +16,14 @@
  *      - 输入框用 AppInput 的 `:color="... 'error'"`（→ UInput 的 error ring）
  *      - `<form novalidate>` 关掉浏览器原生 required 气泡，改由我们统一提示
  *    服务端返回的失败（密码错误 / 通行密钥错误）仍走旧版的 `toast.error`。
- * 3) 通行密钥（WebAuthn）：`@simplewebauthn/browser` 的调用与 `apiFetch` 的
- *    `/api/auth/passkey/*` 请求逐行照搬。
- *    ⚠️ `~/lib/passkey` 属于 MIGRATION.md Phase B 的 lib 搬运清单、当前还不存在，
- *    本批**不新建 lib/**，所以 `getAuthenticationOptions` 在本文件内联实现；
- *    Phase B 建好 `app/lib/passkey.ts` 后请把这段换成 import。
+ * 3) 通行密钥（WebAuthn）：`@simplewebauthn/browser` 的调用 + `~/lib/passkey`
+ *    的 `getAuthenticationOptions()`（Phase B 已建好，本文件不再内联实现）。
  * 4) pending 反馈：`isPending` 直接给 AppButton（UButton 自带 spinner），
  *    作用域插槽里只做「图标切换 + 文案切换」，**不再手写 Spinner**（双 spinner）。
  * 5) 动效：`login-role-pill` / `login-method-pill` 两个 `layoutId` + spring，
  *    表单区 `AnimatePresence mode="wait"` 按 `role + method` 换 key 淡入淡出。
  */
-import { startAuthentication, type PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
+import { startAuthentication } from '@simplewebauthn/browser'
 import { AnimatePresence, motion } from 'motion-v'
 
 import ArrowRight from '~icons/lucide/arrow-right'
@@ -39,9 +36,10 @@ import ShieldCheck from '~icons/lucide/shield-check'
 import University from '~icons/lucide/university'
 import Users from '~icons/lucide/users'
 
-import { ApiError, apiFetch } from '~/lib/api'
+import { ApiError } from '~/lib/api'
 import { clearLastUser, getLastUser, lastUserIdentifier, type LastUser } from '~/lib/last-user'
 import type { IconComponent } from '~/lib/nav'
+import { getAuthenticationOptions } from '~/lib/passkey'
 import { cn } from '~/lib/utils'
 
 type Role = 'TA' | 'TEACHER'
@@ -187,17 +185,6 @@ async function submit() {
   } finally {
     loading.value = false
   }
-}
-
-/**
- * 旧版 `~/lib/passkey` 的 getAuthenticationOptions（本批内联，Phase B 换成 import）
- */
-function getAuthenticationOptions(identifierHint?: string) {
-  const query = identifierHint ? `?identifier=${encodeURIComponent(identifierHint)}` : ''
-  return apiFetch<{
-    options: PublicKeyCredentialRequestOptionsJSON
-    challengeToken: string
-  }>(`/api/auth/passkey/authentication-options${query}`)
 }
 
 async function passkeyLogin(hint?: string) {

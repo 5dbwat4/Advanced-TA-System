@@ -13,16 +13,11 @@
  * 1) 原生约束校验（`required` / `minLength={password ? 8 : undefined}`）→ 与 LoginPanel
  *    一致：不引 zod，写普通 `validate()` 在提交时统一跑，红色 inline 文案
  *    （`text-xs text-danger`）+ 出错输入框 `:color="'error'"` + `<form novalidate>`。
- * 2) `registerPasskey` 属于 MIGRATION.md Phase B 的 lib 搬运清单、当前不存在，
- *    本批**不新建 lib/**，在页面内联实现；Phase B 建好 `app/lib/passkey.ts` 后换成 import。
+ * 2) 通行密钥走 `~/lib/passkey` 的 `registerPasskey()`（Phase B 已建好，本文件不再内联实现）。
  * 3) pending 反馈只用 `is-pending`（AppButton 自带 spinner），作用域插槽里只切图标 / 文案。
  * 4) 绑定通行密钥成功后要 `auth.refresh()`：旧版靠 AppShell 的第二个 useEffect 重新拉
  *    `/api/auth/me`，这里改成显式刷新（见 bindPasskey 注释）。
  */
-import {
-  startRegistration,
-  type PublicKeyCredentialCreationOptionsJSON,
-} from '@simplewebauthn/browser'
 import { motion } from 'motion-v'
 
 import ArrowRight from '~icons/lucide/arrow-right'
@@ -30,7 +25,7 @@ import Check from '~icons/lucide/check'
 import Fingerprint from '~icons/lucide/fingerprint'
 import Plus from '~icons/lucide/plus'
 
-import { apiFetch } from '~/lib/api'
+import { registerPasskey } from '~/lib/passkey'
 
 definePageMeta({ layout: 'default' })
 
@@ -72,26 +67,9 @@ function validate() {
 }
 
 /**
- * 旧版 `~/lib/passkey` 的 registerPasskey（本批内联，Phase B 换成 import）
+ * 绑定通行密钥：成功要 `auth.refresh()`，让 AppShell 顶栏的班级/权限等派生状态
+ * 立即跟着更新（旧版靠 AppShell 第二个 useEffect 重新拉 `/api/auth/me`）。
  */
-async function registerPasskey(): Promise<boolean> {
-  try {
-    const { options, challengeToken } = await apiFetch<{
-      options: PublicKeyCredentialCreationOptionsJSON
-      challengeToken: string
-    }>('/api/auth/passkey/registration-options')
-    const response = await startRegistration({ optionsJSON: options })
-    await apiFetch('/api/auth/passkey/registration-verify', {
-      method: 'POST',
-      body: JSON.stringify({ response, challengeToken }),
-    })
-    return true
-  } catch (error) {
-    if ((error as Error).name === 'NotAllowedError') return false
-    throw error
-  }
-}
-
 async function bindPasskey() {
   binding.value = true
   try {
