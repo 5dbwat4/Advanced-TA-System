@@ -89,6 +89,9 @@ export type Experiment = {
   questionBankId: string | null
   xzzdBindIdCheckout: string | null
   xzzdBindIdReport: string | null
+  publishTime: string | null
+  checkoffDeadline: string | null
+  reportDeadline: string | null
   lastXzzdDownSyncAt: string | null
   lastXzzdUpSyncAt: string | null
   klass: { id: string; name: string; xzzdClassId: string | null } | null
@@ -328,6 +331,9 @@ export function updateExperiment(
     questionBankId?: string | null
     xzzdBindIdCheckout?: string | null
     xzzdBindIdReport?: string | null
+    publishTime?: string | null
+    checkoffDeadline?: string | null
+    reportDeadline?: string | null
   },
 ): Promise<{ experiment: Experiment }> {
   return apiFetch<{ experiment: Experiment }>(`/api/experiments/${id}`, {
@@ -397,6 +403,7 @@ export async function applyRoster(
 export type ClassSettings = {
   checkpointEnabled?: boolean
   checkpointRule?: string | null
+  focusEnabled?: boolean
   [key: string]: unknown
 }
 
@@ -406,11 +413,59 @@ export function fetchClassSettings(classId: string): Promise<{ settings: ClassSe
 
 export function updateClassSettings(
   classId: string,
-  body: { checkpointEnabled?: boolean; checkpointRule?: string | null },
+  body: { checkpointEnabled?: boolean; checkpointRule?: string | null; focusEnabled?: boolean },
 ): Promise<{ settings: ClassSettings }> {
   return apiFetch<{ settings: ClassSettings }>(`/api/classes/${classId}/settings`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  })
+}
+
+export type FocusStudent = {
+  id: string
+  classId: string
+  stuId: string
+  reason: string
+  createdAt: string
+  updatedAt: string
+  student: { name: string; studentNo: string } | null
+}
+
+export function listFocusStudents(classId: string): Promise<{ focusStudents: FocusStudent[] }> {
+  return apiFetch<{ focusStudents: FocusStudent[] }>(`/api/classes/${classId}/focus-students`)
+}
+
+export function addFocusStudent(
+  classId: string,
+  body: { stuId: string; reason?: string },
+): Promise<{ focusStudent: FocusStudent }> {
+  return apiFetch<{ focusStudent: FocusStudent }>(`/api/classes/${classId}/focus-students`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateFocusStudent(
+  classId: string,
+  id: string,
+  reason: string,
+): Promise<{ focusStudent: FocusStudent }> {
+  return apiFetch<{ focusStudent: FocusStudent }>(
+    `/api/classes/${classId}/focus-students/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    },
+  )
+}
+
+export function deleteFocusStudents(
+  classId: string,
+  ids: string[],
+): Promise<{ ok: true; deletedCount: number }> {
+  return apiFetch<{ ok: true; deletedCount: number }>(`/api/classes/${classId}/focus-students`, {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
   })
 }
 

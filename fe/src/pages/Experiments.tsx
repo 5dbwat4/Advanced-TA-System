@@ -8,10 +8,11 @@ import Check from '~icons/lucide/check'
 import ChevronRight from '~icons/lucide/chevron-right'
 import FlaskConical from '~icons/lucide/flask-conical'
 import GraduationCap from '~icons/lucide/graduation-cap'
-import NotebookText from '~icons/lucide/notebook-text'
 import Plus from '~icons/lucide/plus'
 import X from '~icons/lucide/x'
+import { ExperimentStatusChip } from '@/components/experiments/ExperimentTimeline'
 import { EmptyState } from '@/components/ui/Card'
+import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { apiFetch, type Experiment } from '@/lib/api'
 import { useCurrentClass } from '@/lib/store'
@@ -23,6 +24,9 @@ export default function Experiments() {
   const [creating, setCreating] = useState(false)
   const [mark, setMark] = useState('')
   const [title, setTitle] = useState('')
+  const [publishTime, setPublishTime] = useState<string | null>(null)
+  const [checkoffDeadline, setCheckoffDeadline] = useState<string | null>(null)
+  const [reportDeadline, setReportDeadline] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const reload = useCallback(async () => {
@@ -59,11 +63,21 @@ export default function Experiments() {
     try {
       await apiFetch<{ experiment: Experiment }>('/api/experiments', {
         method: 'POST',
-        body: JSON.stringify({ mark: mark.trim(), title: title.trim(), classId: currentClass.id }),
+        body: JSON.stringify({
+          mark: mark.trim(),
+          title: title.trim(),
+          classId: currentClass.id,
+          publishTime,
+          checkoffDeadline,
+          reportDeadline,
+        }),
       })
       toast.success('已添加实验')
       setMark('')
       setTitle('')
+      setPublishTime(null)
+      setCheckoffDeadline(null)
+      setReportDeadline(null)
       setCreating(false)
       await reload()
     } catch (error) {
@@ -135,6 +149,12 @@ export default function Experiments() {
               </div>
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <DateTimePicker label="公开时间" value={publishTime} onChange={setPublishTime} />
+              <DateTimePicker label="验收截止时间" value={checkoffDeadline} onChange={setCheckoffDeadline} />
+              <DateTimePicker label="报告提交截止时间" value={reportDeadline} onChange={setReportDeadline} />
+            </div>
+
             <div className="flex items-center gap-2 rounded-xl bg-sunken px-4 py-2.5 text-xs text-fg-subtle">
               <GraduationCap width={14} height={14} className="shrink-0" />
               归属课程：{currentClass?.name ?? '未选择课程'}
@@ -187,13 +207,7 @@ export default function Experiments() {
                   {exp.mark}
                 </span>
                 <h3 className="min-w-0 flex-1 truncate font-bold">{exp.title}</h3>
-                <span className="rounded-lg border border-line bg-sunken px-2.5 py-1 text-xs font-semibold text-fg-muted">
-                  {exp.klass?.name ?? '未绑定课程'}
-                </span>
-                <span className="hidden items-center gap-1 text-xs text-fg-subtle sm:flex">
-                  <NotebookText width={13} height={13} className="shrink-0" />
-                  {exp.questionBank ? exp.questionBank.name : '未绑定题目集'}
-                </span>
+                <ExperimentStatusChip experiment={exp} />
                 <ChevronRight
                   width={18}
                   height={18}

@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import ArrowDown from '~icons/lucide/arrow-down'
 import ArrowLeft from '~icons/lucide/arrow-left'
 import ArrowUp from '~icons/lucide/arrow-up'
+import CalendarClock from '~icons/lucide/calendar-clock'
 import Check from '~icons/lucide/check'
 import ChevronRight from '~icons/lucide/chevron-right'
 import ExternalLink from '~icons/lucide/external-link'
@@ -25,6 +26,7 @@ import Table from '~icons/lucide/table'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
+import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
@@ -56,6 +58,11 @@ export default function ExperimentDetail() {
   const [savingXzzd, setSavingXzzd] = useState(false)
   const [xzzdMode, setXzzdMode] = useState<'view' | 'bind'>('bind')
 
+  const [publishDraft, setPublishDraft] = useState<string | null>(null)
+  const [checkoffDeadlineDraft, setCheckoffDeadlineDraft] = useState<string | null>(null)
+  const [reportDeadlineDraft, setReportDeadlineDraft] = useState<string | null>(null)
+  const [savingTimeline, setSavingTimeline] = useState(false)
+
   const xzzdState = useOverlayState()
 
   const loadHomeworks = useCallback(async () => {
@@ -79,6 +86,9 @@ export default function ExperimentDetail() {
     ])
     setExperiment(detail.experiment)
     setBanks(bankData.banks)
+    setPublishDraft(detail.experiment.publishTime)
+    setCheckoffDeadlineDraft(detail.experiment.checkoffDeadline)
+    setReportDeadlineDraft(detail.experiment.reportDeadline)
 
     const checkoff = await fetchCheckoff({
       classId: detail.experiment.classId,
@@ -196,6 +206,33 @@ export default function ExperimentDetail() {
     }
   }
 
+  const dirty =
+    experiment !== null &&
+    (experiment.publishTime !== publishDraft ||
+      experiment.checkoffDeadline !== checkoffDeadlineDraft ||
+      experiment.reportDeadline !== reportDeadlineDraft)
+
+  const saveTimeline = async () => {
+    if (!experiment || !dirty) return
+    setSavingTimeline(true)
+    try {
+      const { experiment: updated } = await updateExperiment(experiment.id, {
+        publishTime: publishDraft,
+        checkoffDeadline: checkoffDeadlineDraft,
+        reportDeadline: reportDeadlineDraft,
+      })
+      setExperiment(updated)
+      setPublishDraft(updated.publishTime)
+      setCheckoffDeadlineDraft(updated.checkoffDeadline)
+      setReportDeadlineDraft(updated.reportDeadline)
+      toast.success('时间线已保存')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setSavingTimeline(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <Link
@@ -262,6 +299,60 @@ export default function ExperimentDetail() {
             未绑定题目集时，验收抽题将没有题目。
           </p>
         )}
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock
+              width={16}
+              height={16}
+              className="shrink-0 text-brand-600 dark:text-brand-300"
+            />
+            <span className="text-sm font-bold">时间线</span>
+          </div>
+          <span className="text-xs text-fg-subtle">
+            截止时间后的 5 天为缓冲期，时间线走完才视为「已结束」
+          </span>
+          <Button
+            className="ml-auto"
+            size="sm"
+            isDisabled={!dirty}
+            isPending={savingTimeline}
+            onPress={saveTimeline}
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? (
+                  <Spinner color="current" size="sm" />
+                ) : (
+                  <Check width={16} height={16} className="shrink-0" />
+                )}
+                {isPending ? '保存中' : '保存'}
+              </>
+            )}
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <DateTimePicker
+            label="公开时间"
+            value={publishDraft}
+            onChange={setPublishDraft}
+            isDisabled={savingTimeline}
+          />
+          <DateTimePicker
+            label="验收截止时间"
+            value={checkoffDeadlineDraft}
+            onChange={setCheckoffDeadlineDraft}
+            isDisabled={savingTimeline}
+          />
+          <DateTimePicker
+            label="报告提交截止时间"
+            value={reportDeadlineDraft}
+            onChange={setReportDeadlineDraft}
+            isDisabled={savingTimeline}
+          />
+        </div>
       </div>
 
       <button

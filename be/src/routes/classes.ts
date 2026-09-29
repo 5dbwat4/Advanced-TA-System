@@ -37,7 +37,26 @@ const rosterApplySchema = z.object({
 const classSettingsPatchSchema = z.object({
   checkpointEnabled: z.boolean().optional(),
   checkpointRule: z.string().trim().max(64).nullable().optional(),
+  focusEnabled: z.boolean().optional(),
 })
+
+const focusCreateSchema = z.object({
+  stuId: z.string().trim().min(1),
+  reason: z.string().trim().max(200).optional(),
+})
+
+const focusUpdateSchema = z.object({
+  reason: z.string().trim().max(200),
+})
+
+const focusDeleteSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1).max(1000),
+})
+
+const focusParamsSchema = z.object({ id: z.string().min(1), focusId: z.string().min(1) })
+
+/** 重点关注记录统一 include（学生姓名 / 学号） */
+const focusInclude = { student: { select: { name: true, studentNo: true } } } as const
 
 export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 当前登录用户是否为助教 / 教师 */
@@ -355,4 +374,143 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.send({ claims })
   })
+
+  /** 重点关注学生名单 */
+  fastify.get(
+    '/:id/focus-students',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const parsed = classParamsSchema.safeParse(request.params)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const klass = await resolveOwnedClass(request, reply, parsed.data.id)
+      if (!klass) return reply
+
+      const focusStudents = await prisma.focusStudent.findMany({
+        where: { classId: klass.id },
+        include: focusInclude,
+        orderBy: { createdAt: 'asc' },
+      })
+
+      return reply.send({ focusStudents })
+    },
+  )
+
+  /** 新增重点关注学生 */
+  fastify.post(
+    '/:id/focus-students',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
+      }
+
+      const parsedParams = classParamsSchema.safeParse(request.params)
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+      if (!klass) return reply
+
+      const parsedBody = focusCreateSchema.safeParse(request.body ?? {})
+      if (!parsedBody.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const { stuId, reason } = parsedBody.data
+
+      const student = await prisma.student.findFirst({ where: { stuId, classId: klass.id } })
+      if (!student) {
+        return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
+      }
+
+      const existing = await prisma.focusStudent.findUnique({
+        where: { classId_stuId: { classId: klass.id, stuId } },
+      })
+      if (existing) {
+        return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该学生已在重点关注名单中' })
+      }
+
+      const focusStudent = await prisma.focusStudent.create({
+        data: { classId: klass.id, stuId, reason: reason ?? '' },
+        include: focusInclude,
+      })
+
+      return reply.code(201).send({ focusStudent })
+    },
+  )
+
+  /** 修改重点关注原因 */
+  fastify.patch(
+    '/:id/focus-students/:focusId',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
+      }
+
+      const parsedParams = focusParamsSchema.safeParse(request.params)
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+      if (!klass) return reply
+
+      const parsedBody = focusUpdateSchema.safeParse(request.body ?? {})
+      if (!parsedBody.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const existing = await prisma.focusStudent.findFirst({
+        where: { id: parsedParams.data.focusId, classId: klass.id },
+      })
+      if (!existing) {
+        return reply
+          .code(404)
+          .send({ error: 'FOCUS_STUDENT_NOT_FOUND', message: '重点关注记录不存在' })
+      }
+
+      const focusStudent = await prisma.focusStudent.update({
+        where: { id: existing.id },
+        data: { reason: parsedBody.data.reason },
+        include: focusInclude,
+      })
+
+      return reply.send({ focusStudent })
+    },
+  )
+
+  /** 批量移除重点关注学生 */
+  fastify.delete(
+    '/:id/focus-students',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
+      }
+
+      const parsedParams = classParamsSchema.safeParse(request.params)
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+      if (!klass) return reply
+
+      const parsedBody = focusDeleteSchema.safeParse(request.body ?? {})
+      if (!parsedBody.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const { count } = await prisma.focusStudent.deleteMany({
+        where: { classId: klass.id, id: { in: parsedBody.data.ids } },
+      })
+
+      return reply.send({ ok: true, deletedCount: count })
+    },
+  )
 }

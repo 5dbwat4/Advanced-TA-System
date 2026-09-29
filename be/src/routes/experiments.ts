@@ -6,11 +6,19 @@ import { prisma } from '../lib/prisma'
 import { isStaff } from '../lib/roles'
 import { listHomeworkActivities, ZjuamError } from '../lib/zjuam'
 
+/** 时间线字段（ISO 8601 字符串，null 表示清空） */
+const timelineFields = {
+  publishTime: z.string().datetime({ offset: true }).nullish(),
+  checkoffDeadline: z.string().datetime({ offset: true }).nullish(),
+  reportDeadline: z.string().datetime({ offset: true }).nullish(),
+}
+
 const createExperimentSchema = z.object({
   mark: z.string().trim().min(1).max(32),
   title: z.string().trim().min(1).max(64),
   classId: z.string().trim().min(1).max(64),
   questionBankId: z.string().trim().min(1).max(64).nullish(),
+  ...timelineFields,
 })
 
 const updateExperimentSchema = z.object({
@@ -19,6 +27,7 @@ const updateExperimentSchema = z.object({
   questionBankId: z.string().trim().min(1).max(64).nullable().optional(),
   xzzdBindIdCheckout: z.string().trim().min(1).max(64).nullable().optional(),
   xzzdBindIdReport: z.string().trim().min(1).max(64).nullable().optional(),
+  ...timelineFields,
 })
 
 const zjuamCredentialsSchema = z.object({
@@ -29,6 +38,13 @@ const zjuamCredentialsSchema = z.object({
 const experimentInclude = {
   klass: { select: { id: true, name: true, xzzdClassId: true } },
   questionBank: { select: { id: true, name: true } },
+}
+
+/** 时间线字段：ISO 字符串 → Date；null 表示清空；undefined 表示不改 */
+function toTimelineDate(value: string | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  return new Date(value)
 }
 
 export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -147,7 +163,8 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { mark, title, classId, questionBankId } = parsed.data
+    const { mark, title, classId, questionBankId, publishTime, checkoffDeadline, reportDeadline } =
+      parsed.data
 
     const klass = await prisma.class.findUnique({ where: { id: classId } })
     if (!klass) {
@@ -169,7 +186,15 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const experiment = await prisma.experiment.create({
-      data: { mark, title, classId, questionBankId: questionBankId ?? null },
+      data: {
+        mark,
+        title,
+        classId,
+        questionBankId: questionBankId ?? null,
+        publishTime: toTimelineDate(publishTime) ?? null,
+        checkoffDeadline: toTimelineDate(checkoffDeadline) ?? null,
+        reportDeadline: toTimelineDate(reportDeadline) ?? null,
+      },
       include: experimentInclude,
     })
 
@@ -216,9 +241,17 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
+    const { publishTime, checkoffDeadline, reportDeadline, ...rest } = parsed.data
+    const data = {
+      ...rest,
+      ...(publishTime !== undefined ? { publishTime: toTimelineDate(publishTime) } : {}),
+      ...(checkoffDeadline !== undefined ? { checkoffDeadline: toTimelineDate(checkoffDeadline) } : {}),
+      ...(reportDeadline !== undefined ? { reportDeadline: toTimelineDate(reportDeadline) } : {}),
+    }
+
     const experiment = await prisma.experiment.update({
       where: { id },
-      data: parsed.data,
+      data,
       include: experimentInclude,
     })
 

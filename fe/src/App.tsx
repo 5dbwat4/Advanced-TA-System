@@ -12,9 +12,11 @@ import CourseSettings from '@/pages/CourseSettings'
 import Dashboard from '@/pages/Dashboard'
 import ExperimentDetail from '@/pages/ExperimentDetail'
 import Experiments from '@/pages/Experiments'
+import FocusStudents from '@/pages/FocusStudents'
 import Login from '@/pages/Login'
 import NewCourse from '@/pages/NewCourse'
 import LlmConnect from '@/pages/LlmConnect'
+import More from '@/pages/More'
 import Questions from '@/pages/Questions'
 import Reports from '@/pages/Reports'
 import Scores from '@/pages/Scores'
@@ -40,10 +42,12 @@ export default function App() {
           <Route path="questions" element={<Questions />} />
           <Route path="reports" element={<Reports />} />
           <Route path="llm-connect" element={<LlmConnect />} />
+          <Route path="more" element={<More />} />
           <Route path="scores" element={<Scores />} />
           <Route path="courses/new" element={<NewCourse />} />
           <Route path="courses/settings" element={<CourseSettings />} />
           <Route path="courses/checkpoints" element={<Checkpoints />} />
+          <Route path="courses/focus-students" element={<FocusStudents />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Route>

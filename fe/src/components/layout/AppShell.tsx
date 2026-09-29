@@ -1,50 +1,28 @@
 import { Button, Dropdown, Label, Tooltip } from '@heroui/react'
 import { motion } from 'motion/react'
 import { useEffect } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import BookOpen from '~icons/lucide/book-open'
-import Bot from '~icons/lucide/bot'
 import ChevronDown from '~icons/lucide/chevron-down'
-import CircuitBoard from '~icons/lucide/circuit-board'
-import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Cpu from '~icons/lucide/cpu'
-import FileText from '~icons/lucide/file-text'
-import FlaskConical from '~icons/lucide/flask-conical'
-import LayoutDashboard from '~icons/lucide/layout-dashboard'
+import Ellipsis from '~icons/lucide/ellipsis'
 import LogOut from '~icons/lucide/log-out'
-import NotebookText from '~icons/lucide/notebook-text'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
-import Settings2 from '~icons/lucide/settings-2'
-import Table from '~icons/lucide/table'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
-import type { IconComponent } from '@/lib/icon'
+import { MOBILE_NAV_ITEMS, MORE_PATH, NAV_ITEMS, isMoreSection } from '@/lib/nav'
 import { useAppStore, useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { getZjuamCredential } from '@/lib/zjuam'
 
-type NavItem = { to: string; label: string; icon: IconComponent; end?: boolean }
-
-const NAV_ITEMS: NavItem[] = [
-  { to: '/console', label: '总览', icon: LayoutDashboard, end: true },
-  { to: '/console/checkoff', label: '验收', icon: ClipboardCheck },
-  { to: '/console/boards', label: '开发板', icon: CircuitBoard },
-  { to: '/console/experiments', label: '实验', icon: FlaskConical },
-  { to: '/console/questions', label: '题库', icon: NotebookText },
-  { to: '/console/reports', label: '实验报告', icon: FileText },
-  { to: '/console/scores', label: '分数和名单', icon: Table },
-  { to: '/console/llm-connect', label: 'MCP & Skills', icon: Bot },
-  { to: '/console/courses/settings', label: '课程设置', icon: BookOpen },
-  { to: '/console/settings', label: '设置', icon: Settings2 },
-]
-
 export function AppShell() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const moreActive = isMoreSection(pathname)
   const classes = user?.classes ?? []
   const currentClass = useCurrentClass()
   const setCurrentClassId = useAppStore((state) => state.setCurrentClassId)
@@ -295,7 +273,7 @@ export function AppShell() {
 
         {/* Mobile bottom nav */}
         <nav className="glass fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-line pb-[env(safe-area-inset-bottom)] md:hidden">
-          {NAV_ITEMS.map((item) => (
+          {MOBILE_NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -321,6 +299,23 @@ export function AppShell() {
               )}
             </NavLink>
           ))}
+          <NavLink
+            to={MORE_PATH}
+            aria-current={moreActive ? 'page' : undefined}
+            className={cn(
+              'relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors',
+              moreActive ? 'text-brand-600 dark:text-brand-300' : 'text-fg-subtle',
+            )}
+          >
+            {moreActive && (
+              <motion.span
+                layoutId="mobile-nav-pill"
+                className="absolute -top-px h-0.5 w-10 rounded-full bg-gradient-to-r from-brand-500 to-amber-500"
+              />
+            )}
+            <Ellipsis width={20} height={20} className="shrink-0" />
+            更多
+          </NavLink>
         </nav>
 
         <main className="flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
+import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
@@ -14,13 +15,16 @@ const CHECKPOINT_RULES = [{ value: 'lab0-zero', label: 'Lab 0 置为0分' }]
 
 const SECTIONS: TocItem[] = [
   { id: 'checkpoint', label: 'Checkpoint Settings' },
+  { id: 'focus', label: '重点关注学生' },
   { id: 'basic', label: '基本信息' },
   { id: 'roster', label: '学生名单' },
   { id: 'tas', label: '助教' },
   { id: 'xzzd', label: '学在浙大' },
 ]
 
-const PLACEHOLDER_SECTIONS = SECTIONS.filter((section) => section.id !== 'checkpoint')
+const PLACEHOLDER_SECTIONS = SECTIONS.filter(
+  (section) => section.id !== 'checkpoint' && section.id !== 'focus',
+)
 
 export default function CourseSettings() {
   return (
@@ -33,9 +37,13 @@ export default function CourseSettings() {
             <CheckpointSettingsSection index={0} />
           </section>
 
+          <section id="focus" className="scroll-mt-24">
+            <FocusStudentsSection index={1} />
+          </section>
+
           {PLACEHOLDER_SECTIONS.map((section, index) => (
             <section key={section.id} id={section.id} className="scroll-mt-24">
-              <Card index={index + 1}>
+              <Card index={index + 2}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>

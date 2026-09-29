@@ -67,6 +67,13 @@ model Experiment {
   /// 绑定的学在浙大「报告」作业 id（homework activity id）
   xzzdBindIdReport   String?
 
+  /// 时间线：公开时间
+  publishTime       DateTime?
+  /// 时间线：验收截止时间
+  checkoffDeadline  DateTime?
+  /// 时间线：报告提交截止时间
+  reportDeadline    DateTime?
+
   /// 上次「向下同步」时间：从学在浙大拉取提交情况等（细则以上游为准）
   lastXzzdDownSyncAt DateTime?
   /// 上次「向上同步」时间：把本地评分推送到学在浙大（评分以本地为准）
@@ -131,6 +138,7 @@ model Class {
   tas         User[]
   experiments Experiment[]
   checkpointClaims CheckpointClaimed[]
+  focusStudents FocusStudent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -149,6 +157,7 @@ model Student {
   klass     Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
   scores    Score[]
   checkpointClaims CheckpointClaimed[]
+  focusStudents FocusStudent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,6 +206,28 @@ model CheckpointClaimed {
 
   /// 已应用的规则位标志（Int，当前统一置为 0）
   appliedRules Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classId, stuId])
+  @@index([classId])
+  @@index([stuId])
+}
+
+/// 重点关注学生（某课程某学生 + 关注原因）
+model FocusStudent {
+  id String @id @default(uuid(4))
+
+  /// 课程
+  classId String
+  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  /// 学生（Student.stuId）
+  stuId   String
+  student Student @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
+
+  /// 重点关注原因（可为空字符串）
+  reason String @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
