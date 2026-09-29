@@ -1,7 +1,7 @@
 # 前端迁移方案：React (`fe/`) → Vue + Nuxt UI (`fe-v2/`)
 
 > 状态：方案已定稿（2026-09-29），待开工。
-> 目标：**展示样式不变**，`be/` 后端零改动。
+> 目标：迁移到 Vue + Nuxt UI，**视觉基调一致、体验不退让**（动画/交互见 §4.4），`be/` 后端零改动。
 > 本文件是迁移的「唯一事实来源」：每个 Phase 的范围、文件、验收点、风险都记在这里，跨会话可恢复。
 
 ---
@@ -12,11 +12,32 @@
 |---|---|
 | 目标 | 把整个前端从 React 迁到 Vue，产物落在 `fe-v2/`，UI 与交互保持一致 |
 | 后端 | `be/` **一行不改**（纯 REST + socket.io，前端零耦合） |
-| 样式 | 视觉尽量像素级一致；**唯一有意偏差**是 toast（见 2.4） |
+| 样式 | **基调一致即可，允许轻微差异**（组件库不同，像素级一致不现实）；要保住品牌感、层次感与精致度 |
+| **体验（最高优先）** | **丰富的动画 + 美观的页面 + 符合人类思维的交互，一个都不能退化**。清单见 §4.4，迁移动作逐条对照 |
+| 交互一致性 | 表单校验时机、焦点管理、键盘可达性（`onPress` 的 Enter/Space 语义）、空态/错误态反馈都要对齐 |
 | 数据库 | 无 schema 变更、无数据迁移（`user.preferences.markdownEditor` 字段保留不动） |
 | 分支/目录 | 建议从 `main` 切 `feat/nuxt-fe`；新目录 `fe-v2/`；`fe/` 原样保留直到验收通过 |
 | 协作约定 | 代码由 subagent 分批写；**主 agent 只做复核，不跑测试/类型检查/lint/构建**；每批交付「启动命令 + 肉眼比对清单」，由人工验收 |
 | 工具 | 组件文档走 Nuxt UI MCP（已配好：`opencode.json` 的 `nuxt-ui` → `https://ui.nuxt.com/mcp`） |
+
+### 1.1 技术栈版本锁定（2026-09-29 已核实 npm 最新版）
+
+| 包 | 版本 | 备注 |
+|---|---|---|
+| `nuxt` | `^4.5.2` | `ssr: false` |
+| `@nuxt/ui` | `^4.11.2` | 已内置 `motion-v`、`@nuxt/icon`、`@nuxt/fonts`、`fuse.js`、`reka-ui`、`tailwindcss` |
+| `pinia` + `@pinia/nuxt` | `^4.0.3` + `^1.0.2` | peer 匹配（`@pinia/nuxt@1.0.2` 要求 `pinia ^4.0.3`） |
+| `motion-v` | `^2.5.1` | 显式声明，与 Nuxt UI 内置版本去重 |
+| `@nuxtjs/color-mode` | `^4.0.1` | 明暗切换 |
+| `tailwindcss` + `@tailwindcss/vite` | `^4.3.3` | **必须与旧版同 minor**，token 才能 1:1 |
+| `md-editor-v3` | `^7.1.0` | Markdown 编辑器 + 只读渲染（自带 KaTeX） |
+| `unplugin-icons` + `@iconify-json/lucide` | `^24.0.0` + `^1.2.136` | `compiler: 'vue'`，导入写法不变 |
+| `vite-plugin-load-with-progress-bar` | `file:../../load-with-progress-bar/plugin` | 仓库外依赖，同深度可用 |
+| `typescript` | `~5.9.x` | 跟随 Nuxt 4 官方模板，**不要升 7.x** |
+
+字体：改用 `@nuxt/fonts`（Nuxt UI 已内置）自托管，替代现在不可达的 Google Fonts `<link>`。
+
+> ⚠️ **安装注意**：`fe/node_modules` 与 `be/node_modules` 都是在 **Windows** 上安装的（`be/node_modules` 只有 `@esbuild/win32-x64`）。本仓库的 shell 在 WSL 下跑，**不要在 WSL 里执行 `npm install`**，否则会装成 Linux 原生二进制、破坏你在 Windows 上的开发。安装与 `dev` 都在你平时的环境里执行。
 
 ---
 
@@ -27,14 +48,17 @@
 - 理由：Nuxt UI v4 只支持 Nuxt，Vue 形态基本锁死；本应用是**登录后使用的控制台**（localStorage / socket.io / WebAuthn / 视口 API 全在客户端），SSR 收益≈0 而坑很多；`ssr: false` 保留文件路由、Nuxt UI、auto-import、vite 插件能力，行为与现有 SPA 完全一致。
 - 附带好处：`@internationalized/date`、`pinyin-pro`、`socket.io-client`、`@simplewebauthn/browser` 都是框架无关，可直接搬。
 
-### 2.2 移除 `@mdxeditor/editor`（只保留 `@uiw/vue-md-editor`）
+### 2.2 移除 `@mdxeditor/editor`，Markdown 编辑器改用 `md-editor-v3`
 
-- 现状：`components/ui/MarkdownEditor.tsx` 按 `user.preferences.markdownEditor` 在 `uiw` 与 `mdxeditor` 之间切换，切换 UI 在 `components/settings/MarkdownEditorChoice.tsx`。
+- 现状：`components/ui/MarkdownEditor.tsx` 按 `user.preferences.markdownEditor` 在 `uiw`（`@uiw/react-md-editor`）与 `mdxeditor` 之间切换，切换 UI 在 `components/settings/MarkdownEditorChoice.tsx`。
+- 事实修正：`@uiw/vue-md-editor` **在 npm 上不存在**（404），不存在「uiw 的 Vue 版」。Vue 侧的 Markdown 编辑器改用 **`md-editor-v3` ^7.1.0**（Vue 3 + CodeMirror 6，自带 KaTeX 渲染、暗/亮主题、上传钩子）。
 - 处理：
-  - `MarkdownEditor.tsx` 只保留 uiw 实现（`@uiw/vue-md-editor` + `@codemirror/language-data`，同样支持 `remarkPlugins` / `rehypePlugins`）；
-  - `MarkdownEditorChoice.tsx` 的二选一卡片**移除/隐藏**；
-  - 后端偏好字段与 API **不动**（将来若要加回第三种编辑器无需数据迁移）；
-  - `index.css` 中 106 行 `.mdx-editor-content` 覆盖（`index.css:323-428`）不带过去，改为编写 `.w-md-editor`（uiw 的类名前缀）的亮/暗覆盖。
+  - `MarkdownEditor.tsx` 重写为基于 `md-editor-v3` 的单一实现（可编辑 + 只读预览两种模式，对应现有的 `MarkdownEditor` / `Markdown` 两个组件）；
+  - `MarkdownEditorChoice.tsx` 的二选一卡片移除（编辑器不再可切换）；
+  - 后端偏好字段 `user.preferences.markdownEditor` 与 API **不动**（将来加回第三种编辑器无需数据迁移）；
+  - `index.css` 中 106 行 `.mdx-editor-content` 覆盖（`index.css:323-428`）不带过去，改写为 `md-editor-v3` 的类名（`.md-editor`）亮/暗覆盖；
+  - 只读渲染（`components/ui/Markdown.tsx`）继续用 `remark-math` + `rehype-katex` + `katex`（`md-editor-v3` 原生支持 KaTeX）。
+  - 代价：编辑器外观与旧版 uiw 不同（属于允许的轻微差异），需专门调一版主题让观感精致。
 
 ### 2.3 图标：`unplugin-icons`（`compiler: 'vue'`）
 
@@ -118,6 +142,8 @@ HeroUI v3 与 Nuxt UI v4 的 API 差异极大：`onPress` vs `@press`、`variant
 
 代价：兼容层约 1200~1500 行。**这是整个迁移最划算的投入。**
 
+> **兼容层锁「行为与语义」，不锁「像素」。** 视觉上以 Nuxt UI 默认形态 + 我们的品牌 token 为主；只在与动效、交互手感、信息密度强相关的地方做覆盖（例如自定义圆角/过渡时长/焦点环）。这样既省力，又不会把 HeroUI 的旧样式硬套成一个四不像。
+
 ### 4.2 样式地基
 
 1. `app/assets/css/main.css` **逐字搬运** `fe/src/index.css`：
@@ -143,6 +169,86 @@ HeroUI v3 与 Nuxt UI v4 的 API 差异极大：`onPress` vs `@press`、`variant
 | `sonner` `toast.*` | Nuxt UI `useToast().add({...})` |
 | `motion` | `motion-v`（同引擎 Vue 版）；`layoutId` 行为需验证，失败退化为 CSS transition |
 | `react-router` `useSearchParams` / `useParams` / `Navigate state.from` | `useRoute().query` / `route.params` / 中间件 `navigateTo('/login?redirect=...')` |
+
+---
+
+### 4.4 体验资产清单（不可退化，迁移动作逐条对照）
+
+> 这是本项目的「灵魂清单」。每一条都要在 Vue 端找到落点，并在对应 Phase 的验收里被肉眼确认。
+
+#### A. 共享布局动画（`layoutId`）—— 最有辨识度的一组
+
+| 位置 | 现状 | Vue 落点 |
+|---|---|---|
+| `AppShell.tsx:104` | 侧栏激活项背景块 `layoutId="nav-active"`，`transition={{ type:'spring', stiffness:400, damping:32 }}` | `motion-v` 的 `<motion.div layout-id="nav-active">` + spring |
+| `AppShell.tsx:120` | 侧栏激活小圆点 `layoutId="nav-dot"` | 同上 |
+| `AppShell.tsx:292,312` | 移动端底部导航 pill，同一个 `layoutId="mobile-nav-pill"` 在桌面/移动两棵导航树里复用（跨 DOM 位置共享动画） | `layout-id` + `<LayoutGroup>`；若跨树匹配不稳，降级为 `layout` + CSS transition，**视觉必须保留「滑动指示块」效果** |
+
+`motion-v` 官方支持 `layout`、`layoutId`、`LayoutGroup`、spring、`AnimatePresence`（已核实），风险低。
+
+#### B. 手势 / 按压反馈
+
+- 现状：多处 `whileTap` / `whileHover`（AppShell 按钮、导航项、卡片等）。
+- 落点：`motion-v` 的 `:while-tap="{ scale: 0.96 }"` / `:while-hover`；或全局 CSS `active:scale-[0.97] transition-transform`。**凡是能点的东西都要有按压反馈**——这是「手感」的主要来源。
+
+#### C. 进出场动画
+
+| 位置 | 现状 | 落点 |
+|---|---|---|
+| `LoginBrandPanel.tsx:14-25` | `AnimatePresence` + `motion.div` variants，背景元素无限循环漂移 | `AnimatePresence` + variants |
+| `SlaveCard.tsx:7-11` | `layout` + 3D 进出场 | `layout` + `rotateX/scale/opacity` |
+| `CheckinScreen` / `Checkin` | 页面级进场 | Nuxt UI 的页面过渡 + 自定义 |
+
+#### D. 数值动画
+
+- `ProgressRing.tsx:17-22`：`useSpring` + `useTransform` 驱动 SVG 圆环插值。
+- 落点：`motion-v` 的 spring transition / 自写 `requestAnimationFrame` 缓动；SVG `stroke-dashoffset` 保持一致。
+
+#### E. 循环 / 状态动画
+
+- `MasterSlavePanel.tsx:84-91` 呼吸点（运行态指示）、`StepIndicator` 状态切换、验收运行态脉冲。
+- 落点：CSS `@keyframes` 搬进 `main.css`（保留 `drift-*`、`fade-up`、`shimmer`），其余用 motion-v 的 `repeat: Infinity`。
+
+#### F. CSS 背景与全局质感（`index.css` → `main.css`，逐条搬运）
+
+- `.aurora`：两个 `blur(120px)` 径向渐变球 + `drift-a`(26s) / `drift-b`(32s) 无限漂移（全局背景，`main.tsx` 挂载）
+- `.grid-overlay`：56px 网格 + `mask-image` 径向遮罩
+- `.diagonal-bg`：签到页全屏斜线底
+- `.glass`：顶栏与移动底部导航的玻璃拟态
+- 自定义 `::-webkit-scrollbar`（宽 10px、thumb `--fg-subtle` + 2px 边框）
+- `::selection` 与 `.dark ::selection` 两套高亮色
+- `html { scroll-behavior: smooth }`、`body { font-feature-settings: "ss01","cv11","tnum" }`（Manrope 特性 + 表格数字等宽）
+- `@theme inline` 内的 `fade-up`(ease-out-expo) 与 `shimmer` 两个 keyframes
+
+#### G. 微交互清单
+
+hover 态（`hover:text-fg` / `hover:bg-sunken/40` / `group-hover:*`）、`transition-colors` 过渡、`:focus-visible` 焦点环（**迁移后必须确认仍然清晰可见**）、`tabular` 等宽数字（成绩/学号/倒计时/分数）、`env(safe-area-inset-bottom)` 安全区、表格 sticky 表头与冻结首列、按钮 pending 内嵌 Spinner、Skeleton 加载态（24 处）、EmptyState（3 处）、`Tooltip delay={0} + showArrow`、icon-only + tooltip 按钮范式、`Chip` 状态标签。
+
+#### H. 交互范式清单
+
+- hover 展示时间线（实验状态 Chip，`delay={0}`）
+- `Ctrl+Enter` 提交（`ScoreForm.tsx`）
+- 300ms 防抖搜索（题库、设置题目）
+- 搜索框自动聚焦（重点关注学生）
+- tab 状态同步 URL query（题库页，刷新/分享保持）
+- 拼音全拼 + 首字母搜索（`pinyin-pro` + `matchStudent`）
+- toast 反馈（success / error / loading / promise）
+- 危险操作二次确认弹窗
+- 登录失败、通行密钥错误的即时提示
+- 课程切换器、侧栏折叠、状态记忆（localStorage）
+
+#### I. 免费获得的 Nuxt UI 动效
+
+Modal / Drawer / Slideover 弹出、Popover 与 Tooltip、Select 下拉、Toast 进出场、Tabs 指示器、Accordion 展开、Skeleton pulse、Switch 与 Checkbox 切换——这些自带过渡，**不要用自定义 class 覆盖掉**。
+
+#### J. 需要补齐的差异点（Nuxt UI 默认 ≠ 我们的手感）
+
+| 差异 | 处理 |
+|---|---|
+| `USkeleton` 默认 pulse 与旧版观感不同 | `app.config.ts` 里覆盖 `ui.skeleton`，回到 shimmer 观感 |
+| 按钮按压反馈可能偏弱 | 全局 `active:scale-[0.97]` + `transition-transform` |
+| 焦点环样式不同 | 全局统一 `:focus-visible` 规则（品牌色 + 偏移） |
+| 圆角/过渡时长全局不统一 | 在 `@theme inline` 里统一 `--radius` 与过渡基准，避免各组件各一套 |
 
 ---
 
@@ -220,10 +326,10 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 | `react` / `react-dom` | `vue` | — |
 | `react-router-dom` | Nuxt 文件路由 + `vue-router` | 低 |
 | `zustand` | `pinia` | 低 |
-| `motion` | `motion-v` | **中**：`layoutId`（AppShell 侧栏高亮块 `nav-active`/`nav-dot`、移动端 `mobile-nav-pill` 跨桌面/移动两棵树复用）需验证 |
+| `motion` | `motion-v` ^2.5.1（`@nuxt/ui` 已内置 ^2.4.4，`package.json` 里显式声明同一 major 以去重） | 低：官方支持 `layout` / `layoutId` / `LayoutGroup` / spring / `AnimatePresence` / 手势（已核实） |
 | `next-themes` | `@nuxtjs/color-mode` | 低（要保证 `<html class>` 注入时机） |
 | `sonner` | Nuxt UI `useToast` | 低（外观按 2.4 校准） |
-| `@uiw/react-md-editor` | `@uiw/vue-md-editor` | 中：类名前缀 `w-md-editor`，主题靠 `data-color-mode` → 需自己写亮暗 CSS |
+| `@uiw/react-md-editor` + `@mdxeditor/editor` | `md-editor-v3` ^7.1.0（mdxeditor 选项已移除） | 中：主题/KaTeX/工具栏外观与旧版有差异，需专门写一版精致主题 |
 | `@mdxeditor/editor` | **移除** | — |
 | `rehype-katex` / `remark-math` / `katex` | 原样保留 | 低（uiw vue 版同样支持这两个插件） |
 | `socket.io-client` | 原样保留 | 中：状态机翻译（214 行） |
@@ -255,7 +361,7 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 - [ ] 路由骨架：`index` / `login` / `setup` / `terms` / `console/*` / `checkin/*` 空壳页（先只有标题）
 - [ ] `app.vue`：`aurora` + `grid-overlay` + `<UToaster />`
 
-**验收点**：① 明/暗两套主题下按钮、输入框、卡片、侧栏与旧版一致；② 未登录访问 `/console/scores` → 跳 `/login?redirect=/console/scores`，登录后回跳；③ `/terms`、`/checkin` 不被守卫拦截；④ 未知路径回落 `/console`；⑤ 桌面/移动两套导航都出现且高亮正确。
+**验收点**：① 明/暗两套主题下按钮、输入框、卡片、侧栏与旧版气质一致；② 未登录访问 `/console/scores` → 跳 `/login?redirect=/console/scores`，登录后回跳；③ `/terms`、`/checkin` 不被守卫拦截；④ 未知路径回落 `/console`；⑤ 桌面/移动两套导航都出现且高亮正确；⑥ **动效基线**：`aurora` 背景漂移、`.glass` 顶栏、导航激活块的 `layoutId` 滑动、按钮按压反馈、focus-visible 焦点环、骨架 shimmer 全部到位。
 
 ### Phase B — 基础设施
 
@@ -282,9 +388,10 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 
 ### Phase D — 内容与收尾
 
-- [ ] `ui/Markdown.tsx`（只读渲染 + KaTeX）+ `ui/MarkdownEditor.tsx`（uiw Vue 版）+ `.w-md-editor` 亮暗样式覆盖
+- [ ] `ui/Markdown.tsx`（只读渲染 + KaTeX，基于 `md-editor-v3`）+ `ui/MarkdownEditor.tsx`（可编辑）+ `.md-editor` 亮暗主题覆盖（精调一版，不能是「默认丑」）
 - [ ] `content/terms.ts`
-- [ ] 全站走查：逐页明/暗主题对照清单；`tabular`、滚动条、`env(safe-area-inset-bottom)` 等细节
+- [ ] 全站走查：逐页明/暗主题对照清单；`tabular`、滚动条、`env(safe-area-inset-bottom)`、focus-visible 等细节
+- [ ] **§4.4 体验资产清单逐条签收**：A~I 每项确认落地
 - [ ] 清理：确认未带入死代码；`be/` diff 为空校验
 
 ### Phase E — 切换
@@ -299,17 +406,19 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 
 | # | 风险 | 影响 | 应对 |
 |---|---|---|---|
-| 1 | `@mdxeditor/editor` 无 Vue 绑定 | 中 | 已决策：移除该选项，UI 收敛为单一编辑器 |
-| 2 | HeroUI ↔ Nuxt UI 默认圆角/阴影/字号/焦点环/过渡不一致 | **高**（视觉） | 全部收敛到 12 个兼容层 wrapper 校准；Phase A 起逐组件对照 |
-| 3 | `AppDateTimePicker`（Nuxt UI 无 segment 式时间输入） | 中高 | 用 `@internationalized/date` 自写一层，外观对齐现版 |
-| 4 | `motion` `layoutId` 跨 DOM 分支复用 | 中 | 先试 `motion-v`；不行退化为 CSS transition / `layout` |
-| 5 | `Autocomplete` + 拼音搜索语义差异 | 中 | 自实现 `useFilter`，接 `lib/pinyin.ts` |
-| 6 | `checkoff-socket.ts` 214 行三套状态机（effect 依赖数组语义差异） | 中高 | 逐行对照翻译，`onMounted/onUnmounted` 精确清理，重点人工联调 |
-| 7 | 双 toast 系统的 115 处调用改写 | 低 | 机械替换，Phase B 一次性完成 |
-| 8 | 无 CI / 无自动化回归 | 中 | 每批交付肉眼比对清单；必要时在 Phase D 补 Playwright 截图对比（可选） |
-| 9 | `load-with-progress-bar` 是仓库外 `file:` 依赖 | 低 | 同深度相对路径继续可用；若要解耦改为可选插件 |
-| 10 | Google Fonts 国内不可达 | 低 | Phase A 一并改自托管 |
-| 11 | 长时间迁移中 `be/` 继续演进导致 API 漂移 | 低 | 每 Phase 结束同步一次 `api.ts` 与 `be/src/routes/*` |
+| 1 | `@mdxeditor/editor` 无 Vue 绑定；`@uiw/vue-md-editor` 不存在（npm 404） | 中 | 已决策：移除 mdxeditor 选项，编辑器统一用 `md-editor-v3`，主题单独精调 |
+| 2 | **动效/交互在迁移中被稀释**（Nuxt UI 默认观感更平、组件重写时最容易丢 hover/按压/进场动画） | **高（体验）** | §4.4 清单逐条对照；Phase A 建立动效基线；Phase D 逐条签收 |
+| 3 | HeroUI ↔ Nuxt UI 默认圆角/阴影/字号/焦点环/过渡不一致 | 中（视觉） | 允许轻微差异；只在 `@theme inline` 与 `app.config.ts` 统一全局基准，不逐页硬调 |
+| 4 | `AppDateTimePicker`（Nuxt UI 无 segment 式时间输入） | 中高 | 用 `@internationalized/date` 自写一层，交互手感对齐现版 |
+| 5 | `motion` `layoutId` 跨 DOM 分支复用（`mobile-nav-pill`） | 低 | `motion-v` 官方支持 `layoutId`/`LayoutGroup`（已核实）；不稳定则退化为 `layout` + CSS transition |
+| 6 | `Autocomplete` + 拼音搜索语义差异 | 中 | 自实现 `useFilter`（可用 Nuxt UI 已内置的 `fuse.js`），接 `lib/pinyin.ts` |
+| 7 | `checkoff-socket.ts` 214 行三套状态机（effect 依赖数组语义差异） | 中高 | 逐行对照翻译，`onMounted/onUnmounted` 精确清理，重点人工联调 |
+| 8 | toast 统一到 Nuxt UI（外观必然有差异） | 低 | `app.config.ts` 调成玻璃拟态，压缩差异 |
+| 9 | 无 CI / 无自动化回归 | 中 | 每批交付肉眼比对清单；Phase D 可选补 Playwright 截图对比 |
+| 10 | `load-with-progress-bar` 是仓库外 `file:` 依赖 | 低 | 同深度相对路径继续可用；若要解耦改为可选插件 |
+| 11 | Google Fonts 国内不可达 | 低 | 改 `@nuxt/fonts` 自托管 |
+| 12 | WSL 装依赖会污染 Windows 环境（`node_modules` 原生二进制） | 中 | 一律在 Windows 侧执行 `npm install` / `npm run dev` |
+| 13 | 长时间迁移中 `be/` 继续演进导致 API 漂移 | 低 | 每 Phase 结束同步一次 `api.ts` 与 `be/src/routes/*` |
 
 ---
 
