@@ -250,6 +250,196 @@ Modal / Drawer / Slideover 弹出、Popover 与 Tooltip、Select 下拉、Toast 
 | 焦点环样式不同 | 全局统一 `:focus-visible` 规则（品牌色 + 偏移） |
 | 圆角/过渡时长全局不统一 | 在 `@theme inline` 里统一 `--radius` 与过渡基准，避免各组件各一套 |
 
+### 4.5 兼容层 API 契约（**并行开发的唯一约定**）
+
+> 规则：**实现方（Phase B）必须严格照这张表实现；使用方（Phase C 页面）必须严格照这张表调用。**
+> 谁都不许临时换成 Nuxt UI 原生组件、不许改名、不许改 prop 名。发现表不够用时**先改这张表**再改代码，并在文件头注释里标注偏离原因。
+> 表格里凡是写「←」的都是从旧版 11.8k 行代码里实测出来的用法，不是设计幻想。
+
+#### 通用约定
+
+- 组件标签不带目录前缀（`pathPrefix: false`）：`app/components/ui/Xxx.vue` → `<Xxx>`。
+- `class` 一律透传到**最内层的原生元素**（与 HeroUI 语义一致：旧版 `className` 加在哪个 DOM 上，新版就加在哪）。
+- 布尔 prop 一律支持无值写法（`<AppCheckbox is-selected />`）。
+- 旧版的 `isDisabled` / `isSelected` / `isPending` / `isIndeterminate` / `isIconOnly` / `isActive` / `fullWidth` **保留 `is` 前缀**（HeroUI 语义），不要改成 Nuxt 的 `disabled`/`modelValue`。
+- 事件一律用 Vue 命名：`update:open` / `update:is-selected` / `press` / `open-change`。
+- 每个组件文件头必须写「旧 props/slots → 新 props/slots → 底层 Nuxt UI 组件 + `ui` 覆盖」三段对照。
+
+#### 1. `AppModal`（← `Modal` + `Modal.{Container,Dialog,Backdrop,Body,Header,Heading,Icon,Footer,CloseTrigger}`，全站 11 套）
+
+旧版是 8 个子组件的复合结构；新版**收敛成单组件 + 具名插槽**，视觉等价但调用简单得多。
+
+```
+props: open: boolean                     // 受控，必需（配合 useOverlayState）
+       size?: 'sm'|'md'|'lg'|'xl'|'full'  默认 'md'
+       scroll?: 'inside'|'outside'        默认 'inside'（旧版多数 Dialog 可滚）
+       hideClose?: boolean                默认 false
+emits: update:open                        // 关闭/打开（遮罩点击、Esc、关闭按钮统一走它）
+slots: header   // 标题区（旧版 Header+Heading+Icon 三合一）
+       icon     // 标题左侧图标（旧版 Modal.Icon，10 处用）
+       default  // 正文（旧版 Modal.Body）
+       footer   // 底部按钮（旧版 Modal.Footer，10 处用）
+```
+- 底层 `UModal`（`v-model:open` + `#header`/`#body`/`#footer` + `:ui` 覆盖圆角/边框/阴影到本站 token）。
+- **关闭语义**：`useOverlayState` 提供的 `onOpenChange(false)` 必须挂到 `@update:open`，这样旧版 `onClose` 里的重置逻辑（清空表单、清 timer）不会丢。
+- 旧版 `<Button slot="close">` 取消/完成 → 新版就是普通 `@press` 里调 `onOpenChange(false)`，**不需要** slot 机制。
+- 旧版 `Modal.CloseTrigger`（11 处）→ 新版 `hideClose` + 右上角 X 按钮自带。
+
+#### 2. `useOverlayState`（← 旧版同名 composable，11 处 Modal 状态机）
+
+```
+const state = useOverlayState()
+// state.isOpen / state.onOpenChange(open: boolean) / 旧版其它字段（见旧文件）
+```
+- 返回值结构与旧版**完全一致**（逐个旧文件抄字段名），只把 `useState` 换成 `ref`、`onOpenChange` 的实现改成「emit `update:open`」。
+
+#### 3. `AppSelect`（← `Select` + `Select.{Trigger,Value,Indicator,Popover,ClearButton}` + `ListBox`，17 处）
+
+```
+props: modelValue: string | number | null          // v-model；旧版 onChange 给的是 key
+       items: { label: string; value: string|number; disabled?: boolean; [extra]: unknown }[]
+       placeholder?: string
+       isDisabled?: boolean
+       isClearable?: boolean                       // 旧版 Select.ClearButton
+       size?: 'sm'|'md'|'lg'                        默认 'md'
+emits: update:modelValue, clear
+slots: item   // 作用域 { item, selected }，自定义单项（班级名 truncate 等）
+       trigger // 完全自定义触发区（可选；默认内置 trigger+value+indicator）
+```
+- 底层 `USelect`（`items` + `#item` + `clearable`）。**注意**：旧版 `onChange` 返回 key（string），`USelect` 返回 value，两边都用 `value` 字段做 key，语义一致。
+
+#### 4. `AppAutocomplete`（← `Autocomplete` + `Autocomplete.{Filter,ClearButton,Indicator,Popover,Value,Trigger}`，7 处：FocusStudents / StudentFinder / QuestionDrawer）
+
+```
+props: modelValue: string | number | null          // v-model，选中项的 value
+       items: { label: string; value: string|number; keywords?: string; [extra]: unknown }[]
+       placeholder?: string
+       isDisabled?: boolean
+       isClearable?: boolean
+       emptyText?: string                           // 空结果文案
+emits: update:modelValue
+slots: item   // 作用域 { item, selected }
+```
+- **筛选**：`useFilter` 负责（见下）；拼音/首字母匹配由 `~/lib/pinyin` 提供，页面通过 `items[].keywords` 传候选关键字。`FocusStudents` / `StudentFinder` 必须能按「姓名拼音 + 首字母 + 学号」搜到人（对照旧版 `matchStudent`）。
+- 底层：`UInput`（带 `icon`）+ `UCommandPalette` 或 `UListbox` 弹层（用 MCP 核实哪个更适合「输入即筛选 + 键盘上下选择」，并在文件头写明选择理由）。
+
+#### 5. `useFilter`（← HeroUI `useFilter` + 旧版 pinyin 匹配）
+
+```
+const { contains, startsWith, fuzzy } = useFilter({ sensitivity?: 'base'|'accent'|'case' })
+contains('haystack', 'needle') -> boolean
+```
+- 内部：先走中文拼音候选（`~/lib/pinyin` 的 `pinyin` / 首字母），再走不区分大小写的子串 + 模糊匹配。`Autocomplete` / 题目搜索 / 学生搜索都走它。
+- 允许直接用 `@nuxt/ui` 已内置的 `fuse.js`，但**必须**保留拼音候选逻辑（`filter` prop 的旧行为）。
+
+#### 6. `AppTabs`（← `Tabs` + `Tabs.{ListContainer,List,Tab,Indicator,Panel}`，9 处；`Questions` 页 tab 同步 URL）
+
+```
+props: modelValue: string        // v-model，= 旧版 selectedKey
+       items: { label: string; value: string; icon?: Component; disabled?: boolean }[]
+emits: update:modelValue
+slots: tab     // 作用域 { item, active }（默认渲染 label，可加图标）
+       panel   // 作用域 { item, active }（旧版 Tabs.Panel）
+```
+- 底层 `UTabs`。`Questions` 页要 tab ↔ URL query 双向同步，靠 `v-model` + `watch` 实现，`AppTabs` 本身不碰路由。
+
+#### 7. `AppPagination`（← `Pagination` + `Pagination.{Content,Item,Link,Ellipsis,Previous,PreviousIcon,Next,NextIcon}`，12 处）
+
+```
+props: page: number                       // v-model:page，1 起
+       total: number                      // 总条数
+       siblingCount?: number              默认 1
+       boundaries?: number                默认 1
+       showEdges?: boolean                默认 true
+       size?: 'sm'|'md'|'lg'              默认 'md'
+       class?: string                     // 旧版 className="mt-4 justify-center"
+emits: update:page
+slots: item  // 作用域 { page, isActive }（自定义页码按钮内容；旧版 Pagination.Link）
+```
+- 底层 `UPagination`（`v-model:page` + `:page-count` + `:sibling-count` + `:total`）。旧版 `onPress` → `@update:page`。
+
+#### 8. `AppCheckbox`（← `Checkbox` + `Checkbox.{Content,Control,Indicator}`，16 处）
+
+```
+props: modelValue: boolean | 'indeterminate'   // v-model；旧版 isIndeterminate
+       isDisabled?: boolean
+emits: update:modelValue
+```
+- 底层 `UCheckbox`（三态用 `indeterminate` prop，值用 `'indeterminate'` 哨兵——**在文件头写清**这个映射）。
+- 旧版把 `Checkbox.Content` 当**可点整行**（`aria-label` + `mt-0.5`）：新版用 `<label>` 包 `UCheckbox` + `class` 透传保证点击区域一致。
+
+#### 9. `AppAccordion`（← `Accordion` + `Accordion.{Item,Trigger,Heading,Indicator,Body,Panel}`，7 处 `LlmConnect`）
+
+```
+props: items: { label: string; value: string; icon?: Component; disabled?: boolean }[]
+       type?: 'single'|'multiple'             默认 'multiple'（旧版 allowsMultipleExpanded）
+emits: none（受控 value 由页面自己管；提供 v-model:modelValue: string[]）
+slots: body  // 作用域 { item, open }
+```
+- 底层 `UAccordion`。旧版 `variant="surface"` → `:ui` 里给内容区加 `bg-sunken border border-line rounded-xl` 之类。
+
+#### 10. `AppSlider`（← `Slider` + `Slider.{Track,Fill,Thumb}`，4 处 `ScoreForm`）
+
+```
+props: modelValue: number          // v-model
+       minValue?: number           默认 0（旧版 prop 名 minValue）
+       maxValue?: number           默认 100
+       step?: number               默认 1
+       isDisabled?: boolean
+emits: update:modelValue
+```
+- 底层 `USlider`。旧版 `SCORE_MAX` 来自 `~/lib/scores`。
+- 旧版 `.score-slider` 的自定义样式（`index.css` 里 53 行、**0 处使用**）不搬；`ScoreForm` 原来就是裸 `Slider`，用 Nuxt UI 默认观感即可。
+
+#### 11. `AppInputOTP`（← `InputOTP` + `InputOTP.{Group,Slot,Separator}`，10 处：`Checkin` 6 位码、`ScoreForm` 等）
+
+```
+props: modelValue: string          // v-model
+       length?: number             默认 6
+       inputMode?: 'numeric'|'text' 默认 'numeric'
+       pattern?: RegExp            逐位过滤（旧版 pattern=REGEXP_ONLY_DIGITS）
+       autoFocus?: boolean
+emits: update:modelValue
+slots: separator // 分隔符（默认第 3 位后插 '-'，旧版 InputOTP.Separator）
+```
+- 底层 `UPinInput`（`v-model:model-value` + `length` + `type`）。
+
+#### 12. `AppListBox`（← `ListBox` + `ListBox.{Item,ItemIndicator}`，14 处）
+
+```
+props: items: unknown[]
+       selectionMode?: 'none'|'single'|'multiple'   默认 'none'
+       modelValue?: unknown                        // 受控（multiple 时是数组）
+emits: update:modelValue, action   // action(item) —— 旧版 onAction(key)
+slots: item  // 作用域 { item, selected, toggle, select }
+```
+- 底层 `UListbox`。**参考实现已在 `pages/console/more.vue`**（`:items` + `#item` + `:highlight-on-hover="false"`），照它的写法建组件。
+
+#### 13. `AppDateTimePicker`（← `DatePicker.{Trigger,Popover,TriggerIndicator}` + `Calendar.*` + `DateField.{Group,Segment}`，`components/ui/DateTimePicker.tsx` 内部 4 层 render-prop）
+
+```
+props: modelValue: ZonedDateTime | null       // v-model，用 @internationalized/date
+       label?: string
+       granularity?: 'minute'|'hour'|'day'     默认 'minute'（旧版两种粒度）
+       isDisabled?: boolean
+       class?: string
+emits: update:modelValue
+```
+- 底层：`UCalendar`（或 `UCalendarRange`）+ 自己写的 segment 输入；**必须**用 `@internationalized/date` 的 `ZonedDateTime` / `DateFormatter` / `today()` / `getLocalTimeZone()`。
+- 交互要求（对照旧版）：点触发器开面板、面板里上/下月切换、点日期+时分段、`Enter` 确认、`Esc` 关闭、底部「现在」快捷项、非法值回退到当前时间。
+- 这是唯一一个**自写**的兼容层组件，Nuxt UI 没有等价物。单独立一个 subagent 做。
+
+#### 14. Phase B 还要搬的 `lib`（1:1，函数名/类型名不许改）
+
+| 文件 | 行数 | 导出 | 注意 |
+|---|---|---|---|
+| `app/lib/scores.ts` | 11 | `SCORE_MAX` `SCORE_TYPES` `scoreKey()` | 纯常量 |
+| `app/lib/experiments.ts` | 92 | `TIMELINE_BUFFER_DAYS` `ExperimentTimelineEvent/Status/Info` `experimentTimeline()` `formatTimelineTime()` | 纯函数，含「今天」判定与状态推导 |
+| `app/lib/totp.ts` | 89 | `totp()` `useTotp()` | `useTotp` 是 hook → Vue `ref` + 定时器，**必须在 `onScopeDispose`/`onUnmounted` 清理定时器** |
+| `app/lib/passkey.ts` | 37 | `getAuthenticationOptions()` `registerPasskey()` | ⚠️ A3 的 `LoginPanel.vue` / `setup.vue` 目前把 `getAuthenticationOptions` **内联**了，本文件建好后请让这两个文件改成 import（Phase B 收尾时由主 agent 统一改） |
+| `app/lib/realtime.ts` | 42 | `ScoreChangeEvent` `connectScoreSocket()` `disconnectScoreSocket()` `subscribeScores(socket)` | 旧版是模块级单例 socket，Vue 端保持单例语义 |
+| `app/lib/checkoff-socket.ts` | 214 | `SlaveCardState` `getCheckoffSocket()` `MasterSession` `useCheckoffMaster()` `CheckoffStartedEvent` `useCheckoffWatch()` `notifyCheckoffStarted()` `useCheckoffSlave()` | **最高风险**：三套状态机。React `useEffect` 依赖数组 → Vue `watch` 源数组；清理逻辑放 `onScopeDispose` |
+
 ---
 
 ## 5. 目录映射（Nuxt 4 默认 `app/` 作 srcDir）
