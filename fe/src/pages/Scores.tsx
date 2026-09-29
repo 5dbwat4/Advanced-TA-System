@@ -15,7 +15,9 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
   applyRoster,
+  fetchClassSettings,
   previewRoster,
+  type ClassSettings,
   type Experiment,
   type RosterDiff,
   type Score,
@@ -29,6 +31,7 @@ import {
   type ScoreChangeEvent,
 } from '@/lib/realtime'
 import { SCORE_MAX, SCORE_TYPES, scoreKey } from '@/lib/scores'
+import { resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
@@ -237,11 +240,13 @@ function ScoreCell({
 
 export default function Scores() {
   const currentClass = useCurrentClass()
+  const classId = currentClass?.id ?? null
   const { refresh } = useAuth()
   const hasXzzd = useHasXzzdPermission()
   const [students, setStudents] = useState<Student[]>([])
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [scores, setScores] = useState<Map<string, Score>>(new Map())
+  const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [rosterBusy, setRosterBusy] = useState(false)
   const [pendingDiff, setPendingDiff] = useState<RosterDiff | null>(null)
@@ -292,6 +297,24 @@ export default function Scores() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!classId) {
+      setClassSettings(null)
+      return
+    }
+    let cancelled = false
+    fetchClassSettings(classId)
+      .then((res) => {
+        if (!cancelled) setClassSettings(res.settings)
+      })
+      .catch(() => {
+        // 占比缺失时回退默认，不影响分数编辑
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [classId])
 
   useEffect(() => {
     const socket = connectScoreSocket()
@@ -380,6 +403,15 @@ export default function Scores() {
   const classExperiments = currentClass
     ? experiments.filter((exp) => exp.classId === currentClass.id)
     : []
+
+  /** 按该实验的评分占比现场计算总评；缺任一计入项时为 null */
+  const experimentTotal = (student: Student, experiment: Experiment) =>
+    weightedTotal(
+      SCORE_TYPES.map(
+        (type) => scores.get(scoreKey(student.stuId, type.value, experiment.id))?.score ?? null,
+      ),
+      resolveScoreRatio(classSettings, experiment.id),
+    )
 
   const importRoster = useCallback(async () => {
     if (!currentClass) return
@@ -604,7 +636,7 @@ export default function Scores() {
                     {classExperiments.map((exp) => (
                       <th
                         key={exp.id}
-                        colSpan={SCORE_TYPES.length}
+                        colSpan={SCORE_TYPES.length + 1}
                         className="border-b border-r border-line bg-elevated px-4 py-2 text-center font-semibold"
                       >
                         {exp.mark} · {exp.title}
@@ -612,8 +644,8 @@ export default function Scores() {
                     ))}
                   </tr>
                   <tr>
-                    {classExperiments.flatMap((exp) =>
-                      SCORE_TYPES.map((type) => (
+                    {classExperiments.flatMap((exp) => [
+                      ...SCORE_TYPES.map((type) => (
                         <th
                           key={`${exp.id}:${type.value}`}
                           aria-sort={ariaSort(`${exp.id}:${type.value}`)}
@@ -627,7 +659,13 @@ export default function Scores() {
                           />
                         </th>
                       )),
-                    )}
+                      <th
+                        key={`${exp.id}:total`}
+                        className="border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-semibold text-fg"
+                      >
+                        总评
+                      </th>,
+                    ])}
                   </tr>
                 </thead>
                 <tbody>
@@ -637,22 +675,35 @@ export default function Scores() {
                         <div className="font-bold">{student.name}</div>
                         <div className="tabular text-xs text-fg-muted">{student.studentNo}</div>
                       </td>
-                      {classExperiments.flatMap((exp) =>
-                        SCORE_TYPES.map((type) => {
-                          const key = scoreKey(student.stuId, type.value, exp.id)
-                          return (
-                            <td
-                              key={key}
-                              className="border-b border-r border-line px-2 py-1.5 text-center"
-                            >
-                              <ScoreCell
-                                score={scores.get(key) ?? null}
-                                onCommit={(next) => commitScore(student, type.value, exp.id, next)}
-                              />
-                            </td>
-                          )
-                        }),
-                      )}
+                      {classExperiments.flatMap((exp) => {
+                        const total = experimentTotal(student, exp)
+                        return [
+                          ...SCORE_TYPES.map((type) => {
+                            const key = scoreKey(student.stuId, type.value, exp.id)
+                            return (
+                              <td
+                                key={key}
+                                className="border-b border-r border-line px-2 py-1.5 text-center"
+                              >
+                                <ScoreCell
+                                  score={scores.get(key) ?? null}
+                                  onCommit={(next) => commitScore(student, type.value, exp.id, next)}
+                                />
+                              </td>
+                            )
+                          }),
+                          <td
+                            key={`${exp.id}:total`}
+                            className="tabular border-b border-r border-line px-2 py-1.5 text-center font-bold"
+                          >
+                            {total == null ? (
+                              <span className="font-normal text-fg-subtle">—</span>
+                            ) : (
+                              total.toFixed(1)
+                            )}
+                          </td>,
+                        ]
+                      })}
                     </tr>
                   ))}
                 </tbody>

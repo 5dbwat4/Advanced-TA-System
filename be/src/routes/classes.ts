@@ -34,10 +34,19 @@ const rosterApplySchema = z.object({
   removed: z.array(z.string().trim().min(1)),
 })
 
+/** 评分占比：功能测试 / 验收问答 / 报告，三个非负整数 */
+const scoreRatioSchema = z.array(z.number().int().min(0).max(10000)).length(3)
+
 const classSettingsPatchSchema = z.object({
   checkpointEnabled: z.boolean().optional(),
   checkpointRule: z.string().trim().max(64).nullable().optional(),
   focusEnabled: z.boolean().optional(),
+  /** 全课程是否共用统一评分占比 */
+  scoreRatioUnified: z.boolean().optional(),
+  /** 课程级评分占比（统一模式使用） */
+  scoreRatio: scoreRatioSchema.optional(),
+  /** 各实验独立的评分占比，键为实验 id */
+  experimentScoreRatios: z.record(scoreRatioSchema).optional(),
 })
 
 const focusCreateSchema = z.object({
@@ -347,7 +356,19 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const settings = { ...parseClassSettings(klass.settings), ...parsedBody.data }
+    const current = parseClassSettings(klass.settings)
+    const { experimentScoreRatios, ...rest } = parsedBody.data
+    const settings: Record<string, unknown> = { ...current, ...rest }
+    if (experimentScoreRatios) {
+      const prev = current.experimentScoreRatios
+      // 逐实验合并，避免一次写入覆盖其它实验的占比
+      settings.experimentScoreRatios = {
+        ...(prev && typeof prev === 'object' && !Array.isArray(prev)
+          ? (prev as Record<string, unknown>)
+          : {}),
+        ...experimentScoreRatios,
+      }
+    }
     const updated = await prisma.class.update({
       where: { id: klass.id },
       data: { settings: JSON.stringify(settings) },

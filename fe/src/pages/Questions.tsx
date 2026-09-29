@@ -1,6 +1,7 @@
-import { Button, Input, Modal, Pagination, Skeleton, Spinner, Tabs, useOverlayState } from '@heroui/react'
+import { Button, Input, Modal, Pagination, Skeleton, Spinner, Tabs, Tooltip, useOverlayState } from '@heroui/react'
+import copyToClipboard from 'copy-to-clipboard'
 import { AnimatePresence, motion } from 'motion/react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -41,6 +42,37 @@ import {
 import { useAuth } from '@/lib/auth'
 
 const PAGE_SIZE = 20
+
+/** 复制文本到剪贴板并提示结果 */
+async function copyText(text: string, label: string) {
+  const ok = await copyToClipboard(text)
+  if (ok) toast.success(`已复制${label}`)
+  else toast.error('复制失败')
+}
+
+/** 图标按钮 + 悬浮提示 */
+function IconAction({
+  label,
+  onPress,
+  children,
+}: {
+  label: string
+  onPress: () => void
+  children: ReactNode
+}) {
+  return (
+    <Tooltip delay={0}>
+      <Tooltip.Trigger className="inline-flex">
+        <Button isIconOnly size="sm" variant="ghost" aria-label={label} onPress={onPress}>
+          {children}
+        </Button>
+      </Tooltip.Trigger>
+      <Tooltip.Content placement="top" showArrow>
+        {label}
+      </Tooltip.Content>
+    </Tooltip>
+  )
+}
 
 function QuestionsPanel() {
   const { user } = useAuth()
@@ -264,10 +296,9 @@ function QuestionsPanel() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     {isOwner ? (
-                      <Button size="sm" variant="ghost" onPress={() => openEdit(item)}>
+                      <IconAction label="编辑" onPress={() => openEdit(item)}>
                         <Pen width={14} height={14} className="shrink-0" />
-                        编辑
-                      </Button>
+                      </IconAction>
                     ) : (
                       <Button
                         size="sm"
@@ -276,7 +307,7 @@ function QuestionsPanel() {
                         onPress={() => duplicate(item.id)}
                       >
                         <Copy width={14} height={14} className="shrink-0" />
-                        复制并编辑
+                        创建副本编辑
                       </Button>
                     )}
                     {isOwner &&
@@ -304,10 +335,9 @@ function QuestionsPanel() {
                           </Button>
                         </>
                       ) : (
-                        <Button size="sm" variant="ghost" onPress={() => setConfirmingId(item.id)}>
+                        <IconAction label="删除" onPress={() => setConfirmingId(item.id)}>
                           <Trash2 width={14} height={14} className="shrink-0" />
-                          删除
-                        </Button>
+                        </IconAction>
                       ))}
                   </div>
                 </div>
@@ -316,7 +346,7 @@ function QuestionsPanel() {
                   <Markdown source={item.question} />
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-1">
                   <Button size="sm" variant="ghost" onPress={() => setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }))}>
                     {expanded[item.id] ? (
                       <EyeOff width={14} height={14} className="shrink-0" />
@@ -325,6 +355,16 @@ function QuestionsPanel() {
                     )}
                     {expanded[item.id] ? '隐藏答案' : '显示答案'}
                   </Button>
+                  <Button size="sm" variant="ghost" onPress={() => void copyText(item.question, '题目')}>
+                    <Copy width={14} height={14} className="shrink-0" />
+                    复制题目
+                  </Button>
+                  {expanded[item.id] && (
+                    <Button size="sm" variant="ghost" onPress={() => void copyText(item.answer, '答案')}>
+                      <Copy width={14} height={14} className="shrink-0" />
+                      复制答案
+                    </Button>
+                  )}
                 </div>
 
                 <AnimatePresence initial={false}>

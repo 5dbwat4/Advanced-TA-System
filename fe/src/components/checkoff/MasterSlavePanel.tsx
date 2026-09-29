@@ -1,4 +1,5 @@
 import { Button, Spinner } from '@heroui/react'
+import copyToClipboard from 'copy-to-clipboard'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -60,14 +61,21 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
   const url = `${window.location.origin}/checkin/${session.token ?? ''}`
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url)
+    const ok = await copyToClipboard(url)
+    if (ok) {
       setCopied(true)
       toast.success('链接已复制')
       setTimeout(() => setCopied(false), 1600)
-    } catch {
+    } else {
       toast.error(url)
     }
+  }
+
+  const copyCode = async () => {
+    if (!code) return
+    const ok = await copyToClipboard(code)
+    if (ok) toast.success('配对码已复制')
+    else toast.error(code)
   }
 
   return (
@@ -93,7 +101,15 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
           <div>
             <div className="text-xs font-semibold text-fg-muted">从机配对码</div>
             <div className="flex items-center gap-2">
-              <span className="tabular text-2xl font-bold tracking-[0.3em]">{pin}</span>
+              <button
+                type="button"
+                onClick={() => void copyCode()}
+                disabled={!code}
+                title={code ? '点击复制配对码' : undefined}
+                className="tabular cursor-pointer text-2xl font-bold tracking-[0.3em] transition-colors hover:text-brand-600 disabled:cursor-default dark:hover:text-brand-300"
+              >
+                {pin}
+              </button>
               <CountdownRing remaining={remaining} period={period} />
             </div>
           </div>
@@ -108,13 +124,12 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
           </div>
         </div>
 
-        <Button size="sm" variant="secondary" onPress={copy}>
+        <Button size="sm" variant="secondary" isIconOnly aria-label="复制链接" onPress={copy}>
           {copied ? (
             <Check width={14} height={14} className="shrink-0" />
           ) : (
             <Copy width={14} height={14} className="shrink-0" />
           )}
-          {copied ? '已复制' : '复制链接'}
         </Button>
 
         <div className="flex items-center gap-2 text-xs font-semibold">

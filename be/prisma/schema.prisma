@@ -132,7 +132,7 @@ model Class {
   xzzdClassId String?
   /// 最近一次获取 / 更新学生名单的时间
   lastRosterSyncAt DateTime?
-  /// 课程级设置（JSON 字符串），如 { checkpointEnabled, checkpointRule }
+  /// 课程级设置（JSON 字符串），如 { checkpointEnabled, checkpointRule, scoreRatioUnified, scoreRatio, experimentScoreRatios }
   settings    String  @default("{}")
   students    Student[]
   tas         User[]

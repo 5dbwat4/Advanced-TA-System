@@ -9,11 +9,12 @@ import MessageCircleQuestion from '~icons/lucide/message-circle-question'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { submitCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
 import { SCORE_MAX } from '@/lib/scores'
+import { weightedTotal } from '@/lib/scoring'
 
-/** 计入总分的两类，权重 功能测试 : 验收问答 = 2 : 5（报告不计入） */
+/** 验收计分的两类，具体权重来自课程 / 实验的评分占比配置 */
 const SCORED_TYPES = [
-  { value: 0, label: '功能测试', icon: ClipboardCheck, weight: 2 },
-  { value: 1, label: '验收问答', icon: MessageCircleQuestion, weight: 5 },
+  { value: 0, label: '功能测试', icon: ClipboardCheck },
+  { value: 1, label: '验收问答', icon: MessageCircleQuestion },
 ] as const
 
 const DEFAULT_SCORE = 100
@@ -23,12 +24,14 @@ export function ScoreForm({
   student,
   marks,
   existingScores,
+  ratio,
   onSaved,
 }: {
   experimentId: string
   student: CheckoffStudent
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
+  ratio: number[]
   onSaved: () => void
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
@@ -43,9 +46,10 @@ export function ScoreForm({
     setValues(next)
   }, [student.stuId, existingScores])
 
-  const weighted = SCORED_TYPES.reduce((sum, type) => sum + values[type.value] * type.weight, 0)
-  const weightSum = SCORED_TYPES.reduce((sum, type) => sum + type.weight, 0)
-  const total = Math.round((weighted / weightSum) * 10) / 10
+  // 仅取功能测试 / 验收问答的权重；两者都为 0 时退化为等权，避免总分为空
+  const rawWeights = SCORED_TYPES.map((type) => ratio[type.value] ?? 0)
+  const weights = rawWeights[0] <= 0 && rawWeights[1] <= 0 ? [1, 1] : rawWeights
+  const total = weightedTotal([values[0], values[1]], weights) ?? 0
 
   const correctCount = Object.values(marks).filter((mark) => mark === 'correct').length
   const partialCount = Object.values(marks).filter((mark) => mark === 'partial').length
@@ -96,14 +100,14 @@ export function ScoreForm({
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-4">
-          {SCORED_TYPES.map((type) => (
+          {SCORED_TYPES.map((type, index) => (
             <div key={type.value} className="rounded-2xl border border-line bg-elevated p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <label className="flex items-center gap-2 text-sm font-semibold text-fg-muted">
                   <type.icon width={15} height={15} className="shrink-0" />
                   {type.label}
                   <span className="tabular rounded-md bg-sunken px-1.5 py-0.5 text-[11px] font-semibold text-fg-subtle">
-                    ×{type.weight}
+                    ×{weights[index]}
                   </span>
                 </label>
                 {type.value === 1 && tallyLabel && (
@@ -156,7 +160,10 @@ export function ScoreForm({
           </div>
           <div className="relative mt-6 flex items-center gap-2 border-t border-white/10 pt-4 text-xs text-white/50">
             <Info width={13} height={13} className="shrink-0" />
-            功能测试 ×2 · 验收问答 ×5（占比 2 : 5）
+            {SCORED_TYPES.map((type, index) => `${type.label} ×${weights[index]}`).join(' · ')}
+            {' （占比 '}
+            {weights.join(' : ')}
+            {'）'}
           </div>
         </div>
       </div>

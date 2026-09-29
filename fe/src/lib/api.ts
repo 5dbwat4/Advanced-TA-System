@@ -408,6 +408,12 @@ export type ClassSettings = {
   checkpointEnabled?: boolean
   checkpointRule?: string | null
   focusEnabled?: boolean
+  /** 全课程是否共用统一评分占比 */
+  scoreRatioUnified?: boolean
+  /** 课程级评分占比：功能测试 / 验收问答 / 报告 */
+  scoreRatio?: number[]
+  /** 各实验独立的评分占比，键为实验 id */
+  experimentScoreRatios?: Record<string, number[]>
   [key: string]: unknown
 }
 
@@ -417,7 +423,14 @@ export function fetchClassSettings(classId: string): Promise<{ settings: ClassSe
 
 export function updateClassSettings(
   classId: string,
-  body: { checkpointEnabled?: boolean; checkpointRule?: string | null; focusEnabled?: boolean },
+  body: {
+    checkpointEnabled?: boolean
+    checkpointRule?: string | null
+    focusEnabled?: boolean
+    scoreRatioUnified?: boolean
+    scoreRatio?: number[]
+    experimentScoreRatios?: Record<string, number[]>
+  },
 ): Promise<{ settings: ClassSettings }> {
   return apiFetch<{ settings: ClassSettings }>(`/api/classes/${classId}/settings`, {
     method: 'PATCH',

@@ -4,6 +4,7 @@ import Cpu from '~icons/lucide/cpu'
 import { Markdown } from '@/components/ui/Markdown'
 import type { MarkdownStyleId } from '@/lib/api'
 import type { SlaveCardState } from '@/lib/checkoff-socket'
+import { cn } from '@/lib/utils'
 
 const variants = {
   enter: { x: 360, opacity: 0, scale: 0.9, rotateY: 18 },
@@ -21,7 +22,7 @@ function cardKey(state: SlaveCardState): string {
 
 function IdleCard({ mark, title }: { mark: string; title: string }) {
   return (
-    <div className="flex flex-col items-center gap-4 text-center">
+    <div className="flex flex-col items-center gap-6 text-center">
       <motion.div
         animate={{ scale: [1, 1.1, 1], opacity: [0.7, 1, 0.7] }}
         transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -108,6 +109,7 @@ function CardBody({ state, markdownStyle }: { state: SlaveCardState; markdownSty
 }
 
 export function SlaveCard({ state, markdownStyle }: { state: SlaveCardState; markdownStyle?: MarkdownStyleId }) {
+  const isHero = state.kind === 'idle' || state.kind === 'thank'
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -118,7 +120,10 @@ export function SlaveCard({ state, markdownStyle }: { state: SlaveCardState; mar
         exit="exit"
         transition={{ type: 'spring', stiffness: 220, damping: 26 }}
         style={{ transformPerspective: 1000 }}
-        className="rounded-3xl border border-line bg-elevated/80 p-8 shadow-2xl backdrop-blur-xl transition-shadow duration-300 hover:shadow-2xl hover:shadow-brand-600/20"
+        className={cn(
+          'rounded-3xl border border-line bg-elevated/80 p-8 shadow-2xl backdrop-blur-xl transition-shadow duration-300 hover:shadow-2xl hover:shadow-brand-600/20',
+          isHero && 'flex aspect-square w-full items-center justify-center',
+        )}
       >
         <CardBody state={state} markdownStyle={markdownStyle} />
       </motion.div>

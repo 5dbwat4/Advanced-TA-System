@@ -8,7 +8,7 @@ import {
   Tooltip,
   useOverlayState,
 } from '@heroui/react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -22,24 +22,30 @@ import ExternalLink from '~icons/lucide/external-link'
 import FlaskConical from '~icons/lucide/flask-conical'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import NotebookText from '~icons/lucide/notebook-text'
+import Percent from '~icons/lucide/percent'
 import Table from '~icons/lucide/table'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import Users from '~icons/lucide/users'
+import { ScoreRatioEditor } from '@/components/settings/ScoreRatioEditor'
 import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
   fetchCheckoff,
+  fetchClassSettings,
   fetchExperimentHomeworks,
   listBanks,
+  updateClassSettings,
   updateExperiment,
   type CheckoffStudent,
+  type ClassSettings,
   type Experiment,
   type QuestionBank,
   type ZjuamHomework,
 } from '@/lib/api'
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
+import { DEFAULT_SCORE_RATIO, resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 
 export default function ExperimentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -47,6 +53,10 @@ export default function ExperimentDetail() {
   const [banks, setBanks] = useState<QuestionBank[]>([])
   const [students, setStudents] = useState<CheckoffStudent[]>([])
   const [scores, setScores] = useState<Map<string, number>>(new Map())
+  const [settings, setSettings] = useState<ClassSettings | null>(null)
+  const [ratio, setRatio] = useState<number[]>(DEFAULT_SCORE_RATIO)
+  const [savingRatio, setSavingRatio] = useState(false)
+  const ratioTimer = useRef<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
 
@@ -90,10 +100,12 @@ export default function ExperimentDetail() {
     setCheckoffDeadlineDraft(detail.experiment.checkoffDeadline)
     setReportDeadlineDraft(detail.experiment.reportDeadline)
 
-    const checkoff = await fetchCheckoff({
-      classId: detail.experiment.classId,
-      experimentId,
-    })
+    const [checkoff, settingsRes] = await Promise.all([
+      fetchCheckoff({ classId: detail.experiment.classId, experimentId }),
+      fetchClassSettings(detail.experiment.classId),
+    ])
+    setSettings(settingsRes.settings)
+    setRatio(resolveScoreRatio(settingsRes.settings, experimentId))
     setStudents(checkoff.students)
     setScores(
       new Map(checkoff.scores.map((item) => [scoreKey(item.stuId, item.type, item.indId), item.score])),
@@ -118,6 +130,13 @@ export default function ExperimentDetail() {
     }
   }, [id, load])
 
+  useEffect(
+    () => () => {
+      if (ratioTimer.current) window.clearTimeout(ratioTimer.current)
+    },
+    [],
+  )
+
   const bind = async (bankId: string) => {
     if (!experiment) return
     setBinding(true)
@@ -137,12 +156,11 @@ export default function ExperimentDetail() {
   const scoreOf = (stuId: string, type: number) =>
     experiment ? scores.get(scoreKey(stuId, type, experiment.id)) : undefined
 
-  const totalOf = (stuId: string) => {
-    const func = scoreOf(stuId, 0)
-    const qa = scoreOf(stuId, 1)
-    if (func == null || qa == null) return null
-    return (func * 2 + qa * 5) / 7
-  }
+  const totalOf = (stuId: string) =>
+    weightedTotal(
+      [scoreOf(stuId, 0) ?? null, scoreOf(stuId, 1) ?? null, scoreOf(stuId, 2) ?? null],
+      ratio,
+    )
 
   if (loading) {
     return (
@@ -170,6 +188,8 @@ export default function ExperimentDetail() {
   const xzzdBoundCount = [experiment.xzzdBindIdCheckout, experiment.xzzdBindIdReport].filter(
     Boolean,
   ).length
+
+  const unifiedRatio = settings?.scoreRatioUnified ?? false
 
   const openXzzd = () => {
     setCheckoutDraft(experiment.xzzdBindIdCheckout)
@@ -231,6 +251,19 @@ export default function ExperimentDetail() {
     } finally {
       setSavingTimeline(false)
     }
+  }
+
+  const changeRatio = (next: number[]) => {
+    setRatio(next)
+    if (ratioTimer.current) window.clearTimeout(ratioTimer.current)
+    ratioTimer.current = window.setTimeout(() => {
+      setSavingRatio(true)
+      updateClassSettings(experiment.classId, { experimentScoreRatios: { [experiment.id]: next } })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : '保存评分占比失败')
+        })
+        .finally(() => setSavingRatio(false))
+    }, 700)
   }
 
   return (
@@ -311,9 +344,6 @@ export default function ExperimentDetail() {
             />
             <span className="text-sm font-bold">时间线</span>
           </div>
-          <span className="text-xs text-fg-subtle">
-            截止时间后的 5 天为缓冲期，时间线走完才视为「已结束」
-          </span>
           <Button
             className="ml-auto"
             size="sm"
@@ -352,6 +382,34 @@ export default function ExperimentDetail() {
             onChange={setReportDeadlineDraft}
             isDisabled={savingTimeline}
           />
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Percent
+              width={16}
+              height={16}
+              className="shrink-0 text-brand-600 dark:text-brand-300"
+            />
+            <span className="text-sm font-bold">实验计分方式</span>
+          </div>
+          {savingRatio && <Spinner size="sm" />}
+          {unifiedRatio && (
+            <span className="text-xs text-fg-subtle">
+              已启用课程统一评分占比，
+              <Link
+                to="/console/courses/settings#scoring"
+                className="font-semibold text-brand-600 transition-colors hover:underline dark:text-brand-300"
+              >
+                前往设置修改
+              </Link>
+            </span>
+          )}
+        </div>
+        <div className="mt-4">
+          <ScoreRatioEditor value={ratio} onChange={changeRatio} disabled={unifiedRatio} />
         </div>
       </div>
 

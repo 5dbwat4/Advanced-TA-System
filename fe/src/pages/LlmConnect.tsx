@@ -1,4 +1,5 @@
 import { Accordion, Button, Checkbox, Input, Modal, Spinner, useOverlayState } from '@heroui/react'
+import copyToClipboard from 'copy-to-clipboard'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -62,12 +63,9 @@ const EXPIRY_OPTIONS = [
 ]
 
 async function copyText(text: string, label: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.success(`已复制${label}`)
-  } catch {
-    toast.error('复制失败')
-  }
+  const ok = await copyToClipboard(text)
+  if (ok) toast.success(`已复制${label}`)
+  else toast.error('复制失败')
 }
 
 function formatDate(value: string | null): string {

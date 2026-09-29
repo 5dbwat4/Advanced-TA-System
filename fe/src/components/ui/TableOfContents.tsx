@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { cn } from '@/lib/utils'
 
@@ -11,6 +12,7 @@ export type TocItem = { id: string; label: string }
  */
 export function TableOfContents({ items }: { items: TocItem[] }) {
   const [activeId, setActiveId] = useState<string | null>(items[0]?.id ?? null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const sections = items
@@ -46,6 +48,8 @@ export function TableOfContents({ items }: { items: TocItem[] }) {
               onClick={(event) => {
                 event.preventDefault()
                 document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' })
+                // 让地址栏带上 hash（等价 pushState），便于分享 / 前进后退
+                navigate({ hash: `#${item.id}` })
               }}
               className={cn(
                 'block border-l-2 py-1.5 pl-4 text-sm transition-colors',

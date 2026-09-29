@@ -1,20 +1,24 @@
 import { Button, ListBox, Select, Spinner, Switch } from '@heroui/react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
+import { ExperimentScoringSection } from '@/components/settings/ExperimentScoringSection'
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
 import { fetchClassSettings, updateClassSettings, type ClassSettings } from '@/lib/api'
+import { useScrollToHash } from '@/lib/hash'
 import { useCurrentClass } from '@/lib/store'
+import { cn } from '@/lib/utils'
 
 const CHECKPOINT_RULES = [{ value: 'lab0-zero', label: 'Lab 0 置为0分' }]
 
 const SECTIONS: TocItem[] = [
   { id: 'checkpoint', label: 'Checkpoint Settings' },
+  { id: 'scoring', label: '实验计分方式' },
   { id: 'focus', label: '重点关注学生' },
   { id: 'basic', label: '基本信息' },
   { id: 'roster', label: '学生名单' },
@@ -23,27 +27,54 @@ const SECTIONS: TocItem[] = [
 ]
 
 const PLACEHOLDER_SECTIONS = SECTIONS.filter(
-  (section) => section.id !== 'checkpoint' && section.id !== 'focus',
+  (section) => section.id !== 'checkpoint' && section.id !== 'scoring' && section.id !== 'focus',
 )
 
 export default function CourseSettings() {
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const highlightTimer = useRef<number | null>(null)
+
+  useScrollToHash(
+    useCallback((id: string) => {
+      setHighlightId(id)
+      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
+      highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1600)
+    }, []),
+  )
+
+  useEffect(
+    () => () => {
+      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
+    },
+    [],
+  )
+
+  const sectionClass = (id: string) =>
+    cn(
+      'scroll-mt-24 rounded-2xl transition-shadow duration-300',
+      highlightId === id && 'ring-2 ring-brand-500/40 dark:ring-brand-400/50',
+    )
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title="课程设置" />
 
       <div className="flex items-start gap-8">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <section id="checkpoint" className="scroll-mt-24">
+          <section id="checkpoint" className={sectionClass('checkpoint')}>
             <CheckpointSettingsSection index={0} />
           </section>
 
-          <section id="focus" className="scroll-mt-24">
-            <FocusStudentsSection index={1} />
+          <section id="scoring" className={sectionClass('scoring')}>
+            <ExperimentScoringSection index={1} />
+          </section>
+
+          <section id="focus" className={sectionClass('focus')}>
+            <FocusStudentsSection index={2} />
           </section>
 
           {PLACEHOLDER_SECTIONS.map((section, index) => (
-            <section key={section.id} id={section.id} className="scroll-mt-24">
-              <Card index={index + 2}>
+            <section key={section.id} id={section.id} className={sectionClass(section.id)}>
+              <Card index={index + 3}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>

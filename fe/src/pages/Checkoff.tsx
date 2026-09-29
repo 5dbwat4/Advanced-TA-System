@@ -1,7 +1,7 @@
 import { Button, Modal, Spinner, toast as herouiToast, useOverlayState } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DemoStep } from '@/components/checkoff/DemoStep'
@@ -19,9 +19,11 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import {
   fetchCheckoff,
   fetchCheckoffQuestions,
+  fetchClassSettings,
   type CheckoffExperiment,
   type CheckoffQuestion,
   type CheckoffStudent,
+  type ClassSettings,
   type Score,
   type UserPreferences,
 } from '@/lib/api'
@@ -33,6 +35,7 @@ import {
   type CheckoffStartedEvent,
   type SlaveCardState,
 } from '@/lib/checkoff-socket'
+import { DEFAULT_SCORE_RATIO, resolveScoreRatio, type ScoreRatio } from '@/lib/scoring'
 import { useCurrentClass } from '@/lib/store'
 
 export default function Checkoff() {
@@ -41,6 +44,7 @@ export default function Checkoff() {
   const classId = currentClass?.id
 
   const [experiments, setExperiments] = useState<CheckoffExperiment[]>([])
+  const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [experiment, setExperiment] = useState<CheckoffExperiment | null>(null)
   const [student, setStudent] = useState<CheckoffStudent | null>(null)
@@ -62,6 +66,11 @@ export default function Checkoff() {
   const markdownStyle = user?.preferences?.markdownStyle ?? 'github'
   const theme: 'light' | 'dark' = resolvedTheme === 'dark' ? 'dark' : 'light'
 
+  const scoreRatio: ScoreRatio = useMemo(
+    () => (experiment ? resolveScoreRatio(classSettings, experiment.id) : DEFAULT_SCORE_RATIO),
+    [classSettings, experiment],
+  )
+
   const handleCheckoffStarted = useCallback((event: CheckoffStartedEvent) => {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
   }, [])
@@ -81,6 +90,21 @@ export default function Checkoff() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [classId])
+
+  useEffect(() => {
+    if (!classId) return
+    let cancelled = false
+    fetchClassSettings(classId)
+      .then((res) => {
+        if (!cancelled) setClassSettings(res.settings)
+      })
+      .catch(() => {
+        // 占比缺失时回退默认，不影响验收流程
       })
     return () => {
       cancelled = true
@@ -330,6 +354,7 @@ export default function Checkoff() {
                 student={student}
                 marks={marks}
                 existingScores={existingScores}
+                ratio={scoreRatio}
                 onSaved={handleSaved}
               />
             )}

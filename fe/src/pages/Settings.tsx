@@ -1,5 +1,5 @@
 import { Button, Input, Modal, Spinner, useOverlayState } from '@heroui/react'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -18,7 +18,9 @@ import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
 import { useAuth } from '@/lib/auth'
+import { useScrollToHash } from '@/lib/hash'
 import { registerPasskey } from '@/lib/passkey'
+import { cn } from '@/lib/utils'
 
 const SECTIONS: TocItem[] = [
   { id: 'profile', label: '个人信息' },
@@ -29,6 +31,29 @@ const SECTIONS: TocItem[] = [
 
 export default function Settings() {
   const { user, refresh, updateSettings } = useAuth()
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const highlightTimer = useRef<number | null>(null)
+
+  useScrollToHash(
+    useCallback((id: string) => {
+      setHighlightId(id)
+      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
+      highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1600)
+    }, []),
+  )
+
+  useEffect(
+    () => () => {
+      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
+    },
+    [],
+  )
+
+  const sectionClass = (id: string) =>
+    cn(
+      'scroll-mt-24 rounded-2xl transition-shadow duration-300',
+      highlightId === id && 'ring-2 ring-brand-500/40 dark:ring-brand-400/50',
+    )
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
@@ -109,7 +134,7 @@ export default function Settings() {
       <PageHeader title="设置" />
       <div className="flex items-start gap-8">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <section id="profile" className="scroll-mt-24">
+          <section id="profile" className={sectionClass('profile')}>
             <Card index={0} className="flex flex-col gap-5">
           <div className="flex items-center gap-2 text-sm font-bold">
             <IdCard width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
@@ -343,15 +368,15 @@ export default function Settings() {
           </Modal.Backdrop>
         </Modal>
 
-        <section id="zjuam" className="scroll-mt-24">
+        <section id="zjuam" className={sectionClass('zjuam')}>
           <ZjuamSection index={1} />
         </section>
 
-        <section id="preferences" className="scroll-mt-24">
+        <section id="preferences" className={sectionClass('preferences')}>
           <PreferenceSection index={2} />
         </section>
 
-        <section id="system" className="scroll-mt-24">
+        <section id="system" className={sectionClass('system')}>
           <SystemSection index={3} />
         </section>
         </div>
