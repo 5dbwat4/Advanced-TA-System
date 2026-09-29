@@ -1,5 +1,6 @@
 import { Button, Modal, Spinner, Switch, useOverlayState } from '@heroui/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
 
 import Percent from '~icons/lucide/percent'
@@ -26,14 +27,7 @@ export function ExperimentScoringSection({ index }: { index: number }) {
   const [draft, setDraft] = useState<number[]>(DEFAULT_SCORE_RATIO)
 
   const oneClickState = useOverlayState()
-  const saveTimer = useRef<number | null>(null)
-
-  useEffect(
-    () => () => {
-      if (saveTimer.current) window.clearTimeout(saveTimer.current)
-    },
-    [],
-  )
+  const ratioDirty = useRef(false)
 
   useEffect(() => {
     if (!classId) return
@@ -88,16 +82,26 @@ export function ExperimentScoringSection({ index }: { index: number }) {
     [classId, syncFromServer],
   )
 
+  const [, cancelRatioSave] = useDebounce(
+    () => {
+      if (!ratioDirty.current) return
+      ratioDirty.current = false
+      void patch({ scoreRatio: ratio })
+    },
+    700,
+    [ratio],
+  )
+
   const toggleUnified = (selected: boolean) => {
-    if (saveTimer.current) window.clearTimeout(saveTimer.current)
+    cancelRatioSave()
+    ratioDirty.current = false
     setUnified(selected)
     void patch({ scoreRatioUnified: selected, scoreRatio: ratio })
   }
 
   const changeRatio = (next: number[]) => {
+    ratioDirty.current = true
     setRatio(next)
-    if (saveTimer.current) window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => void patch({ scoreRatio: next }), 700)
   }
 
   const openOneClick = () => {

@@ -2,6 +2,7 @@ import { Button, Modal, Spinner, toast as herouiToast, useOverlayState } from '@
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { DemoStep } from '@/components/checkoff/DemoStep'
@@ -42,6 +43,8 @@ export default function Checkoff() {
   const currentClass = useCurrentClass()
   const { user, loading: authLoading, updatePreferences } = useAuth()
   const classId = currentClass?.id
+  const [searchParams] = useSearchParams()
+  const preselectId = searchParams.get('experiment')
 
   const [experiments, setExperiments] = useState<CheckoffExperiment[]>([])
   const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
@@ -131,6 +134,12 @@ export default function Checkoff() {
       setQuestionsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (experiment || !preselectId || experiments.length === 0) return
+    const match = experiments.find((item) => item.id === preselectId)
+    if (match) void selectExperiment(match)
+  }, [experiment, experiments, preselectId, selectExperiment])
 
   const selectStudent = useCallback(
     (next: CheckoffStudent, nextScores: Score[]) => {

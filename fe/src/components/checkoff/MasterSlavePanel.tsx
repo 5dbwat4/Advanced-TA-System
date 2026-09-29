@@ -1,12 +1,11 @@
-import { Button, Spinner } from '@heroui/react'
+import { Button, Spinner, Tooltip } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { motion } from 'motion/react'
-import { useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 
-import Check from '~icons/lucide/check'
-import Copy from '~icons/lucide/copy'
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
+import QrCode from '~icons/lucide/qr-code'
 import { useTotp } from '@/lib/totp'
 import { cn } from '@/lib/utils'
 
@@ -45,7 +44,6 @@ function CountdownRing({ remaining, period }: { remaining: number; period: numbe
 }
 
 export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
-  const [copied, setCopied] = useState(false)
   const { code, remaining, period } = useTotp(session.secret, session.period, session.serverTime)
 
   if (!session.ready) {
@@ -62,13 +60,8 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
 
   const copy = async () => {
     const ok = await copyToClipboard(url)
-    if (ok) {
-      setCopied(true)
-      toast.success('链接已复制')
-      setTimeout(() => setCopied(false), 1600)
-    } else {
-      toast.error(url)
-    }
+    if (ok) toast.success('链接已复制')
+    else toast.error(url)
   }
 
   const copyCode = async () => {
@@ -101,15 +94,21 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
           <div>
             <div className="text-xs font-semibold text-fg-muted">从机配对码</div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void copyCode()}
-                disabled={!code}
-                title={code ? '点击复制配对码' : undefined}
-                className="tabular cursor-pointer text-2xl font-bold tracking-[0.3em] transition-colors hover:text-brand-600 disabled:cursor-default dark:hover:text-brand-300"
-              >
-                {pin}
-              </button>
+              <Tooltip delay={0}>
+                <Tooltip.Trigger className="inline-flex">
+                  <button
+                    type="button"
+                    onClick={() => void copyCode()}
+                    disabled={!code}
+                    className="tabular cursor-pointer text-2xl font-bold tracking-[0.3em] transition-colors hover:text-brand-600 disabled:cursor-default dark:hover:text-brand-300"
+                  >
+                    {pin}
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Content placement="bottom" showArrow>
+                  点击复制配对码
+                </Tooltip.Content>
+              </Tooltip>
               <CountdownRing remaining={remaining} period={period} />
             </div>
           </div>
@@ -119,18 +118,42 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
 
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold text-fg-muted">从机链接</div>
-          <div className="tabular truncate text-sm font-medium">
-            {url.replace(/^https?:\/\//, '')}
-          </div>
+          <Tooltip delay={0}>
+            <Tooltip.Trigger className="block w-full text-left">
+              <button
+                type="button"
+                onClick={() => void copy()}
+                className="tabular block w-full cursor-pointer truncate text-sm font-medium transition-colors hover:text-brand-600 dark:hover:text-brand-300"
+              >
+                {url.replace(/^https?:\/\//, '')}
+              </button>
+            </Tooltip.Trigger>
+            <Tooltip.Content placement="bottom" showArrow className="max-w-xs break-all">
+              {url}
+            </Tooltip.Content>
+          </Tooltip>
         </div>
 
-        <Button size="sm" variant="secondary" isIconOnly aria-label="复制链接" onPress={copy}>
-          {copied ? (
-            <Check width={14} height={14} className="shrink-0" />
-          ) : (
-            <Copy width={14} height={14} className="shrink-0" />
-          )}
-        </Button>
+        <Tooltip delay={0}>
+          <Tooltip.Trigger className="inline-flex">
+            <Button size="sm" variant="secondary" isIconOnly aria-label="显示二维码">
+              <QrCode width={14} height={14} className="shrink-0" />
+            </Button>
+          </Tooltip.Trigger>
+          <Tooltip.Content placement="bottom" offset={8} className="w-auto max-w-none p-2">
+            <div className="flex flex-col items-center gap-2">
+              <QRCodeSVG
+                value={url}
+                size={168}
+                level="M"
+                marginSize={2}
+                bgColor="#ffffff"
+                fgColor="#000000"
+              />
+              <span className="text-xs text-fg-subtle">扫码在从机打开</span>
+            </div>
+          </Tooltip.Content>
+        </Tooltip>
 
         <div className="flex items-center gap-2 text-xs font-semibold">
           <span

@@ -1,5 +1,6 @@
 import { Button, Input, Modal, Spinner, useOverlayState } from '@heroui/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useTimeoutFn } from 'react-use'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -32,21 +33,16 @@ const SECTIONS: TocItem[] = [
 export default function Settings() {
   const { user, refresh, updateSettings } = useAuth()
   const [highlightId, setHighlightId] = useState<string | null>(null)
-  const highlightTimer = useRef<number | null>(null)
+  const [, , resetHighlight] = useTimeoutFn(() => setHighlightId(null), 1600)
 
   useScrollToHash(
-    useCallback((id: string) => {
-      setHighlightId(id)
-      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
-      highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1600)
-    }, []),
-  )
-
-  useEffect(
-    () => () => {
-      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
-    },
-    [],
+    useCallback(
+      (id: string) => {
+        setHighlightId(id)
+        resetHighlight()
+      },
+      [resetHighlight],
+    ),
   )
 
   const sectionClass = (id: string) =>

@@ -1,6 +1,7 @@
 import { Button, Spinner } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useTimeoutFn } from 'react-use'
 
 import ArrowRight from '~icons/lucide/arrow-right'
 import Check from '~icons/lucide/check'
@@ -161,20 +162,23 @@ export function QuestionDrawer({
 }) {
   const [drawing, setDrawing] = useState(false)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const drawArmed = useRef(false)
 
-  useEffect(() => () => clearTimeout(timer.current), [])
+  const [, , scheduleDraw] = useTimeoutFn(() => {
+    if (!drawArmed.current) return
+    drawArmed.current = false
+    const count = Math.min(drawCount, questions.length)
+    onDrawnChange(shuffle(questions).slice(0, count))
+    setDrawing(false)
+  }, 600)
 
   const toggleReveal = (id: string) => setRevealed((prev) => ({ ...prev, [id]: !prev[id] }))
 
   const draw = () => {
     if (questions.length === 0) return
     setDrawing(true)
-    timer.current = setTimeout(() => {
-      const count = Math.min(drawCount, questions.length)
-      onDrawnChange(shuffle(questions).slice(0, count))
-      setDrawing(false)
-    }, 600)
+    drawArmed.current = true
+    scheduleDraw()
   }
 
   const toggleFixed = (question: CheckoffQuestion) => {

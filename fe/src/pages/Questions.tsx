@@ -3,6 +3,7 @@ import copyToClipboard from 'copy-to-clipboard'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
 
 import AlertTriangle from '~icons/lucide/alert-triangle'
@@ -93,13 +94,14 @@ function QuestionsPanel() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
+  useDebounce(
+    () => {
       setApplied(query.trim())
       setPage(1)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [query])
+    },
+    300,
+    [query],
+  )
 
   useEffect(() => {
     let cancelled = false

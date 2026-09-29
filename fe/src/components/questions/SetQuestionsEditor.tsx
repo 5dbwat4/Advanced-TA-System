@@ -1,5 +1,6 @@
 import { Button, Checkbox, Input, Spinner } from '@heroui/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -65,27 +66,27 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
   }, [bank.id, register])
 
   // 搜索（防抖）
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    const timer = setTimeout(async () => {
+  const searchSeq = useRef(0)
+  useDebounce(
+    async () => {
+      const seq = ++searchSeq.current
+      setLoading(true)
       try {
         const data = await listQuestions({ q: keyword.trim(), limit: PAGE_SIZE, offset: 0 })
-        if (cancelled) return
+        if (seq !== searchSeq.current) return
         setResults(data.questions)
         setTotal(data.total)
         register(data.questions)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (seq !== searchSeq.current) return
+        toast.error(error instanceof Error ? error.message : '加载失败')
       } finally {
-        if (!cancelled) setLoading(false)
+        if (seq === searchSeq.current) setLoading(false)
       }
-    }, 300)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [keyword, register])
+    },
+    300,
+    [keyword],
+  )
 
   const loadMore = async () => {
     setLoadingMore(true)

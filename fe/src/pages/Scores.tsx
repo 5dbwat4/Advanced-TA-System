@@ -649,7 +649,7 @@ export default function Scores() {
                         <th
                           key={`${exp.id}:${type.value}`}
                           aria-sort={ariaSort(`${exp.id}:${type.value}`)}
-                          className="border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
+                          className="min-w-[5.5rem] border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
                         >
                           <SortButton
                             label={type.label}
@@ -661,7 +661,7 @@ export default function Scores() {
                       )),
                       <th
                         key={`${exp.id}:total`}
-                        className="border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-semibold text-fg"
+                        className="min-w-[5.5rem] border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
                       >
                         总评
                       </th>,
@@ -683,7 +683,7 @@ export default function Scores() {
                             return (
                               <td
                                 key={key}
-                                className="border-b border-r border-line px-2 py-1.5 text-center"
+                                className="min-w-[5.5rem] border-b border-r border-line px-2 py-1.5 text-center"
                               >
                                 <ScoreCell
                                   score={scores.get(key) ?? null}
@@ -694,7 +694,7 @@ export default function Scores() {
                           }),
                           <td
                             key={`${exp.id}:total`}
-                            className="tabular border-b border-r border-line px-2 py-1.5 text-center font-bold"
+                            className="tabular min-w-[5.5rem] border-b border-r border-line px-2 py-1.5 text-center font-bold"
                           >
                             {total == null ? (
                               <span className="font-normal text-fg-subtle">—</span>

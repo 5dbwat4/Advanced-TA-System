@@ -1,6 +1,7 @@
 import { Button, ListBox, Select, Spinner, Switch } from '@heroui/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTimeoutFn } from 'react-use'
 import { toast } from 'sonner'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
@@ -32,21 +33,16 @@ const PLACEHOLDER_SECTIONS = SECTIONS.filter(
 
 export default function CourseSettings() {
   const [highlightId, setHighlightId] = useState<string | null>(null)
-  const highlightTimer = useRef<number | null>(null)
+  const [, , resetHighlight] = useTimeoutFn(() => setHighlightId(null), 1600)
 
   useScrollToHash(
-    useCallback((id: string) => {
-      setHighlightId(id)
-      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
-      highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1600)
-    }, []),
-  )
-
-  useEffect(
-    () => () => {
-      if (highlightTimer.current) window.clearTimeout(highlightTimer.current)
-    },
-    [],
+    useCallback(
+      (id: string) => {
+        setHighlightId(id)
+        resetHighlight()
+      },
+      [resetHighlight],
+    ),
   )
 
   const sectionClass = (id: string) =>

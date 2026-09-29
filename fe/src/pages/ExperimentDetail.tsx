@@ -9,7 +9,8 @@ import {
   useOverlayState,
 } from '@heroui/react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
 
 import ArrowDown from '~icons/lucide/arrow-down'
@@ -18,14 +19,17 @@ import ArrowUp from '~icons/lucide/arrow-up'
 import CalendarClock from '~icons/lucide/calendar-clock'
 import Check from '~icons/lucide/check'
 import ChevronRight from '~icons/lucide/chevron-right'
+import ClipboardCheck from '~icons/lucide/clipboard-check'
 import ExternalLink from '~icons/lucide/external-link'
 import FlaskConical from '~icons/lucide/flask-conical'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import NotebookText from '~icons/lucide/notebook-text'
+import Pencil from '~icons/lucide/pencil'
 import Percent from '~icons/lucide/percent'
 import Table from '~icons/lucide/table'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import Users from '~icons/lucide/users'
+import X from '~icons/lucide/x'
 import { ScoreRatioEditor } from '@/components/settings/ScoreRatioEditor'
 import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
@@ -47,8 +51,28 @@ import {
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 
+function formatDateTime(value: string | null): string {
+  if (!value) return '未指定'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未指定'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function TimeStat({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold text-fg-muted">{label}</div>
+      <div className={value ? 'tabular mt-1.5 text-sm' : 'tabular mt-1.5 text-sm text-fg-subtle'}>
+        {formatDateTime(value)}
+      </div>
+    </div>
+  )
+}
+
 export default function ExperimentDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [experiment, setExperiment] = useState<Experiment | null>(null)
   const [banks, setBanks] = useState<QuestionBank[]>([])
   const [students, setStudents] = useState<CheckoffStudent[]>([])
@@ -56,7 +80,7 @@ export default function ExperimentDetail() {
   const [settings, setSettings] = useState<ClassSettings | null>(null)
   const [ratio, setRatio] = useState<number[]>(DEFAULT_SCORE_RATIO)
   const [savingRatio, setSavingRatio] = useState(false)
-  const ratioTimer = useRef<number | null>(null)
+  const ratioDirty = useRef(false)
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
 
@@ -72,6 +96,7 @@ export default function ExperimentDetail() {
   const [checkoffDeadlineDraft, setCheckoffDeadlineDraft] = useState<string | null>(null)
   const [reportDeadlineDraft, setReportDeadlineDraft] = useState<string | null>(null)
   const [savingTimeline, setSavingTimeline] = useState(false)
+  const [editingTimeline, setEditingTimeline] = useState(false)
 
   const xzzdState = useOverlayState()
 
@@ -130,11 +155,21 @@ export default function ExperimentDetail() {
     }
   }, [id, load])
 
-  useEffect(
-    () => () => {
-      if (ratioTimer.current) window.clearTimeout(ratioTimer.current)
+  useDebounce(
+    () => {
+      if (!ratioDirty.current || !experiment) return
+      ratioDirty.current = false
+      setSavingRatio(true)
+      updateClassSettings(experiment.classId, {
+        experimentScoreRatios: { [experiment.id]: ratio },
+      })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : '保存评分占比失败')
+        })
+        .finally(() => setSavingRatio(false))
     },
-    [],
+    700,
+    [ratio],
   )
 
   const bind = async (bankId: string) => {
@@ -232,6 +267,21 @@ export default function ExperimentDetail() {
       experiment.checkoffDeadline !== checkoffDeadlineDraft ||
       experiment.reportDeadline !== reportDeadlineDraft)
 
+  const hasTimeline =
+    experiment !== null &&
+    Boolean(experiment.publishTime || experiment.checkoffDeadline || experiment.reportDeadline)
+
+  const showTimelineEditor = editingTimeline || !hasTimeline
+
+  const cancelEditTimeline = () => {
+    if (experiment) {
+      setPublishDraft(experiment.publishTime)
+      setCheckoffDeadlineDraft(experiment.checkoffDeadline)
+      setReportDeadlineDraft(experiment.reportDeadline)
+    }
+    setEditingTimeline(false)
+  }
+
   const saveTimeline = async () => {
     if (!experiment || !dirty) return
     setSavingTimeline(true)
@@ -245,6 +295,7 @@ export default function ExperimentDetail() {
       setPublishDraft(updated.publishTime)
       setCheckoffDeadlineDraft(updated.checkoffDeadline)
       setReportDeadlineDraft(updated.reportDeadline)
+      setEditingTimeline(false)
       toast.success('时间线已保存')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
@@ -254,16 +305,8 @@ export default function ExperimentDetail() {
   }
 
   const changeRatio = (next: number[]) => {
+    ratioDirty.current = true
     setRatio(next)
-    if (ratioTimer.current) window.clearTimeout(ratioTimer.current)
-    ratioTimer.current = window.setTimeout(() => {
-      setSavingRatio(true)
-      updateClassSettings(experiment.classId, { experimentScoreRatios: { [experiment.id]: next } })
-        .catch((error) => {
-          toast.error(error instanceof Error ? error.message : '保存评分占比失败')
-        })
-        .finally(() => setSavingRatio(false))
-    }, 700)
   }
 
   return (
@@ -276,7 +319,18 @@ export default function ExperimentDetail() {
         返回实验列表
       </Link>
 
-      <PageHeader title={`${experiment.mark} · ${experiment.title}`} />
+      <PageHeader
+        title={`${experiment.mark} · ${experiment.title}`}
+        actions={
+          <Button
+            size="sm"
+            onPress={() => navigate(`/console/checkoff?experiment=${experiment.id}`)}
+          >
+            <ClipboardCheck width={15} height={15} className="shrink-0" />
+            去验收
+          </Button>
+        }
+      />
 
       <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
         <div className="flex flex-wrap items-center gap-3">
@@ -344,45 +398,100 @@ export default function ExperimentDetail() {
             />
             <span className="text-sm font-bold">时间线</span>
           </div>
-          <Button
-            className="ml-auto"
-            size="sm"
-            isDisabled={!dirty}
-            isPending={savingTimeline}
-            onPress={saveTimeline}
-          >
-            {({ isPending }) => (
+          <div className="ml-auto flex items-center gap-2">
+            {showTimelineEditor ? (
               <>
-                {isPending ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <Check width={16} height={16} className="shrink-0" />
+                {hasTimeline && (
+                  <Tooltip delay={0}>
+                    <Tooltip.Trigger className="inline-flex">
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="secondary"
+                        isDisabled={savingTimeline}
+                        aria-label="取消编辑"
+                        onPress={cancelEditTimeline}
+                      >
+                        <X width={15} height={15} className="shrink-0" />
+                      </Button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content placement="bottom" showArrow>
+                      取消
+                    </Tooltip.Content>
+                  </Tooltip>
                 )}
-                {isPending ? '保存中' : '保存'}
+                <Tooltip delay={0}>
+                  <Tooltip.Trigger className="inline-flex">
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      isDisabled={!dirty}
+                      isPending={savingTimeline}
+                      aria-label="保存时间线"
+                      onPress={saveTimeline}
+                    >
+                      {({ isPending }) =>
+                        isPending ? (
+                          <Spinner color="current" size="sm" />
+                        ) : (
+                          <Check width={16} height={16} className="shrink-0" />
+                        )
+                      }
+                    </Button>
+                  </Tooltip.Trigger>
+                  <Tooltip.Content placement="bottom" showArrow>
+                    保存
+                  </Tooltip.Content>
+                </Tooltip>
               </>
+            ) : (
+              <Tooltip delay={0}>
+                <Tooltip.Trigger className="inline-flex">
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="secondary"
+                    aria-label="编辑时间线"
+                    onPress={() => setEditingTimeline(true)}
+                  >
+                    <Pencil width={15} height={15} className="shrink-0" />
+                  </Button>
+                </Tooltip.Trigger>
+                <Tooltip.Content placement="bottom" showArrow>
+                  编辑
+                </Tooltip.Content>
+              </Tooltip>
             )}
-          </Button>
+          </div>
         </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <DateTimePicker
-            label="公开时间"
-            value={publishDraft}
-            onChange={setPublishDraft}
-            isDisabled={savingTimeline}
-          />
-          <DateTimePicker
-            label="验收截止时间"
-            value={checkoffDeadlineDraft}
-            onChange={setCheckoffDeadlineDraft}
-            isDisabled={savingTimeline}
-          />
-          <DateTimePicker
-            label="报告提交截止时间"
-            value={reportDeadlineDraft}
-            onChange={setReportDeadlineDraft}
-            isDisabled={savingTimeline}
-          />
-        </div>
+        {showTimelineEditor ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <DateTimePicker
+              label="公开时间"
+              value={publishDraft}
+              onChange={setPublishDraft}
+              isDisabled={savingTimeline}
+            />
+            <DateTimePicker
+              label="验收截止时间"
+              value={checkoffDeadlineDraft}
+              onChange={setCheckoffDeadlineDraft}
+              isDisabled={savingTimeline}
+            />
+            <DateTimePicker
+              label="报告提交截止时间"
+              value={reportDeadlineDraft}
+              onChange={setReportDeadlineDraft}
+              isDisabled={savingTimeline}
+            />
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <TimeStat label="公开时间" value={experiment.publishTime} />
+            <TimeStat label="验收截止时间" value={experiment.checkoffDeadline} />
+            <TimeStat label="报告提交截止时间" value={experiment.reportDeadline} />
+          </div>
+        )}
       </div>
 
       <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
