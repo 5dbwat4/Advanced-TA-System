@@ -350,23 +350,42 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 
 ### Phase A — 地基
 
-> 进度：**A1 已完成**（脚手架 / 配置 / CSS 地基 / 路由骨架 / 守卫 / stores / lib 搬运），A2（兼容层）、A3（AppShell + Login）待做。
-> 复核记录：`api.ts` 563 行导出符号与旧版完全一致；`main.css` 的 `:root` / `.dark` / `@theme inline` 三块逐字一致（已用脚本比对）。
+> 进度：**A1 / A2 / A3 全部完成**（脚手架+地基 / 兼容层 10 件 / AppShell+登录+初始化+条款）。下一个 Phase 是 B。
+> 复核记录：`api.ts` 563 行导出符号与旧版完全一致；`main.css` 的 `:root` / `.dark` / `@theme inline` 三块逐字一致（已用脚本比对）；A3 的 `console.vue` / `LoginPanel.vue` 由主 agent 逐行读过。
+> ⚠️ A3 执行时 subagent 自行跑了 `npm install`：装出来的是 **win32-x64** 原生绑定（`@esbuild/win32-x64`、`@tailwindcss/oxide-win32-x64-msvc`），即在 Windows 侧完成，`fe-v2/node_modules` 可直接用于你的 Windows 开发；`package-lock.json` 已按仓库惯例（`fe/package-lock.json` 也入库）提交。
 
 - [x] `fe-v2/` 脚手架：Nuxt 4 + `@nuxt/ui` + Tailwind v4 + `unplugin-icons`(vue) + `vite-plugin-load-with-progress-bar`；`package.json` / `tsconfig` / `public/` / `.gitignore` / `README.md`（**`npm install` 由用户在 Windows 侧执行**）
 - [x] `nuxt.config.ts`：`ssr: false`、`css`、`vite.plugins`、`vite.server.proxy`（`/api`、`/socket.io`(ws)、`/mcp` → `localhost:3001`）、`colorMode: { classSuffix: '' }`、`icon.clientBundle.scan`、`fonts`、devServer 5173
 - [x] `app/assets/css/main.css`：逐字搬运 `fe/src/index.css`（Nuxt UI CSS 在前、自定义 `@theme inline` 在后；`.score-slider` / `.mdx-editor-content` 不带过去）；末尾追加全局焦点环 + 按压反馈兜底（`:where()` + `@layer utilities`，支持 `data-no-press` 退出）
 - [x] `app.config.ts`：`ui.colors.primary='brand'`、`ui.toast` 玻璃拟态（追加合并写法）、`ui.skeleton` 换 shimmer
 - [x] 字体：`@nuxt/fonts` 配置三套字体的自托管（替代 Google Fonts `<link>`）—— 待用户 `npm run dev` 后确认实际生效
-- [ ] 兼容层前 6 个：`AppButton` `AppInput` `AppChip` `AppTooltip` `AppSwitch` `AppLabel`（A2）
-- [ ] `app/layouts/console.vue` 完整实现（← `AppShell.tsx`，A3；当前只有最小容器）+ `app/layouts/default.vue`（已完成）
+- [x] 兼容层前 6 个（实际做了 10 个）：`AppButton` `AppInput` `AppChip`（→ `UBadge`）`AppTooltip` `AppSwitch` `AppLabel`（→ 原生 `<label>`，Nuxt UI 无 `Label`）+ `Card` `EmptyState`（从旧版 `Card.tsx` 拆出）`PageHeader` `ThemeToggle`；外加 `composables/useToasts.ts`（sonner → Nuxt UI toast 封装，Phase B 替换 115 处调用时用）
+- [x] `app/layouts/console.vue` 完整实现（← `AppShell.tsx` 327 行）+ `app/layouts/default.vue`
+- [x] `components/auth/{LoginPanel,LoginBrandPanel}.vue` + `pages/{login,setup,terms}.vue` + `content/terms.ts` + `components/ui/Markdown.vue`（只读渲染器，A3 提前落地，Phase D 只做可编辑器 + 精调）
 - [x] `app/middleware/auth.global.ts`（← `RequireAuth` + `RedirectIfAuthed`，白名单 `/terms` `/checkin*`，回跳 `?redirect=`）
 - [x] 路由骨架：`index` / `[...all]` / `login` / `setup` / `terms` / `console/*` / `checkin/*` 空壳页
 - [x] `app/app.vue`：`<UApp :toaster="{ position: 'bottom-right' }">` + `aurora` + `grid-overlay`（`UApp` 内部已渲染 `UToaster`，不要重复挂）
 - [x] `app/stores/{auth,app}.ts` + `plugins/app-store-persist.client.ts`（localStorage key `tasaas.app`，结构与 zustand persist 兼容）
 - [x] `app/composables/{useCurrentClass,useHasXzzdPermission}.ts`、`app/lib/{api,zjuam,last-user,pinyin,utils,nav}.ts`
-- [ ] A2：兼容层 6 个组件 + `components/ui/{Card,PageHeader,ThemeToggle}.vue`
-- [ ] A3：`AppShell` 完整移植 + `More` + `Login` + `Setup` + `Terms`
+- [x] A2：兼容层 6 个组件 + `components/ui/{Card,EmptyState,PageHeader,ThemeToggle}.vue` + `composables/useToasts.ts`
+- [x] A3：`AppShell` 完整移植 + `More` + `Login` + `Setup` + `Terms`
+
+### A 批落地时确认的事实（给 Phase B/C 直接用，别再重复调研）
+
+| 事实 | 说明 |
+|---|---|
+| `AppButton` 默认 `variant='primary'` | 依据：旧版 22 处不写 variant，且 `LlmConnect.tsx:680` 的「完成」不写、同页「取消」写 `secondary` |
+| HeroUI `.input` **默认不整宽** | 只有 `.input--full-width` 才 `w-full`。所以 `AppInput` 的做法是：内部 `<input>` 给 `w-full`，外层 wrapper 在页面写了定宽类（`w-16` 等）时收成 `w-fit` |
+| HeroUI Button 的 `isPending` **不自带 spinner** | 旧版 30 处靠 render-prop 手写 `<Spinner>`；`data-pending` 只给 `status-pending` 样式。Nuxt UI 的 `loading` 自带 spinner 且保留文字，观感更好 → 迁移时删掉手写 Spinner |
+| HeroUI 无 `Label` / `Chip` 同名组件 | `AppLabel` → 原生 `<label>`；`AppChip` → `UBadge`（Nuxt UI 的 Chip 是状态点） |
+| 全站只有 `AppShell` 用 `Dropdown`（5 处） | 直接用 `UMenu` + `UDropdownMenu`，**不建 `AppDropdown`** |
+| `UDropdownMenu` 没有受控单选 | 无 `modelValue`；勾选项用 `type:'checkbox'` + item 上的 `checked` / `onSelect`（`onUpdateChecked` 存疑，故 `onSelect` 兜底）。勾选标记在**行尾**（HeroUI 在行首，可接受差异） |
+| `UListbox` 是 `ListBox` 的正确替代 | `pages/console/more.vue` 已是参考写法：`:items` + `#item` 作用域插槽 + `:highlight-on-hover="false"`；Phase B 的 `AppListBox` 按这个模式建 |
+| `AppTooltip` 有 `disabled` prop | 侧栏导航项用 `:disabled="!sidebarCollapsed"` 一套树搞定两种状态，避免维护两套 JSX |
+| `md-editor-v3@7.1.0` 只读渲染（已读源码确认） | `MdPreview` props：`modelValue`(必填) / `theme` / `previewTheme` / `noMermaid` / `noKatex` / `codeTheme` / `sanitize` …；必须 `import 'md-editor-v3/lib/preview.css'`；**katex 默认走 CDN**，要本地化：`config({ editorExtensions: { katex: { instance: katex } } })` + `import 'katex/dist/katex.min.css'`；可选预览主题：`default` / `vuepress` / `github` / `cyanosis` / `mk-cute` / `smart-blue` |
+| `motion-v` 显式 import | Nuxt 不自动导入 `motion-v`，每个用到的地方写 `import { motion, AnimatePresence } from 'motion-v'` |
+| 表单校验不引 zod | 依赖里没有 zod。`LoginPanel` / `Setup` 用普通 `validate()` 函数 + 红色 inline 文案（`text-xs text-danger`）+ 输入框 error 描边 + `<form novalidate>` |
+| 全局 `import` auto-import 已开 | A2 的组件里写了 `import { computed } from 'vue'`，无害，不去动 |
 
 **验收点**：① 明/暗两套主题下按钮、输入框、卡片、侧栏与旧版气质一致；② 未登录访问 `/console/scores` → 跳 `/login?redirect=/console/scores`，登录后回跳；③ `/terms`、`/checkin` 不被守卫拦截；④ 未知路径回落 `/console`；⑤ 桌面/移动两套导航都出现且高亮正确；⑥ **动效基线**：`aurora` 背景漂移、`.glass` 顶栏、导航激活块的 `layoutId` 滑动、按钮按压反馈、focus-visible 焦点环、骨架 shimmer 全部到位。
 
@@ -395,8 +414,10 @@ Nuxt UI 侧对应的「不存在项 → 替代方案」：`ToggleGroup`（按钮
 
 ### Phase D — 内容与收尾
 
-- [ ] `ui/Markdown.tsx`（只读渲染 + KaTeX，基于 `md-editor-v3`）+ `ui/MarkdownEditor.tsx`（可编辑）+ `.md-editor` 亮暗主题覆盖（精调一版，不能是「默认丑」）
-  - ⚠️ 开工前先确认 `md-editor-v3` 的 KaTeX 依赖形态（内置 `katex` prop / 需要 `katex` / `@vscode/katex`），再决定 `package.json` 补哪个包（旧版的 `remark-math` + `rehype-katex` 可能不再需要）
+- [x] `ui/Markdown.vue`（只读渲染 + 本地 KaTeX + token 覆写样式，A3 已提前落地）
+- [ ] `ui/MarkdownEditor.vue`（可编辑，← `MarkdownEditor.tsx`）+ `.md-editor` 亮暗主题精调（不能是「默认丑」）
+  - 已有基础：`MdPreview` 的用法与 katex 本地化已确认（见上表）；编辑器用同包的 `MdEditor`，主题走 `theme` + `previewTheme` 双参
+  - ⚠️ 旧版的 `remark-math` + `rehype-katex` 不再需要（md-editor-v3 内置 markdown-it + katex），`package.json` 不必补这两个包
 - [ ] `content/terms.ts`
 - [ ] 全站走查：逐页明/暗主题对照清单；`tabular`、滚动条、`env(safe-area-inset-bottom)`、focus-visible 等细节
 - [ ] **§4.4 体验资产清单逐条签收**：A~I 每项确认落地
