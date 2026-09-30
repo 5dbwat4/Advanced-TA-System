@@ -16,6 +16,7 @@
     "@iconify-json/lucide": "^1.2.136",
     "@internationalized/date": "^3.12.4",
     "@mdxeditor/editor": "^4.2.5",
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@simplewebauthn/browser": "^14.0.0",
     "@uiw/react-md-editor": "^4.1.2",
     "clsx": "^2.1.1",

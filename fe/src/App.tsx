@@ -23,6 +23,7 @@ import Scores from '@/pages/Scores'
 import Settings from '@/pages/Settings'
 import Setup from '@/pages/Setup'
 import Terms from '@/pages/Terms'
+import XzzdPush from '@/pages/XzzdPush'
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="boards" element={<Boards />} />
           <Route path="experiments" element={<Experiments />} />
           <Route path="experiments/:id" element={<ExperimentDetail />} />
+          <Route path="experiments/:id/xzzd-push" element={<XzzdPush />} />
           <Route path="questions" element={<Questions />} />
           <Route path="reports" element={<Reports />} />
           <Route path="llm-connect" element={<LlmConnect />} />

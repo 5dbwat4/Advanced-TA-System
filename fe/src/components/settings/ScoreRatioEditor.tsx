@@ -1,11 +1,21 @@
 import { Input } from '@heroui/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 
 import { SCORE_TYPES } from '@/lib/scores'
 import { ratioPercentages } from '@/lib/scoring'
-import { cn } from '@/lib/utils'
 
-const SEGMENT_CLASSES = ['bg-brand-500', 'bg-emerald-500', 'bg-amber-500'] as const
+const SEGMENT_STYLES: CSSProperties[] = [
+  {
+    backgroundImage: 'repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 4px)',
+  },
+  {
+    backgroundImage: 'radial-gradient(currentColor 0.8px, transparent 1px)',
+    backgroundSize: '4px 4px',
+  },
+  {
+    backgroundImage: 'repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 4px)',
+  },
+]
 
 function parseWeight(raw: unknown): number {
   const n = Math.floor(Number(raw))
@@ -65,13 +75,18 @@ export function ScoreRatioEditor({
         ))}
       </div>
 
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-sunken">
+      <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-fg-muted/60 bg-sunken">
         {hasWeight &&
           SCORE_TYPES.map((item, index) => (
             <div
               key={item.value}
-              className={cn('h-full transition-all', SEGMENT_CLASSES[index % SEGMENT_CLASSES.length])}
-              style={{ width: `${percentages[index]}%` }}
+              className={`h-full text-fg-muted opacity-60 transition-all ${
+                index > 0 ? 'border-l border-current' : ''
+              }`}
+              style={{
+                width: `${percentages[index]}%`,
+                ...SEGMENT_STYLES[index % SEGMENT_STYLES.length],
+              }}
             />
           ))}
       </div>
@@ -80,10 +95,8 @@ export function ScoreRatioEditor({
         {SCORE_TYPES.map((item, index) => (
           <div key={item.value} className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
             <span
-              className={cn(
-                'h-2 w-2 shrink-0 rounded-full',
-                SEGMENT_CLASSES[index % SEGMENT_CLASSES.length],
-              )}
+              className="h-3 w-3 shrink-0 rounded-[3px] text-fg-muted opacity-60"
+              style={SEGMENT_STYLES[index % SEGMENT_STYLES.length]}
             />
             <span>{item.label}</span>
             <span className="tabular font-semibold text-fg-muted">

@@ -5,6 +5,7 @@ import { useTimeoutFn } from 'react-use'
 import { toast } from 'sonner'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
+import { CommentTemplateSection } from '@/components/settings/CommentTemplateSection'
 import { ExperimentScoringSection } from '@/components/settings/ExperimentScoringSection'
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
 import { Card } from '@/components/ui/Card'
@@ -21,6 +22,7 @@ const SECTIONS: TocItem[] = [
   { id: 'checkpoint', label: 'Checkpoint Settings' },
   { id: 'scoring', label: '实验计分方式' },
   { id: 'focus', label: '重点关注学生' },
+  { id: 'comment', label: '评语模板' },
   { id: 'basic', label: '基本信息' },
   { id: 'roster', label: '学生名单' },
   { id: 'tas', label: '助教' },
@@ -28,7 +30,11 @@ const SECTIONS: TocItem[] = [
 ]
 
 const PLACEHOLDER_SECTIONS = SECTIONS.filter(
-  (section) => section.id !== 'checkpoint' && section.id !== 'scoring' && section.id !== 'focus',
+  (section) =>
+    section.id !== 'checkpoint' &&
+    section.id !== 'scoring' &&
+    section.id !== 'focus' &&
+    section.id !== 'comment',
 )
 
 export default function CourseSettings() {
@@ -68,9 +74,13 @@ export default function CourseSettings() {
             <FocusStudentsSection index={2} />
           </section>
 
+          <section id="comment" className={sectionClass('comment')}>
+            <CommentTemplateSection index={3} />
+          </section>
+
           {PLACEHOLDER_SECTIONS.map((section, index) => (
             <section key={section.id} id={section.id} className={sectionClass(section.id)}>
-              <Card index={index + 3}>
+              <Card index={index + 4}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>

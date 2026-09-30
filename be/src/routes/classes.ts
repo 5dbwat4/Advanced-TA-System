@@ -47,6 +47,10 @@ const classSettingsPatchSchema = z.object({
   scoreRatio: scoreRatioSchema.optional(),
   /** 各实验独立的评分占比，键为实验 id */
   experimentScoreRatios: z.record(scoreRatioSchema).optional(),
+  /** 验收评语模板 */
+  checkoutCommentTemplate: z.string().max(20000).optional(),
+  /** 报告评语模板 */
+  reportCommentTemplate: z.string().max(20000).optional(),
 })
 
 const focusCreateSchema = z.object({

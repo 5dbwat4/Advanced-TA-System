@@ -366,6 +366,82 @@ export function fetchExperimentHomeworks(
   )
 }
 
+/** 学在浙大作业提交记录（student-submissions 接口） */
+export type ZjuamHomeworkSubmission = {
+  id: number
+  created_at: string | null
+  /** 提交者 ZJU person id */
+  created_by: { id: number } | null
+  attachments_size?: number
+  instructor_comment: string | null
+  instructor_score: number | null
+  marked_submitted: boolean
+  score: number | null
+  submit_by_instructor: boolean
+  [key: string]: unknown
+}
+
+/** 学在浙大作业成绩（homework-scores 接口） */
+export type ZjuamHomeworkScore = {
+  activity_id: number
+  /** 学生 ZJU person id */
+  student_id: number
+  final_score: string | null
+  instructor_comment: string | null
+  score: string | null
+  status_comment: string | null
+  [key: string]: unknown
+}
+
+/** 学在浙大课程学生（course students 接口，已裁剪为 id / 姓名 / 学号） */
+export type ZjuamCourseStudent = {
+  /** ZJU person id（与提交记录 created_by.id、成绩 student_id 对应） */
+  id: number
+  name: string
+  /** 学号 */
+  studentNo: string
+}
+
+/** 推送流程第一步（只读）拉取到的上游数据 */
+export type ZjuamHomeworkSyncData = {
+  activityId: string
+  submissions: ZjuamHomeworkSubmission[]
+  homeworkScores: ZjuamHomeworkScore[]
+  students: ZjuamCourseStudent[]
+}
+
+/** 推送流程组装出的单个学生结果（对应后端 lib/xzzd-push.ts） */
+export type XzzdPushTarget = {
+  stuId: string
+  name: string
+  studentNo: string
+  /** 学在浙大 person id；未匹配到为 null */
+  personId: number | null
+  functionScore: number | null
+  answerScore: number | null
+  reportScore: number | null
+  /** 推送给上游的分数：验收按功能测试/验收问答占比归一化到 100；缺成绩或无法计算为 null */
+  pushScore: number | null
+  /** 模板渲染后的评语 */
+  comment: string
+  /** 分数最近更新时间（ISO 字符串） */
+  modifiedAt: string | null
+  /** 无法推送时的原因；可推送为 null */
+  skippedReason: string | null
+}
+
+export function fetchXzzdPushPreview(
+  experimentId: string,
+  kind: 'checkout' | 'report',
+): Promise<ZjuamHomeworkSyncData> {
+  const local = getZjuamCredential()
+  const body = local ? { kind, account: local.account, password: local.password } : { kind }
+  return apiFetch<ZjuamHomeworkSyncData>(`/api/experiments/${experimentId}/xzzd-push/preview`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function createClass(body: {
   xzzdClassId: string
   name: string
@@ -414,6 +490,10 @@ export type ClassSettings = {
   scoreRatio?: number[]
   /** 各实验独立的评分占比，键为实验 id */
   experimentScoreRatios?: Record<string, number[]>
+  /** 验收评语模板 */
+  checkoutCommentTemplate?: string
+  /** 报告评语模板 */
+  reportCommentTemplate?: string
   [key: string]: unknown
 }
 
@@ -430,6 +510,8 @@ export function updateClassSettings(
     scoreRatioUnified?: boolean
     scoreRatio?: number[]
     experimentScoreRatios?: Record<string, number[]>
+    checkoutCommentTemplate?: string
+    reportCommentTemplate?: string
   },
 ): Promise<{ settings: ClassSettings }> {
   return apiFetch<{ settings: ClassSettings }>(`/api/classes/${classId}/settings`, {

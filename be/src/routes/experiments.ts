@@ -1,10 +1,25 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import { decryptSecret } from '../lib/crypto'
 import { prisma } from '../lib/prisma'
 import { isStaff } from '../lib/roles'
-import { listHomeworkActivities, ZjuamError } from '../lib/zjuam'
+import {
+  assemblePushTargets,
+  isSameAsUpstream,
+  parseClassSettings,
+  resolveScoreRatio,
+} from '../lib/xzzd-push'
+import {
+  fetchCourseStudents,
+  fetchHomeworkScores,
+  fetchHomeworkSubmissions,
+  fetchHomeworkSyncData,
+  listHomeworkActivities,
+  pushSubmissionScore,
+  type ZjuamHomeworkSubmission,
+  ZjuamError,
+} from '../lib/zjuam'
 
 /** 时间线字段（ISO 8601 字符串，null 表示清空） */
 const timelineFields = {
@@ -35,6 +50,11 @@ const zjuamCredentialsSchema = z.object({
   password: z.string().trim().min(1).max(128).optional(),
 })
 
+const xzzdPushPreviewSchema = zjuamCredentialsSchema.extend({
+  /** 推送对象：验收作业 / 报告作业 */
+  kind: z.enum(['checkout', 'report']).default('checkout'),
+})
+
 const experimentInclude = {
   klass: { select: { id: true, name: true, xzzdClassId: true } },
   questionBank: { select: { id: true, name: true } },
@@ -47,12 +67,146 @@ function toTimelineDate(value: string | null | undefined): Date | null | undefin
   return new Date(value)
 }
 
+/** 提交排序时间：created_at 非法时退化为提交 id */
+function submissionTime(submission: ZjuamHomeworkSubmission): number {
+  const time = submission.created_at ? Date.parse(submission.created_at) : Number.NaN
+  return Number.isFinite(time) ? time : submission.id
+}
+
+/** 取某学生（person id）最近一次提交记录；没有提交返回 null */
+function latestSubmissionOf(
+  submissions: ZjuamHomeworkSubmission[],
+  personId: number,
+): ZjuamHomeworkSubmission | null {
+  let latest: ZjuamHomeworkSubmission | null = null
+  for (const submission of submissions) {
+    if (submission.created_by?.id !== personId) continue
+    if (!latest || submissionTime(submission) > submissionTime(latest)) latest = submission
+  }
+  return latest
+}
+
 export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
   /** 读取当前用户所属班级 id 列表 */
   async function myClassIds(request: FastifyRequest): Promise<string[]> {
     const { sub } = request.user as { sub: string }
     const me = await prisma.user.findUnique({ where: { id: sub }, include: { classes: true } })
     return (me?.classes ?? []).map((c) => c.id)
+  }
+
+  /**
+   * 解析学在浙大凭据：优先请求体（"密码保存在本地" 模式），否则回退到已保存的凭据。
+   * 密文损坏 / 密钥不匹配时按“未保存密码”处理，返回 null。
+   */
+  async function resolveZjuamCredentials(
+    request: FastifyRequest,
+    body: { account?: string; password?: string },
+  ): Promise<{ account: string; password: string } | null> {
+    const { sub } = request.user as { sub: string }
+    const user = await prisma.user.findUnique({ where: { id: sub } })
+    const account = body.account?.trim() || user?.zjuamAccount
+    let password = body.password
+    if (!password && user?.zjuamPassword) {
+      try {
+        password = decryptSecret(user.zjuamPassword)
+      } catch {
+        password = undefined
+      }
+    }
+    if (!account || !password) return null
+    return { account, password }
+  }
+
+  /** 将 ZjuamError 映射为 HTTP 响应；其它异常原样抛出 */
+  function sendZjuamError(reply: FastifyReply, error: unknown): FastifyReply | never {
+    if (error instanceof ZjuamError) {
+      if (error.code === 'ZJUAM_AUTH_FAILED') {
+        return reply
+          .code(401)
+          .send({ error: 'ZJUAM_AUTH_FAILED', message: '统一身份认证账号或密码错误' })
+      }
+      return reply
+        .code(502)
+        .send({ error: 'ZJUAM_UNAVAILABLE', message: '统一身份认证服务暂时不可用' })
+    }
+    throw error
+  }
+
+  /**
+   * 推送 / 预览共用的前置校验：staff、实验归属、作业绑定、请求体与凭据。
+   * 校验失败时已通过 reply 发送错误响应，返回 null。
+   */
+  async function resolveXzzdPushContext(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    experimentId: string,
+    body: unknown,
+  ): Promise<{
+    activityId: string
+    courseId: string
+    classId: string
+    kind: 'checkout' | 'report'
+    account: string
+    password: string
+  } | null> {
+    const { role } = request.user as { role?: string }
+    if (typeof role !== 'string' || !isStaff(role)) {
+      reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
+      return null
+    }
+
+    const experiment = await prisma.experiment.findUnique({
+      where: { id: experimentId },
+      include: { klass: { select: { xzzdClassId: true } } },
+    })
+    if (!experiment) {
+      reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
+      return null
+    }
+
+    const classIds = await myClassIds(request)
+    if (!classIds.includes(experiment.classId)) {
+      reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级的实验' })
+      return null
+    }
+
+    const courseId = experiment.klass?.xzzdClassId
+    if (!courseId) {
+      reply.code(400).send({ error: 'XZZD_CLASS_ID_MISSING', message: '该班级未绑定学在浙大课程' })
+      return null
+    }
+
+    const parsedBody = xzzdPushPreviewSchema.safeParse(body ?? {})
+    if (!parsedBody.success) {
+      reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      return null
+    }
+
+    const activityId =
+      parsedBody.data.kind === 'report'
+        ? experiment.xzzdBindIdReport
+        : experiment.xzzdBindIdCheckout
+    if (!activityId) {
+      reply.code(400).send({ error: 'XZZD_BIND_MISSING', message: '该实验尚未绑定学在浙大作业' })
+      return null
+    }
+
+    const credentials = await resolveZjuamCredentials(request, parsedBody.data)
+    if (!credentials) {
+      reply
+        .code(400)
+        .send({ error: 'ZJUAM_CREDENTIALS_MISSING', message: '请先保存浙大统一身份认证账号和密码' })
+      return null
+    }
+
+    return {
+      activityId,
+      courseId,
+      classId: experiment.classId,
+      kind: parsedBody.data.kind,
+      account: credentials.account,
+      password: credentials.password,
+    }
   }
 
   /** 实验列表 */
@@ -114,39 +268,340 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const { sub } = request.user as { sub: string }
-      const user = await prisma.user.findUnique({ where: { id: sub } })
-      const account = parsedBody.data.account?.trim() || user?.zjuamAccount
-      let password = parsedBody.data.password
-      if (!password && user?.zjuamPassword) {
-        // 密文损坏 / 密钥不匹配时按“未保存密码”处理，避免 500。
-        try {
-          password = decryptSecret(user.zjuamPassword)
-        } catch {
-          password = undefined
-        }
-      }
-      if (!account || !password) {
+      const credentials = await resolveZjuamCredentials(request, parsedBody.data)
+      if (!credentials) {
         return reply
           .code(400)
           .send({ error: 'ZJUAM_CREDENTIALS_MISSING', message: '请先保存浙大统一身份认证账号和密码' })
       }
 
       try {
-        const homeworks = await listHomeworkActivities(account, password, xzzdClassId)
+        const homeworks = await listHomeworkActivities(
+          credentials.account,
+          credentials.password,
+          xzzdClassId,
+        )
         return reply.send({ homeworks })
       } catch (error) {
-        if (error instanceof ZjuamError) {
-          if (error.code === 'ZJUAM_AUTH_FAILED') {
-            return reply
-              .code(401)
-              .send({ error: 'ZJUAM_AUTH_FAILED', message: '统一身份认证账号或密码错误' })
-          }
-          return reply
-            .code(502)
-            .send({ error: 'ZJUAM_UNAVAILABLE', message: '统一身份认证服务暂时不可用' })
+        return sendZjuamError(reply, error)
+      }
+    },
+  )
+
+  /**
+   * 推送成绩流程第一步（只读预览）：拉取绑定作业的提交记录、上游成绩与学生名单。
+   * kind=checkout 取验收作业，kind=report 取报告作业；不写库。
+   */
+  fastify.post(
+    '/:id/xzzd-push/preview',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const context = await resolveXzzdPushContext(request, reply, id, request.body)
+      if (!context) return reply
+
+      try {
+        const data = await fetchHomeworkSyncData(
+          context.account,
+          context.password,
+          context.courseId,
+          context.activityId,
+        )
+        return reply.send(data)
+      } catch (error) {
+        return sendZjuamError(reply, error)
+      }
+    },
+  )
+
+  /**
+   * 推送成绩流程（SSE）：按步骤执行并通过事件实时上报进度。
+   * 事件：step（running / done / error）、assembled（组装结果）、
+   * push（单个学生 pushing / pushed / unchanged / failed）、done、error。
+   */
+  fastify.post(
+    '/:id/xzzd-push/stream',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const context = await resolveXzzdPushContext(request, reply, id, request.body)
+      if (!context) return reply
+
+      const { activityId, courseId, classId, kind, account, password } = context
+
+      // 前置校验通过后接管底层连接，后续手动写 SSE 帧
+      reply.hijack()
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+
+      let disconnected = false
+      request.raw.on('close', () => {
+        disconnected = true
+      })
+
+      const send = (event: string, data: unknown): void => {
+        if (disconnected) return
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+
+      const runStep = async <T>(
+        stepId: string,
+        label: string,
+        run: () => Promise<T>,
+        detailOf?: (result: T) => string | undefined,
+      ): Promise<T> => {
+        send('step', { id: stepId, label, status: 'running' })
+        try {
+          const result = await run()
+          send('step', { id: stepId, label, status: 'done', detail: detailOf?.(result) })
+          return result
+        } catch (error) {
+          send('step', {
+            id: stepId,
+            label,
+            status: 'error',
+            detail: error instanceof Error ? error.message : '未知错误',
+          })
+          throw error
         }
-        throw error
+      }
+
+      try {
+        const submissions = await runStep(
+          'fetch-submissions',
+          '获取提交记录',
+          () => fetchHomeworkSubmissions(account, password, activityId),
+          (list) => `共 ${list.length} 条`,
+        )
+        if (disconnected) return
+
+        const homeworkScores = await runStep(
+          'fetch-scores',
+          '获取上游成绩',
+          () => fetchHomeworkScores(account, password, activityId),
+          (list) => `共 ${list.length} 条`,
+        )
+        if (disconnected) return
+
+        const students = await runStep(
+          'fetch-students',
+          '获取学生名单',
+          () => fetchCourseStudents(account, password, courseId),
+          (list) => `共 ${list.length} 人`,
+        )
+        if (disconnected) return
+
+        await runStep('persist', '写入本地数据库', () =>
+          prisma.xzzdHomework.upsert({
+            where: { id },
+            create: { id, value: JSON.stringify({ students, submissions }) },
+            update: { value: JSON.stringify({ students, submissions }) },
+          }),
+        )
+        if (disconnected) return
+
+        // 组装所需本地数据：实验分值比例 / 评语模板（课程设置）+ 学生分数
+        const local = await runStep('collect-local', '读取实验配置与学生成绩', async () => {
+          const [klass, localStudents, scoreRows] = await Promise.all([
+            prisma.class.findUnique({ where: { id: classId }, select: { settings: true } }),
+            prisma.student.findMany({
+              where: { classId },
+              select: { stuId: true, name: true, studentNo: true },
+            }),
+            prisma.score.findMany({
+              where: { labId: id, type: { in: [0, 1, 2] } },
+              select: {
+                stuId: true,
+                type: true,
+                score: true,
+                updatedAt: true,
+                grader: { select: { name: true } },
+              },
+            }),
+          ])
+
+          return {
+            settings: parseClassSettings(klass?.settings ?? null),
+            students: localStudents,
+            scores: scoreRows.map((row) => ({
+              stuId: row.stuId,
+              type: row.type,
+              score: row.score,
+              graderName: row.grader?.name ?? null,
+              updatedAt: row.updatedAt,
+            })),
+          }
+        })
+        if (disconnected) return
+
+        const targets = await runStep(
+          'assemble',
+          '组装学生成绩',
+          async () => {
+            const templateRaw =
+              kind === 'report'
+                ? local.settings.reportCommentTemplate
+                : local.settings.checkoutCommentTemplate
+            return assemblePushTargets({
+              kind,
+              courseId,
+              activityId,
+              template: typeof templateRaw === 'string' ? templateRaw : '',
+              ratio: resolveScoreRatio(local.settings, id),
+              students: local.students,
+              upstreamStudents: students,
+              scores: local.scores,
+            })
+          },
+          (list) => {
+            const ready = list.filter((item) => !item.skippedReason).length
+            return `可推送 ${ready} 人，跳过 ${list.length - ready} 人`
+          },
+        )
+
+        send('assembled', { targets })
+
+        // 推送：逐一发送成绩与评语；与上游完全一致的跳过
+        const readyTargets = targets.filter((item) => !item.skippedReason)
+        const upstreamScoreByStudent = new Map(homeworkScores.map((row) => [row.student_id, row]))
+        let unchangedCount = 0
+
+        const pushed = await runStep(
+          'push-scores',
+          '推送成绩与评语',
+          async () => {
+            const records: Array<{
+              stuId: string
+              personId: number
+              submissionId: number | null
+              score: number
+              comment: string
+            }> = []
+
+            for (const [index, target] of readyTargets.entries()) {
+              if (disconnected) return records
+              if (target.personId == null || target.pushScore == null) continue
+
+              const upstream = upstreamScoreByStudent.get(target.personId) ?? null
+              if (isSameAsUpstream({ pushScore: target.pushScore, comment: target.comment }, upstream)) {
+                unchangedCount += 1
+                send('push', { stuId: target.stuId, status: 'unchanged' })
+                send('step', {
+                  id: 'push-scores',
+                  label: '推送成绩与评语',
+                  status: 'running',
+                  detail: `${index + 1}/${readyTargets.length}`,
+                })
+                continue
+              }
+
+              const submission = latestSubmissionOf(submissions, target.personId)
+              send('push', { stuId: target.stuId, status: 'pushing' })
+              try {
+                await pushSubmissionScore(account, password, activityId, {
+                  submissionId: submission?.id ?? null,
+                  studentId: target.personId,
+                  score: target.pushScore.toFixed(1),
+                  comment: target.comment,
+                })
+              } catch (error) {
+                send('push', {
+                  stuId: target.stuId,
+                  status: 'failed',
+                  message: error instanceof Error ? error.message : '推送失败',
+                })
+                throw error
+              }
+              records.push({
+                stuId: target.stuId,
+                personId: target.personId,
+                submissionId: submission?.id ?? null,
+                score: target.pushScore,
+                comment: target.comment,
+              })
+              send('push', { stuId: target.stuId, status: 'pushed' })
+              send('step', {
+                id: 'push-scores',
+                label: '推送成绩与评语',
+                status: 'running',
+                detail: `${index + 1}/${readyTargets.length}`,
+              })
+            }
+
+            return records
+          },
+          (records) =>
+            unchangedCount > 0
+              ? `已推送 ${records.length} 人，跳过 ${unchangedCount} 人（无变化）`
+              : `已推送 ${records.length} 人`,
+        )
+        if (disconnected) return
+
+        // 写回数据库：推送结果 + 向上同步时间
+        const pushedAt = new Date()
+        await runStep('write-back', '写回数据库', () =>
+          prisma.$transaction([
+            prisma.xzzdHomework.upsert({
+              where: { id },
+              create: {
+                id,
+                value: JSON.stringify({
+                  students,
+                  submissions,
+                  lastPush: { kind, at: pushedAt.toISOString(), records: pushed },
+                }),
+                lastXzzdUpSyncAt: pushedAt,
+              },
+              update: {
+                value: JSON.stringify({
+                  students,
+                  submissions,
+                  lastPush: { kind, at: pushedAt.toISOString(), records: pushed },
+                }),
+                lastXzzdUpSyncAt: pushedAt,
+              },
+            }),
+            prisma.experiment.update({
+              where: { id },
+              data: { lastXzzdUpSyncAt: pushedAt },
+            }),
+          ]),
+        )
+
+        const ready = targets.filter((item) => !item.skippedReason).length
+        const doneMessage =
+          pushed.length === 0
+            ? unchangedCount > 0
+              ? `推送完成：${unchangedCount} 人无变化，未发送请求`
+              : '推送完成：没有需要推送的学生'
+            : `推送完成：更新 ${pushed.length} 人${
+                unchangedCount > 0 ? `，跳过 ${unchangedCount} 人（无变化）` : ''
+              }`
+        send('done', {
+          stage: 'pushed',
+          message: doneMessage,
+          activityId,
+          submissions: submissions.length,
+          homeworkScores: homeworkScores.length,
+          students: students.length,
+          assembled: targets.length,
+          ready,
+          skipped: targets.length - ready,
+          pushed: pushed.length,
+          unchanged: unchangedCount,
+        })
+      } catch (error) {
+        if (error instanceof ZjuamError) {
+          send('error', { code: error.code, message: error.message })
+        } else {
+          send('error', { code: 'INTERNAL', message: '推送失败，请稍后重试' })
+        }
+      } finally {
+        if (!disconnected) reply.raw.end()
       }
     },
   )

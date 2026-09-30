@@ -26,6 +26,7 @@ import GraduationCap from '~icons/lucide/graduation-cap'
 import NotebookText from '~icons/lucide/notebook-text'
 import Pencil from '~icons/lucide/pencil'
 import Percent from '~icons/lucide/percent'
+import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import Table from '~icons/lucide/table'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import Users from '~icons/lucide/users'
@@ -90,7 +91,6 @@ export default function ExperimentDetail() {
   const [checkoutDraft, setCheckoutDraft] = useState<string | null>(null)
   const [reportDraft, setReportDraft] = useState<string | null>(null)
   const [savingXzzd, setSavingXzzd] = useState(false)
-  const [xzzdMode, setXzzdMode] = useState<'view' | 'bind'>('bind')
 
   const [publishDraft, setPublishDraft] = useState<string | null>(null)
   const [checkoffDeadlineDraft, setCheckoffDeadlineDraft] = useState<string | null>(null)
@@ -98,7 +98,11 @@ export default function ExperimentDetail() {
   const [savingTimeline, setSavingTimeline] = useState(false)
   const [editingTimeline, setEditingTimeline] = useState(false)
 
-  const xzzdState = useOverlayState()
+  const [xzzdExpanded, setXzzdExpanded] = useState(false)
+
+  const bindState = useOverlayState()
+  const syncDownState = useOverlayState()
+  const preferencesState = useOverlayState()
 
   const loadHomeworks = useCallback(async () => {
     if (!id) return
@@ -226,22 +230,13 @@ export default function ExperimentDetail() {
 
   const unifiedRatio = settings?.scoreRatioUnified ?? false
 
-  const openXzzd = () => {
+  const toggleXzzd = () => setXzzdExpanded((prev) => !prev)
+
+  const openBindModal = () => {
     setCheckoutDraft(experiment.xzzdBindIdCheckout)
     setReportDraft(experiment.xzzdBindIdReport)
-    if (xzzdBoundCount > 0) {
-      // 已绑定：不发学在浙大请求，直接展示已绑定的作业与同步时间。
-      setXzzdMode('view')
-    } else {
-      setXzzdMode('bind')
-      void loadHomeworks()
-    }
-    xzzdState.open()
-  }
-
-  const rebindXzzd = () => {
-    setXzzdMode('bind')
     void loadHomeworks()
+    bindState.open()
   }
 
   const saveXzzdBind = async () => {
@@ -253,7 +248,7 @@ export default function ExperimentDetail() {
       })
       setExperiment(updated)
       toast.success('已保存学在浙大作业绑定')
-      setXzzdMode('view')
+      bindState.close()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
     } finally {
@@ -522,22 +517,96 @@ export default function ExperimentDetail() {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={openXzzd}
-        className="mb-4 flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-line bg-elevated p-5 text-left transition-colors hover:border-brand-500/40 hover:bg-sunken/40"
-      >
-        <GraduationCap
-          width={16}
-          height={16}
-          className="shrink-0 text-brand-600 dark:text-brand-300"
-        />
-        <span className="text-sm font-bold">学在浙大作业</span>
-        <span className="ml-auto text-xs text-fg-subtle">
-          {xzzdBoundCount === 0 ? '未绑定' : `已绑定 ${xzzdBoundCount}/2`}
-        </span>
-        <ChevronRight width={16} height={16} className="shrink-0 text-fg-subtle" />
-      </button>
+      <div className="mb-4 rounded-2xl border border-line bg-elevated">
+        <button
+          type="button"
+          onClick={toggleXzzd}
+          aria-expanded={xzzdExpanded}
+          className="flex w-full cursor-pointer items-center gap-3 rounded-2xl p-5 text-left transition-colors hover:bg-sunken/40"
+        >
+          <GraduationCap
+            width={16}
+            height={16}
+            className="shrink-0 text-brand-600 dark:text-brand-300"
+          />
+          <span className="text-sm font-bold">学在浙大作业</span>
+          <span className="ml-auto text-xs text-fg-subtle">
+            {xzzdBoundCount === 0 ? '未绑定' : `已绑定 ${xzzdBoundCount}/2`}
+          </span>
+          <ChevronRight
+            width={16}
+            height={16}
+            className={`shrink-0 text-fg-subtle transition-transform ${xzzdExpanded ? 'rotate-90' : ''}`}
+          />
+        </button>
+        {xzzdExpanded && (
+          <div className="flex flex-col gap-4 border-t border-line p-5">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-line p-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-fg-muted">验收</span>
+                <HomeworkTag
+                  id={experiment.xzzdBindIdCheckout}
+                  courseId={experiment.klass?.xzzdClassId ?? null}
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-fg-muted">报告</span>
+                <HomeworkTag
+                  id={experiment.xzzdBindIdReport}
+                  courseId={experiment.klass?.xzzdClassId ?? null}
+                />
+              </div>
+              <Button className="sm:ml-auto" size="sm" variant="secondary" onPress={openBindModal}>
+                {xzzdBoundCount > 0 ? '重新绑定' : '绑定'}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border border-line p-4">
+              <p className="mb-3 text-xs font-semibold text-fg-muted">上次同步时间</p>
+              <div className="grid grid-cols-2 gap-2">
+                <SyncStat
+                  icon={<ArrowUp width={14} height={14} className="shrink-0" />}
+                  tooltip="向上游推送成绩时间"
+                  time={formatSync(experiment.lastXzzdUpSyncAt)}
+                />
+                <SyncStat
+                  icon={<ArrowDown width={14} height={14} className="shrink-0" />}
+                  tooltip="从上游同步提交情况时间"
+                  time={formatSync(experiment.lastXzzdDownSyncAt)}
+                />
+              </div>
+              <div className="mt-3 flex items-stretch gap-2">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                  <Button
+                    variant="secondary"
+                    onPress={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
+                  >
+                    向上游推送成绩
+                  </Button>
+                  <Button variant="secondary" onPress={syncDownState.open}>
+                    从上游同步提交情况
+                  </Button>
+                </div>
+                <Tooltip delay={0}>
+                  <Tooltip.Trigger className="inline-flex">
+                    <Button
+                      isIconOnly
+                      variant="secondary"
+                      aria-label="偏好设置"
+                      onPress={preferencesState.open}
+                    >
+                      <SlidersHorizontal width={16} height={16} className="shrink-0" />
+                    </Button>
+                  </Tooltip.Trigger>
+                  <Tooltip.Content placement="top" showArrow>
+                    偏好设置
+                  </Tooltip.Content>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">
         <Table width={16} height={16} className="shrink-0" />
@@ -602,7 +671,7 @@ export default function ExperimentDetail() {
         </div>
       )}
 
-      <Modal state={xzzdState}>
+      <Modal state={bindState}>
         <Modal.Backdrop>
           <Modal.Container>
             <Modal.Dialog className="sm:max-w-md">
@@ -611,54 +680,10 @@ export default function ExperimentDetail() {
                 <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
                   <GraduationCap width={18} height={18} className="shrink-0" />
                 </Modal.Icon>
-                <Modal.Heading>学在浙大作业</Modal.Heading>
+                <Modal.Heading>绑定学在浙大作业</Modal.Heading>
               </Modal.Header>
               <Modal.Body className="flex flex-col gap-4">
-                {xzzdMode === 'view' ? (
-                  <>
-                    <div className="rounded-2xl border border-line p-4">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-fg-muted">验收</span>
-                          <HomeworkTag
-                            id={experiment.xzzdBindIdCheckout}
-                            courseId={experiment.klass?.xzzdClassId ?? null}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-fg-muted">报告</span>
-                          <HomeworkTag
-                            id={experiment.xzzdBindIdReport}
-                            courseId={experiment.klass?.xzzdClassId ?? null}
-                          />
-                        </div>
-                        <div className="flex justify-end pt-1">
-                          <Button size="sm" variant="secondary" onPress={rebindXzzd}>
-                            重新绑定
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-line p-4">
-                      <p className="mb-3 text-xs font-semibold text-fg-muted">上次同步时间</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <SyncButton
-                          icon={<ArrowUp width={14} height={14} className="shrink-0" />}
-                          tooltip="向上游提交分数信息"
-                          time={formatSync(experiment.lastXzzdUpSyncAt)}
-                          onPress={() => toast('同步功能开发中')}
-                        />
-                        <SyncButton
-                          icon={<ArrowDown width={14} height={14} className="shrink-0" />}
-                          tooltip="从上游同步提交情况"
-                          time={formatSync(experiment.lastXzzdDownSyncAt)}
-                          onPress={() => toast('同步功能开发中')}
-                        />
-                      </div>
-                    </div>
-                  </>
-                ) : homeworksLoading ? (
+                {homeworksLoading ? (
                   <div className="flex items-center justify-center gap-2 py-6 text-sm text-fg-muted">
                     <Spinner size="sm" />
                     正在从学在浙大获取作业…
@@ -695,33 +720,73 @@ export default function ExperimentDetail() {
                 )}
               </Modal.Body>
               <Modal.Footer>
-                {xzzdMode === 'view' ? (
-                  <Button slot="close" variant="secondary">
-                    关闭
-                  </Button>
-                ) : (
-                  <>
-                    <Button slot="close" variant="secondary">
-                      取消
-                    </Button>
-                    <Button
-                      isPending={savingXzzd}
-                      isDisabled={homeworksLoading || Boolean(homeworksError)}
-                      onPress={saveXzzdBind}
-                    >
-                      {({ isPending }) => (
-                        <>
-                          {isPending ? (
-                            <Spinner color="current" size="sm" />
-                          ) : (
-                            <Check width={16} height={16} className="shrink-0" />
-                          )}
-                          保存
-                        </>
+                <Button slot="close" variant="secondary">
+                  取消
+                </Button>
+                <Button
+                  isPending={savingXzzd}
+                  isDisabled={homeworksLoading || Boolean(homeworksError)}
+                  onPress={saveXzzdBind}
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? (
+                        <Spinner color="current" size="sm" />
+                      ) : (
+                        <Check width={16} height={16} className="shrink-0" />
                       )}
-                    </Button>
-                  </>
-                )}
+                      保存
+                    </>
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal state={syncDownState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <ArrowDown width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>从上游同步提交情况</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="text-sm text-fg-muted">功能开发中。</p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  关闭
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal state={preferencesState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <SlidersHorizontal width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>偏好设置</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="text-sm text-fg-muted">功能开发中。</p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  关闭
+                </Button>
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
@@ -763,21 +828,18 @@ function HomeworkTag({ id, courseId }: { id: string | null; courseId: string | n
   )
 }
 
-type SyncButtonProps = {
+type SyncStatProps = {
   icon: ReactNode
   tooltip: string
   time: string
-  onPress: () => void
 }
 
-function SyncButton({ icon, tooltip, time, onPress }: SyncButtonProps) {
+function SyncStat({ icon, tooltip, time }: SyncStatProps) {
   return (
     <Tooltip delay={0}>
-      <Tooltip.Trigger className="inline-flex">
-        <Button size="sm" variant="ghost" className="justify-start gap-2" onPress={onPress}>
-          {icon}
-          <span className="tabular text-xs">{time}</span>
-        </Button>
+      <Tooltip.Trigger className="inline-flex w-fit items-center gap-2 text-fg-muted">
+        {icon}
+        <span className="tabular text-xs">{time}</span>
       </Tooltip.Trigger>
       <Tooltip.Content placement="top" showArrow>
         {tooltip}

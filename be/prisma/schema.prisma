@@ -84,8 +84,29 @@ model Experiment {
 
   scores Score[]
 
+  /// 学在浙大作业缓存（一对一）
+  xzzdHomework XzzdHomework?
+
   @@unique([classId, mark])
   @@index([questionBankId])
+}
+
+/// 学在浙大作业缓存（主键为实验 id，与 Experiment 一对一）
+model XzzdHomework {
+  /// 实验 id，同时作为外键
+  id         String     @id
+  experiment Experiment @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  /// 从学在浙大拉取的作业数据（JSON 文本，暂不拆分读取）
+  value String @default("[]")
+
+  /// 上次向上同步时间（把本地评分推送到学在浙大）
+  lastXzzdUpSyncAt   DateTime?
+  /// 上次从上游同步时间（从学在浙大拉取提交情况等）
+  lastXzzdDownSyncAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// 题目（独立实体，可被多个题库引用）
