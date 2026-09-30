@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { decryptSecret } from '../lib/crypto'
 import { prisma } from '../lib/prisma'
 import { isStaff } from '../lib/roles'
+import { studentViewUrl as buildStudentViewUrl } from '../lib/student-view'
 import {
   assemblePushTargets,
   isSameAsUpstream,
@@ -448,10 +449,9 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
                 : local.settings.checkoutCommentTemplate
             return assemblePushTargets({
               kind,
-              courseId,
-              activityId,
               template: typeof templateRaw === 'string' ? templateRaw : '',
               ratio: resolveScoreRatio(local.settings, id),
+              studentViewUrl: (stuId) => buildStudentViewUrl(fastify, stuId, id),
               students: local.students,
               upstreamStudents: students,
               scores: local.scores,

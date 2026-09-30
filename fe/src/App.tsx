@@ -22,6 +22,7 @@ import Reports from '@/pages/Reports'
 import Scores from '@/pages/Scores'
 import Settings from '@/pages/Settings'
 import Setup from '@/pages/Setup'
+import StudentPreviewView from '@/pages/StudentPreviewView'
 import Terms from '@/pages/Terms'
 import XzzdPush from '@/pages/XzzdPush'
 
@@ -56,6 +57,7 @@ export default function App() {
       <Route path="/terms" element={<Terms />} />
       <Route path="/checkin" element={<Checkin />} />
       <Route path="/checkin/:token" element={<CheckinSession />} />
+      <Route path="/student-preview/view" element={<StudentPreviewView />} />
       <Route path="*" element={<Navigate to="/console" replace />} />
     </Routes>
   )

@@ -18,7 +18,6 @@ import ArrowLeft from '~icons/lucide/arrow-left'
 import ArrowUp from '~icons/lucide/arrow-up'
 import CalendarClock from '~icons/lucide/calendar-clock'
 import Check from '~icons/lucide/check'
-import ChevronRight from '~icons/lucide/chevron-right'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import ExternalLink from '~icons/lucide/external-link'
 import FlaskConical from '~icons/lucide/flask-conical'
@@ -97,8 +96,6 @@ export default function ExperimentDetail() {
   const [reportDeadlineDraft, setReportDeadlineDraft] = useState<string | null>(null)
   const [savingTimeline, setSavingTimeline] = useState(false)
   const [editingTimeline, setEditingTimeline] = useState(false)
-
-  const [xzzdExpanded, setXzzdExpanded] = useState(false)
 
   const bindState = useOverlayState()
   const syncDownState = useOverlayState()
@@ -229,8 +226,6 @@ export default function ExperimentDetail() {
   ).length
 
   const unifiedRatio = settings?.scoreRatioUnified ?? false
-
-  const toggleXzzd = () => setXzzdExpanded((prev) => !prev)
 
   const openBindModal = () => {
     setCheckoutDraft(experiment.xzzdBindIdCheckout)
@@ -518,12 +513,7 @@ export default function ExperimentDetail() {
       </div>
 
       <div className="mb-4 rounded-2xl border border-line bg-elevated">
-        <button
-          type="button"
-          onClick={toggleXzzd}
-          aria-expanded={xzzdExpanded}
-          className="flex w-full cursor-pointer items-center gap-3 rounded-2xl p-5 text-left transition-colors hover:bg-sunken/40"
-        >
+        <div className="flex w-full items-center gap-3 rounded-2xl p-5 text-left">
           <GraduationCap
             width={16}
             height={16}
@@ -533,79 +523,72 @@ export default function ExperimentDetail() {
           <span className="ml-auto text-xs text-fg-subtle">
             {xzzdBoundCount === 0 ? '未绑定' : `已绑定 ${xzzdBoundCount}/2`}
           </span>
-          <ChevronRight
-            width={16}
-            height={16}
-            className={`shrink-0 text-fg-subtle transition-transform ${xzzdExpanded ? 'rotate-90' : ''}`}
-          />
-        </button>
-        {xzzdExpanded && (
-          <div className="flex flex-col gap-4 border-t border-line p-5">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-line p-4">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-fg-muted">验收</span>
-                <HomeworkTag
-                  id={experiment.xzzdBindIdCheckout}
-                  courseId={experiment.klass?.xzzdClassId ?? null}
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-fg-muted">报告</span>
-                <HomeworkTag
-                  id={experiment.xzzdBindIdReport}
-                  courseId={experiment.klass?.xzzdClassId ?? null}
-                />
-              </div>
-              <Button className="sm:ml-auto" size="sm" variant="secondary" onPress={openBindModal}>
-                {xzzdBoundCount > 0 ? '重新绑定' : '绑定'}
-              </Button>
+        </div>
+        <div className="flex flex-col gap-4 border-t border-line p-5">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-line p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-fg-muted">验收</span>
+              <HomeworkTag
+                id={experiment.xzzdBindIdCheckout}
+                courseId={experiment.klass?.xzzdClassId ?? null}
+              />
             </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-fg-muted">报告</span>
+              <HomeworkTag
+                id={experiment.xzzdBindIdReport}
+                courseId={experiment.klass?.xzzdClassId ?? null}
+              />
+            </div>
+            <Button className="sm:ml-auto" size="sm" variant="secondary" onPress={openBindModal}>
+              {xzzdBoundCount > 0 ? '重新绑定' : '绑定'}
+            </Button>
+          </div>
 
-            <div className="rounded-2xl border border-line p-4">
-              <p className="mb-3 text-xs font-semibold text-fg-muted">上次同步时间</p>
-              <div className="grid grid-cols-2 gap-2">
-                <SyncStat
-                  icon={<ArrowUp width={14} height={14} className="shrink-0" />}
-                  tooltip="向上游推送成绩时间"
-                  time={formatSync(experiment.lastXzzdUpSyncAt)}
-                />
-                <SyncStat
-                  icon={<ArrowDown width={14} height={14} className="shrink-0" />}
-                  tooltip="从上游同步提交情况时间"
-                  time={formatSync(experiment.lastXzzdDownSyncAt)}
-                />
+          <div className="rounded-2xl border border-line p-4">
+            <p className="mb-3 text-xs font-semibold text-fg-muted">上次同步时间</p>
+            <div className="grid grid-cols-2 gap-2">
+              <SyncStat
+                icon={<ArrowUp width={14} height={14} className="shrink-0" />}
+                tooltip="向上游推送成绩时间"
+                time={formatSync(experiment.lastXzzdUpSyncAt)}
+              />
+              <SyncStat
+                icon={<ArrowDown width={14} height={14} className="shrink-0" />}
+                tooltip="从上游同步提交情况时间"
+                time={formatSync(experiment.lastXzzdDownSyncAt)}
+              />
+            </div>
+            <div className="mt-3 flex items-stretch gap-2">
+              <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                <Button
+                  variant="secondary"
+                  onPress={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
+                >
+                  向上游推送成绩
+                </Button>
+                <Button variant="secondary" onPress={syncDownState.open}>
+                  从上游同步提交情况
+                </Button>
               </div>
-              <div className="mt-3 flex items-stretch gap-2">
-                <div className="grid flex-1 gap-2 sm:grid-cols-2">
+              <Tooltip delay={0}>
+                <Tooltip.Trigger className="inline-flex">
                   <Button
+                    isIconOnly
                     variant="secondary"
-                    onPress={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
+                    aria-label="偏好设置"
+                    onPress={preferencesState.open}
                   >
-                    向上游推送成绩
+                    <SlidersHorizontal width={16} height={16} className="shrink-0" />
                   </Button>
-                  <Button variant="secondary" onPress={syncDownState.open}>
-                    从上游同步提交情况
-                  </Button>
-                </div>
-                <Tooltip delay={0}>
-                  <Tooltip.Trigger className="inline-flex">
-                    <Button
-                      isIconOnly
-                      variant="secondary"
-                      aria-label="偏好设置"
-                      onPress={preferencesState.open}
-                    >
-                      <SlidersHorizontal width={16} height={16} className="shrink-0" />
-                    </Button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Content placement="top" showArrow>
-                    偏好设置
-                  </Tooltip.Content>
-                </Tooltip>
-              </div>
+                </Tooltip.Trigger>
+                <Tooltip.Content placement="top" showArrow>
+                  偏好设置
+                </Tooltip.Content>
+              </Tooltip>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">

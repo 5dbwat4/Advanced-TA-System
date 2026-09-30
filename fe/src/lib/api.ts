@@ -442,6 +442,37 @@ export function fetchXzzdPushPreview(
   })
 }
 
+/** 学生查看页数据（公开接口，凭签名 token 访问） */
+export type StudentPreviewData = {
+  experiment: {
+    id: string
+    mark: string
+    title: string
+    className: string | null
+    questionBankName: string | null
+    publishTime: string | null
+    checkoffDeadline: string | null
+    reportDeadline: string | null
+  }
+  student: { name: string; studentNo: string }
+  /** 生效评分占比：功能测试 / 验收问答 / 报告 */
+  ratio: number[]
+  total: number | null
+  scores: Array<{
+    /** 0=功能测试 1=验收问答 2=报告 */
+    type: number
+    score: number
+    graderName: string | null
+    updatedAt: string
+  }>
+}
+
+export function fetchStudentPreview(token: string): Promise<StudentPreviewData> {
+  return apiFetch<StudentPreviewData>(
+    `/api/student-preview/view?token=${encodeURIComponent(token)}`,
+  )
+}
+
 export async function createClass(body: {
   xzzdClassId: string
   name: string

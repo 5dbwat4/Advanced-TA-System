@@ -168,18 +168,13 @@ function formatScore(value: number | null): string {
   return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10)
 }
 
-/** 学在浙大作业链接（学生查看地址） */
-export function homeworkViewUrl(courseId: string, activityId: string): string {
-  return `https://courses.zju.edu.cn/course/${courseId}/learning-activity/full-screen#/${activityId}`
-}
-
 export type AssemblePushTargetsInput = {
   kind: 'checkout' | 'report'
-  courseId: string
-  activityId: string
   /** 评语模板（checkout / report 由调用方选出） */
   template: string
   ratio: number[]
+  /** 生成学生查看页链接（站点根地址 + 签名 token） */
+  studentViewUrl: (stuId: string) => string
   /** 本地学生名单 */
   students: Array<{ stuId: string; name: string; studentNo: string }>
   /** 学在浙大学生名单（用于学号 → person id 映射） */
@@ -198,7 +193,6 @@ export function assemblePushTargets(input: AssemblePushTargetsInput): XzzdPushTa
     else scoresByStu.set(row.stuId, [row])
   }
 
-  const studentViewUrl = homeworkViewUrl(input.courseId, input.activityId)
   // 验收取「验收问答」的评分人，报告取「报告」的评分人
   const preferredType = input.kind === 'report' ? 2 : 1
 
@@ -228,7 +222,7 @@ export function assemblePushTargets(input: AssemblePushTargetsInput): XzzdPushTa
     const upstream = upstreamByNo.get(student.studentNo) ?? null
 
     const comment = renderCommentTemplate(input.template, {
-      studentViewUrl,
+      studentViewUrl: input.studentViewUrl(student.stuId),
       taAssigner: graderName ?? '—',
       scoreFunction: formatScore(functionScore),
       scoreAnswer: formatScore(answerScore),

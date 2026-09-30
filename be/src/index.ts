@@ -18,6 +18,7 @@ import { rosterRoutes } from './routes/roster'
 import { scoresRoutes } from './routes/scores'
 import { settingsRoutes } from './routes/settings'
 import { staffRoutes } from './routes/staff'
+import { studentPreviewRoutes } from './routes/student-preview'
 import { tokensRoutes } from './routes/tokens'
 import { zjuamRoutes } from './routes/zjuam'
 
@@ -50,6 +51,7 @@ await fastify.register(banksRoutes, { prefix: '/api/banks' })
 await fastify.register(rosterRoutes, { prefix: '/api' })
 await fastify.register(scoresRoutes, { prefix: '/api/scores' })
 await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
+await fastify.register(studentPreviewRoutes, { prefix: '/api/student-preview' })
 await fastify.register(mcpRoutes)
 
 fastify.get('/api/health', async () => ({ ok: true }))
