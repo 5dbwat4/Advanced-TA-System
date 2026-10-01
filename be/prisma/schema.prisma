@@ -10,9 +10,9 @@ datasource db {
 /// 用户表: 助教 / 教师
 /// role 取值仅限 TA | TEACHER
 model User {
-  id        String  @id @default(uuid(4))
-  name      String
-  role      String // TA | TEACHER
+  id   String @id @default(uuid(4))
+  name String
+  role String // TA | TEACHER
 
   studentId String? @unique
   username  String?
@@ -24,13 +24,13 @@ model User {
   webauthn String?
 
   /// 统一身份认证（ZJUAM）账号
-  zjuamAccount String?
+  zjuamAccount  String?
   /// 加密后的浙大统一身份认证密码（AES-256-GCM）
   zjuamPassword String?
   /// ZJU person id
-  zjuPersonId Int?
+  zjuPersonId   Int?
   /// 最近一次统一身份认证同步时间
-  zjuSyncedAt DateTime?
+  zjuSyncedAt   DateTime?
 
   /// 验收偏好（JSON 字符串）：{ device: 'single'|'multi', draw: 'random'|'fixed', markdownEditor: 'uiw'|'mdx', markdownStyle: 'github'|'prose', drawCount: number }
   preferences String?
@@ -41,19 +41,19 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  questions Question[]
-  banks     QuestionBank[]
-  tokens    PersonalAccessToken[]
-  gradedScores Score[] @relation("ScoreGrader")
+  questions    Question[]
+  banks        QuestionBank[]
+  tokens       PersonalAccessToken[]
+  gradedScores Score[]               @relation("ScoreGrader")
 }
 
 /// 实验
 model Experiment {
-  id     String @id @default(uuid(4))
+  id      String @id @default(uuid(4))
   /// 实验编号，例如 "Lab 0"
-  mark   String
+  mark    String
   /// 实验标题，例如 "五级流水线"
-  title  String
+  title   String
   /// 所属课程
   classId String
   klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
@@ -68,11 +68,11 @@ model Experiment {
   xzzdBindIdReport   String?
 
   /// 时间线：公开时间
-  publishTime       DateTime?
+  publishTime      DateTime?
   /// 时间线：验收截止时间
-  checkoffDeadline  DateTime?
+  checkoffDeadline DateTime?
   /// 时间线：报告提交截止时间
-  reportDeadline    DateTime?
+  reportDeadline   DateTime?
 
   /// 上次「向下同步」时间：从学在浙大拉取提交情况等（细则以上游为准）
   lastXzzdDownSyncAt DateTime?
@@ -145,21 +145,22 @@ model QuestionBank {
 
 /// 班级
 model Class {
-  id          String  @id @default(uuid(4))
-  name        String
+  id               String              @id @default(uuid(4))
+  name             String
   /// 2026-sys1 | 2026-sys2 | 2026-sys3
-  type        String
+  type             String
   /// 学在浙大 课程 / 班级 id（系统II 硬编码为 100199），全局唯一（可空）
-  xzzdClassId String? @unique
+  xzzdClassId      String?             @unique
   /// 最近一次获取 / 更新学生名单的时间
   lastRosterSyncAt DateTime?
   /// 课程级设置（JSON 字符串），如 { checkpointEnabled, checkpointRule, scoreRatioUnified, scoreRatio, experimentScoreRatios }
-  settings    String  @default("{}")
-  students    Student[]
-  tas         User[]
-  experiments Experiment[]
+  settings         String              @default("{}")
+  students         Student[]
+  tas              User[]
+  experiments      Experiment[]
   checkpointClaims CheckpointClaimed[]
-  focusStudents FocusStudent[]
+  focusStudents    FocusStudent[]
+  devBoards        DevBoard[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -168,17 +169,17 @@ model Class {
 /// 学生（一条记录 = 某学生属于某班级；同一学号可在不同班出现多行）
 model Student {
   /// 唯一主键（合成，不代表学号）
-  stuId     String @id @default(uuid(4))
+  stuId            String              @id @default(uuid(4))
   /// 姓名
-  name      String
+  name             String
   /// 学号
-  studentNo String
+  studentNo        String
   /// 所属班级
-  classId   String
-  klass     Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  scores    Score[]
+  classId          String
+  klass            Class               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scores           Score[]
   checkpointClaims CheckpointClaimed[]
-  focusStudents FocusStudent[]
+  focusStudents    FocusStudent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -191,7 +192,7 @@ model Student {
 model Score {
   /// 学生（Student.stuId）
   stuId   String
-  student Student @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
+  student Student     @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
   /// 0=功能测试 1=验收问答 2=报告 3=其它
   type    Int
   /// 标识符：type 0-2 时为实验 id；type 3 时为自定义标识
@@ -220,7 +221,7 @@ model CheckpointClaimed {
 
   /// 课程
   classId String
-  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  klass   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
   /// 学生（Student.stuId）
   stuId   String
   student Student @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
@@ -242,7 +243,7 @@ model FocusStudent {
 
   /// 课程
   classId String
-  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  klass   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
   /// 学生（Student.stuId）
   stuId   String
   student Student @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
@@ -258,23 +259,54 @@ model FocusStudent {
   @@index([stuId])
 }
 
+/// 开发板（一块板一条记录；多人合用时 stuIds 存 JSON 数组）
+model DevBoard {
+  id      String @id @default(uuid(4))
+  classId String
+  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  /// DB id（纯记录，班内唯一，卡片标题）
+  dbId String
+
+  /// id（纯记录，系统内无关联，卡片副标题）
+  boardId String?
+
+  /// 合用学生（Student.stuId 的 JSON 数组，保序，如 ["stu-a","stu-b"]）
+  ///
+  /// 设计权衡（tradeoff，预期内）：多人共用一块开发板时不拆成多条记录，
+  /// 而是以 JSON 文本反范式存放全部学生；因此「学生 → 记录」只能依赖
+  /// LIKE / 内存过滤，查询效率较低。该路径非热点，此代价为有意接受。
+  stuIds String @default("[]")
+
+  /// 联系电话（板级，每条记录一个）
+  phone String?
+
+  /// 是否已借出
+  borrowed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classId, dbId])
+}
+
 /// 个人访问令牌（MCP / API）：仅存 sha256(secret)，明文只展示一次
 model PersonalAccessToken {
-  id        String    @id @default(uuid(4))
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid(4))
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// 备注名
-  name      String
+  name       String
   /// 展示用前缀（token 形如 tasaas_<prefix>_<secret>）
-  prefix    String
+  prefix     String
   /// sha256(secret) 十六进制
-  tokenHash String    @unique
+  tokenHash  String    @unique
   /// 授权范围（JSON 字符串数组）
-  scopes    String    @default("[]")
-  expiresAt DateTime?
-  revokedAt DateTime?
+  scopes     String    @default("[]")
+  expiresAt  DateTime?
+  revokedAt  DateTime?
   lastUsedAt DateTime?
-  createdAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId])
 }

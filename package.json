@@ -1,0 +1,17 @@
+{
+  "name": "tasaas",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev": "concurrently -n be,fe -c blue,magenta \"pnpm dev:be\" \"pnpm dev:fe\"",
+    "dev:be": "pnpm --filter be dev",
+    "dev:fe": "pnpm --filter fe dev",
+    "build:fe": "pnpm --filter fe build",
+    "typecheck": "pnpm --filter be typecheck",
+    "lint": "pnpm --filter fe lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

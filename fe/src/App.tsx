@@ -4,6 +4,7 @@ import { RedirectIfAuthed } from '@/components/auth/RedirectIfAuthed'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
 import Boards from '@/pages/Boards'
+import BoardScan from '@/pages/BoardScan'
 import Checkin from '@/pages/Checkin'
 import CheckinSession from '@/pages/CheckinSession'
 import Checkoff from '@/pages/Checkoff'
@@ -39,6 +40,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="checkoff" element={<Checkoff />} />
           <Route path="boards" element={<Boards />} />
+          <Route path="boards/scan" element={<BoardScan />} />
           <Route path="experiments" element={<Experiments />} />
           <Route path="experiments/:id" element={<ExperimentDetail />} />
           <Route path="experiments/:id/xzzd-push" element={<XzzdPush />} />

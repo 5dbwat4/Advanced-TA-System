@@ -14,6 +14,7 @@ import { authRoutes } from './routes/auth'
 import { banksRoutes } from './routes/banks'
 import { checkoffRoutes } from './routes/checkoff'
 import { classesRoutes } from './routes/classes'
+import { devboardsRoutes } from './routes/devboards'
 import { experimentsRoutes } from './routes/experiments'
 import { mcpRoutes } from './routes/mcp'
 import { passkeyRoutes } from './routes/passkey'
@@ -114,6 +115,7 @@ await fastify.register(banksRoutes, { prefix: '/api/banks' })
 await fastify.register(rosterRoutes, { prefix: '/api' })
 await fastify.register(scoresRoutes, { prefix: '/api/scores' })
 await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
+await fastify.register(devboardsRoutes, { prefix: '/api/devboards' })
 await fastify.register(studentPreviewRoutes, { prefix: '/api/student-preview' })
 await fastify.register(mcpRoutes)
 

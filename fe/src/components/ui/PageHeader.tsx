@@ -3,9 +3,11 @@ import type { ReactNode } from 'react'
 
 export function PageHeader({
   title,
+  subtitle,
   actions,
 }: {
   title: string
+  subtitle?: ReactNode
   actions?: ReactNode
 }) {
   return (
@@ -17,6 +19,7 @@ export function PageHeader({
     >
       <div>
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
+        {subtitle && <div className="mt-1 text-sm text-fg-muted">{subtitle}</div>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </motion.div>
