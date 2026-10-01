@@ -1,4 +1,4 @@
-# CS-II TA Console — Design System / Theme Spec
+# 计算机系统课程 TA Console — Design System / Theme Spec
 
 Reverse-engineered from the legacy Next.js app in `legacy/`. This document is the
 authoritative visual reference for rebuilding the UI faithfully. Every value below
@@ -367,7 +367,7 @@ Used by `/console` and `/me` via their `layout.tsx`. Structure:
       </div>
       <div className="leading-tight">
         <div className="text-sm font-bold tracking-tight">{appName}</div>
-        <div className="text-[10px] font-medium uppercase tracking-widest text-fg-subtle">ZJU · CS-II</div>
+        <div className="text-[10px] font-medium uppercase tracking-widest text-fg-subtle">ZJU · 计算机系统课程</div>
       </div>
     </div>
     <nav className="mt-4 flex flex-1 flex-col gap-1 px-3"> … </nav>

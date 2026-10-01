@@ -76,7 +76,7 @@ export function AppShell() {
             <div className="leading-tight">
               <div className="text-sm font-bold tracking-tight">TA 助教台</div>
               <div className="text-[10px] font-medium uppercase tracking-widest text-fg-subtle">
-                ZJU · CS-II
+                ZJU · 计算机系统课程
               </div>
             </div>
           )}

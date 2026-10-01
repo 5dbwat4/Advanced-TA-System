@@ -16,7 +16,7 @@ export const env = {
   root: process.env.ROOT ?? 'https://atasaas.5dbwat4.top/',
   // 凭据加密密钥；生产环境应单独设置 CREDENTIAL_KEY，未设置时回退到 jwtSecret
   credentialKey: process.env.CREDENTIAL_KEY ?? jwtSecret,
-  passkeyRpName: process.env.PASSKEY_RP_NAME ?? 'CS-II 助教系统',
+  passkeyRpName: process.env.PASSKEY_RP_NAME ?? '计算机系统课程助教系统',
   passkeyRpId: process.env.PASSKEY_RP_ID ?? 'localhost',
   passkeyOrigin: process.env.PASSKEY_ORIGIN ?? 'http://localhost:5173',
 }

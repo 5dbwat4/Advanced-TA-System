@@ -167,7 +167,7 @@ export function LoginPanel() {
           </div>
           <div>
             <div className="font-bold tracking-tight">欢迎回来</div>
-            <div className="text-xs text-fg-subtle">登录 CS-II 助教系统</div>
+            <div className="text-xs text-fg-subtle">登录计算机系统课程助教系统</div>
           </div>
         </div>
 

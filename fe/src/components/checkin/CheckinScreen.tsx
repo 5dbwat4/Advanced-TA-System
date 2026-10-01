@@ -81,7 +81,7 @@ export function CheckinScreen({
       <div className={cn(isQuestion ? 'w-fit max-w-[75%]' : 'w-full max-w-lg')}>
         <div className="mb-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
           <Cpu width={15} height={15} className="shrink-0" />
-          CS-II Checkoff
+          计算机系统课程 Checkoff
         </div>
         {content}
       </div>

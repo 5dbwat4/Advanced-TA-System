@@ -55,7 +55,7 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           {greeting}，{user?.username ?? user?.name ?? '助教'}
         </h1>
-        <p className="mt-1 text-sm text-fg-muted">助教工作台 · CS-II</p>
+        <p className="mt-1 text-sm text-fg-muted">助教工作台 · 计算机系统课程</p>
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-3">

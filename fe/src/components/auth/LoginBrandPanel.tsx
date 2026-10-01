@@ -34,7 +34,7 @@ export function LoginBrandPanel() {
           <Cpu width={24} height={24} className="shrink-0" />
         </div>
         <div>
-          <div className="font-bold tracking-tight">CS-II 助教系统</div>
+          <div className="font-bold tracking-tight">计算机系统课程助教系统</div>
           <div className="text-xs uppercase tracking-[0.2em] text-white/50">Zhejiang University</div>
         </div>
       </motion.div>

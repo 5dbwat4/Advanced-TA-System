@@ -49,7 +49,7 @@ export default function StudentPreviewView() {
       <div className="w-full max-w-2xl">
         <div className="mb-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
           <Cpu width={15} height={15} className="shrink-0" />
-          CS-II 学生成绩
+          计算机系统课程学生成绩
         </div>
 
         {loading ? (

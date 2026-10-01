@@ -10,17 +10,17 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# 先装依赖（含 devDependencies：运行时需要 prisma CLI 与 tsx），充分利用 layer 缓存
+COPY package.json package-lock.json ./
+RUN npm ci
+
 ENV NODE_ENV=production \
     PORT=3001 \
     DATABASE_URL="file:/app/data/dev.db"
 
-# 先装依赖，充分利用 layer 缓存
-COPY package.json package-lock.json ./
-RUN npm ci
-
 # 生成 Prisma Client（SQLite，无需连接数据库）
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -37,5 +37,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # schema 未使用 migrations，启动前用 db push 确保表结构存在
 # 持久化：docker run -v tsaas-data:/app/data ...
-# 初始化种子数据：docker run --rm -v tsaas-data:/app/data <image> npx tsx prisma/seed.ts
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx src/index.ts"]
+# 初始化种子数据：docker run --rm -v tsaas-data:/app/data <image> ./node_modules/.bin/tsx prisma/seed.ts
+CMD ["sh", "-c", "./node_modules/.bin/prisma db push --skip-generate && ./node_modules/.bin/tsx src/index.ts"]
