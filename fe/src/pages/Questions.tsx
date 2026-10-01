@@ -1,7 +1,7 @@
-import { Button, Input, Modal, Pagination, Skeleton, Spinner, Tabs, Tooltip, useOverlayState } from '@heroui/react'
+import { Button, Input, Modal, Pagination, Tabs, useOverlayState } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { AnimatePresence, motion } from 'motion/react'
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
@@ -17,15 +17,19 @@ import Library from '~icons/lucide/library'
 import NotebookText from '~icons/lucide/notebook-text'
 import Pen from '~icons/lucide/pen'
 import Plus from '~icons/lucide/plus'
-import Search from '~icons/lucide/search'
 import Settings2 from '~icons/lucide/settings-2'
 import Trash2 from '~icons/lucide/trash-2'
 import X from '~icons/lucide/x'
 import { SetQuestionsEditor } from '@/components/questions/SetQuestionsEditor'
 import { EmptyState } from '@/components/ui/Card'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { IconAction } from '@/components/ui/IconAction'
 import { Markdown } from '@/components/ui/Markdown'
 import { MarkdownEditor } from '@/components/ui/MarkdownEditor'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
+import { SearchInput } from '@/components/ui/SearchInput'
+import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   createBank,
   createQuestion,
@@ -41,6 +45,8 @@ import {
   type QuestionBank,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
+import { useAsyncData } from '@/lib/request'
 
 const PAGE_SIZE = 20
 
@@ -49,30 +55,6 @@ async function copyText(text: string, label: string) {
   const ok = await copyToClipboard(text)
   if (ok) toast.success(`已复制${label}`)
   else toast.error('复制失败')
-}
-
-/** 图标按钮 + 悬浮提示 */
-function IconAction({
-  label,
-  onPress,
-  children,
-}: {
-  label: string
-  onPress: () => void
-  children: ReactNode
-}) {
-  return (
-    <Tooltip delay={0}>
-      <Tooltip.Trigger className="inline-flex">
-        <Button isIconOnly size="sm" variant="ghost" aria-label={label} onPress={onPress}>
-          {children}
-        </Button>
-      </Tooltip.Trigger>
-      <Tooltip.Content placement="top" showArrow>
-        {label}
-      </Tooltip.Content>
-    </Tooltip>
-  )
 }
 
 function QuestionsPanel() {
@@ -91,7 +73,12 @@ function QuestionsPanel() {
   const [answer, setAnswer] = useState('')
   const [saving, setSaving] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<Question | null>(null)
+  const confirmState = useOverlayState({
+    onOpenChange: (open) => {
+      if (!open) setConfirmTarget(null)
+    },
+  })
   const [busyId, setBusyId] = useState<string | null>(null)
 
   useDebounce(
@@ -114,14 +101,15 @@ function QuestionsPanel() {
           offset: (page - 1) * PAGE_SIZE,
         })
         if (cancelled) return
-        if (data.questions.length === 0 && page > 1) {
-          setPage((p) => p - 1)
+        const maxPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
+        if (page > maxPage) {
+          setPage(maxPage)
           return
         }
         setItems(data.questions)
         setTotal(data.total)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -188,7 +176,7 @@ function QuestionsPanel() {
       resetForm()
       refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : editingId ? '保存失败' : '创建失败')
+      toast.error(getErrorMessage(error, editingId ? '保存失败' : '创建失败'))
     } finally {
       setSaving(false)
     }
@@ -201,7 +189,7 @@ function QuestionsPanel() {
       toast.success('已复制题目，你现在可以编辑副本')
       refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '复制失败')
+      toast.error(getErrorMessage(error, '复制失败'))
     } finally {
       setBusyId(null)
     }
@@ -212,10 +200,10 @@ function QuestionsPanel() {
     try {
       await deleteQuestion(id)
       toast.success('已删除题目')
-      setConfirmingId(null)
+      confirmState.close()
       refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败')
+      toast.error(getErrorMessage(error, '删除失败'))
     } finally {
       setBusyId(null)
     }
@@ -224,21 +212,13 @@ function QuestionsPanel() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[16rem] flex-1">
-          <Search
-            width={15}
-            height={15}
-            className="shrink-0 pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-subtle"
-          />
-          <Input
-            fullWidth
-            className="pl-10"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索题目内容…"
-            aria-label="搜索题目内容"
-          />
-        </div>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="搜索题目内容…"
+          ariaLabel="搜索题目内容"
+          className="min-w-[16rem] flex-1"
+        />
         <Button variant="primary" onPress={openCreate}>
           <Plus width={16} height={16} className="shrink-0" />
           新建题目
@@ -260,11 +240,7 @@ function QuestionsPanel() {
       )}
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
-          ))}
-        </div>
+        <SkeletonList rows={4} className="h-24 rounded-2xl" />
       ) : items.length === 0 ? (
         <EmptyState
           icon={NotebookText}
@@ -272,7 +248,7 @@ function QuestionsPanel() {
           hint={applied ? '换个关键词试试' : '点击右上角新建题目'}
         />
       ) : (
-        <div className="space-y-3" onClick={() => setConfirmingId(null)}>
+        <div className="space-y-3">
           {items.map((item, i) => {
             const isOwner = item.provider === user?.id
             return (
@@ -293,10 +269,7 @@ function QuestionsPanel() {
                   <span className="tabular text-[11px] text-fg-subtle">
                     {new Date(item.createdAt).toLocaleDateString()}
                   </span>
-                  <div
-                    className="ml-auto flex items-center gap-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="ml-auto flex items-center gap-1">
                     {isOwner ? (
                       <IconAction label="编辑" onPress={() => openEdit(item)}>
                         <Pen width={14} height={14} className="shrink-0" />
@@ -312,35 +285,17 @@ function QuestionsPanel() {
                         创建副本编辑
                       </Button>
                     )}
-                    {isOwner &&
-                      (confirmingId === item.id ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="danger-soft"
-                            isPending={busyId === item.id}
-                            onPress={() => remove(item.id)}
-                          >
-                            {({ isPending }) => (
-                              <>
-                                {isPending ? (
-                                  <Spinner color="current" size="sm" />
-                                ) : (
-                                  <Trash2 width={14} height={14} className="shrink-0" />
-                                )}
-                                确认删除
-                              </>
-                            )}
-                          </Button>
-                          <Button size="sm" variant="ghost" onPress={() => setConfirmingId(null)}>
-                            取消
-                          </Button>
-                        </>
-                      ) : (
-                        <IconAction label="删除" onPress={() => setConfirmingId(item.id)}>
-                          <Trash2 width={14} height={14} className="shrink-0" />
-                        </IconAction>
-                      ))}
+                    {isOwner && (
+                      <IconAction
+                        label="删除"
+                        onPress={() => {
+                          setConfirmTarget(item)
+                          confirmState.open()
+                        }}
+                      >
+                        <Trash2 width={14} height={14} className="shrink-0" />
+                      </IconAction>
+                    )}
                   </div>
                 </div>
 
@@ -454,28 +409,29 @@ function QuestionsPanel() {
                 <Button variant="secondary" onPress={resetForm}>
                   取消
                 </Button>
-                <Button
+                <PendingButton
                   isPending={saving}
                   isDisabled={!question.trim() || !answer.trim()}
+                  icon={Check}
+                  pendingLabel="保存中"
                   onPress={submit}
                   className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        <Check width={16} height={16} className="shrink-0" />
-                      )}
-                      {isPending ? '保存中' : editingId ? '保存修改' : '添加题目'}
-                    </>
-                  )}
-                </Button>
+                  {editingId ? '保存修改' : '添加题目'}
+                </PendingButton>
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+
+      <ConfirmDialog
+        state={confirmState}
+        title="删除题目"
+        description={`确定删除「${confirmTarget?.question ?? ''}」吗？此操作不可撤销。`}
+        isPending={busyId !== null && busyId === confirmTarget?.id}
+        onConfirm={() => confirmTarget && remove(confirmTarget.id)}
+      />
     </div>
   )
 }
@@ -483,8 +439,6 @@ function QuestionsPanel() {
 function SetsPanel() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [banks, setBanks] = useState<QuestionBank[]>([])
-  const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -499,36 +453,20 @@ function SetsPanel() {
       if (!open) setPendingRename(null)
     },
   })
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<QuestionBank | null>(null)
+  const confirmState = useOverlayState({
+    onOpenChange: (open) => {
+      if (!open) setConfirmTarget(null)
+    },
+  })
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  const reload = useCallback(async () => {
-    try {
-      const data = await listBanks()
-      setBanks(data.banks)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
-    }
-  }, [])
+  const { data, error, loading, reload } = useAsyncData(() => listBanks(), [])
+  const banks = data?.banks ?? []
 
   useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      try {
-        const data = await listBanks()
-        if (cancelled) return
-        setBanks(data.banks)
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    run()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    if (error) toast.error(error)
+  }, [error])
 
   const create = async (event: FormEvent) => {
     event.preventDefault()
@@ -538,9 +476,9 @@ function SetsPanel() {
       toast.success('已创建题目集')
       setName('')
       setCreating(false)
-      await reload()
+      reload()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '创建失败')
+      toast.error(getErrorMessage(error, '创建失败'))
     } finally {
       setSaving(false)
     }
@@ -551,9 +489,9 @@ function SetsPanel() {
       await renameBank(bank.id, next)
       toast.success('已重命名')
       setRenamingId(null)
-      await reload()
+      reload()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '重命名失败')
+      toast.error(getErrorMessage(error, '重命名失败'))
     }
   }
 
@@ -585,9 +523,9 @@ function SetsPanel() {
     try {
       await duplicateBank(id)
       toast.success('已复制题目集')
-      await reload()
+      reload()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '复制失败')
+      toast.error(getErrorMessage(error, '复制失败'))
     } finally {
       setBusyId(null)
     }
@@ -598,10 +536,10 @@ function SetsPanel() {
     try {
       await deleteBank(id)
       toast.success('已删除题目集')
-      setConfirmingId(null)
-      await reload()
+      confirmState.close()
+      reload()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败')
+      toast.error(getErrorMessage(error, '删除失败'))
     } finally {
       setBusyId(null)
     }
@@ -658,34 +596,23 @@ function SetsPanel() {
               />
             </div>
             <div className="flex justify-end">
-              <Button
+              <PendingButton
                 type="submit"
                 isPending={saving}
                 isDisabled={!name.trim()}
+                icon={Check}
+                pendingLabel="创建中"
                 className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
               >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      <Check width={16} height={16} className="shrink-0" />
-                    )}
-                    {isPending ? '创建中' : '创建题目集'}
-                  </>
-                )}
-              </Button>
+                创建题目集
+              </PendingButton>
             </div>
           </motion.form>
         )}
       </AnimatePresence>
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
-          ))}
-        </div>
+        <SkeletonList rows={3} className="h-24 rounded-2xl" />
       ) : banks.length === 0 ? (
         <EmptyState icon={Library} title="暂无题目集" hint="点击右上角新建题目集" />
       ) : (
@@ -754,35 +681,15 @@ function SetsPanel() {
                       <Copy width={14} height={14} className="shrink-0" />
                       复制
                     </Button>
-                    {confirmingId === bank.id ? (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="danger-soft"
-                          isPending={busyId === bank.id}
-                          onPress={() => remove(bank.id)}
-                        >
-                          {({ isPending }) => (
-                            <>
-                              {isPending ? (
-                                <Spinner color="current" size="sm" />
-                              ) : (
-                                <Trash2 width={14} height={14} className="shrink-0" />
-                              )}
-                              确认删除
-                            </>
-                          )}
-                        </Button>
-                        <Button size="sm" variant="ghost" onPress={() => setConfirmingId(null)}>
-                          取消
-                        </Button>
-                      </>
-                    ) : (
-                      <Button size="sm" variant="ghost" onPress={() => setConfirmingId(bank.id)}>
-                        <Trash2 width={14} height={14} className="shrink-0" />
-                        删除
-                      </Button>
-                    )}
+                    <IconAction
+                      label="删除"
+                      onPress={() => {
+                        setConfirmTarget(bank)
+                        confirmState.open()
+                      }}
+                    >
+                      <Trash2 width={14} height={14} className="shrink-0" />
+                    </IconAction>
                   </div>
                 </div>
 
@@ -853,6 +760,14 @@ function SetsPanel() {
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+
+      <ConfirmDialog
+        state={confirmState}
+        title="删除题目集"
+        description={`确定删除「${confirmTarget?.name ?? ''}」吗？该操作不可撤销。`}
+        isPending={busyId !== null && busyId === confirmTarget?.id}
+        onConfirm={() => confirmTarget && remove(confirmTarget.id)}
+      />
     </div>
   )
 }

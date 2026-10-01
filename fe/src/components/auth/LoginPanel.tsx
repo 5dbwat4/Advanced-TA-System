@@ -1,4 +1,4 @@
-import { Button, Input, Spinner } from '@heroui/react'
+import { Button, Input } from '@heroui/react'
 import { startAuthentication } from '@simplewebauthn/browser'
 import { AnimatePresence, motion } from 'motion/react'
 import { useState } from 'react'
@@ -14,9 +14,11 @@ import KeyRound from '~icons/lucide/key-round'
 import ShieldCheck from '~icons/lucide/shield-check'
 import University from '~icons/lucide/university'
 import Users from '~icons/lucide/users'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import type { IconComponent } from '@/lib/icon'
 import { clearLastUser, getLastUser, lastUserIdentifier, type LastUser } from '@/lib/last-user'
 import { getAuthenticationOptions } from '@/lib/passkey'
@@ -114,7 +116,7 @@ export function LoginPanel() {
       const dest = user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '登录失败')
+      toast.error(getErrorMessage(error, '登录失败'))
     } finally {
       setLoading(false)
     }
@@ -142,7 +144,7 @@ export function LoginPanel() {
         if (lastUser && !showFull) continueWithOtherMethod()
         return
       }
-      toast.error(error instanceof Error ? error.message : '登录失败')
+      toast.error(getErrorMessage(error, '登录失败'))
     } finally {
       setPasskeyLoading(false)
     }
@@ -203,23 +205,16 @@ export function LoginPanel() {
             </div>
 
             {lastUser.hasWebauthn && (
-              <Button
+              <PendingButton
                 type="button"
                 fullWidth
                 isPending={passkeyLoading}
                 onPress={() => passkeyLogin(lastIdentifier || undefined)}
+                icon={Fingerprint}
+                pendingLabel="验证中"
               >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                        <Fingerprint width={16} height={16} className="shrink-0" />
-                    )}
-                    {isPending ? '验证中' : '使用通行密钥继续'}
-                  </>
-                )}
-              </Button>
+                使用通行密钥继续
+              </PendingButton>
             )}
 
             <Button type="button" fullWidth variant="secondary" onPress={continueWithOtherMethod}>
@@ -360,18 +355,16 @@ export function LoginPanel() {
                 {isZjuam && (
                   <p className="text-xs text-fg-subtle">使用学校统一身份认证登录，无需本地账号</p>
                 )}
-                <Button type="submit" fullWidth isPending={loading} className="mt-2">
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        <ArrowRight width={16} height={16} className="shrink-0" />
-                      )}
-                      {isPending ? '登录中' : '登录'}
-                    </>
-                  )}
-                </Button>
+                <PendingButton
+                  type="submit"
+                  fullWidth
+                  isPending={loading}
+                  className="mt-2"
+                  icon={ArrowRight}
+                  pendingLabel="登录中"
+                >
+                  登录
+                </PendingButton>
               </motion.form>
             </AnimatePresence>
 
@@ -384,24 +377,17 @@ export function LoginPanel() {
                   </span>
                   <div className="h-px flex-1 bg-line" />
                 </div>
-                <Button
+                <PendingButton
                   type="button"
                   variant="ghost"
                   fullWidth
                   isPending={passkeyLoading}
                   onPress={() => passkeyLogin(identifier.trim() || undefined)}
+                  icon={Fingerprint}
+                  pendingLabel="验证中"
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                      <Fingerprint width={16} height={16} className="shrink-0" />
-                      )}
-                      {isPending ? '验证中' : '使用通行密钥登录'}
-                    </>
-                  )}
-                </Button>
+                  使用通行密钥登录
+                </PendingButton>
               </div>
             )}
           </>

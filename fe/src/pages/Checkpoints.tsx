@@ -8,6 +8,7 @@ import ListChecks from '~icons/lucide/list-checks'
 import { EmptyState } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { fetchCheckpointClaims, type CheckpointClaim } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { useCurrentClass } from '@/lib/store'
 
 export default function Checkpoints() {
@@ -25,7 +26,7 @@ export default function Checkpoints() {
         const data = await fetchCheckpointClaims(classId)
         if (!cancelled) setClaims(data.claims)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }

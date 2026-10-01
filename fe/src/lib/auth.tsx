@@ -1,11 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { apiFetch, getToken, setToken, type User, type UserPreferences } from '@/lib/api'
+import { ApiError, apiFetch, getToken, setToken, type User, type UserPreferences } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
 
 type AuthContextValue = {
   user: User | null
   loading: boolean
+  bootstrapError: string | null
+  retryBootstrap: () => void
   login: (endpoint: string, body: Record<string, unknown>) => Promise<User>
   completeSetup: (body: { username: string; password?: string }) => Promise<User>
   refresh: () => Promise<void>
@@ -24,16 +27,24 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(() => Boolean(getToken()))
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!getToken()) return
+  const bootstrap = useCallback(() => {
+    setBootstrapError(null)
+    setLoading(true)
     let cancelled = false
     apiFetch<{ user: User }>('/api/auth/me')
       .then((res) => {
         if (!cancelled) setUser(res.user)
       })
-      .catch(() => {
-        if (!cancelled) setToken(null)
+      .catch((error: unknown) => {
+        if (cancelled) return
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          setToken(null)
+          setUser(null)
+        } else {
+          setBootstrapError(getErrorMessage(error, '登录状态检查失败'))
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -43,10 +54,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!getToken()) return
+    return bootstrap()
+  }, [bootstrap])
+
+  const retryBootstrap = useCallback(() => {
+    void bootstrap()
+  }, [bootstrap])
+
   const value = useMemo<AuthContextValue>(() => {
     return {
       user,
       loading,
+      bootstrapError,
+      retryBootstrap,
       login: async (endpoint, body) => {
         const res = await apiFetch<{ token: string; user: User }>(endpoint, {
           method: 'POST',
@@ -54,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         setToken(res.token)
         setUser(res.user)
+        setBootstrapError(null)
         saveLastUser(res.user)
         return res.user
       },
@@ -94,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
       },
     }
-  }, [user, loading])
+  }, [user, loading, bootstrapError, retryBootstrap])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

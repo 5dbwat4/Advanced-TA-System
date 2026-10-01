@@ -1,4 +1,4 @@
-import { Button, Modal, Spinner, toast as herouiToast, useOverlayState } from '@heroui/react'
+import { Alert, Button, Modal, Spinner, toast as herouiToast, useOverlayState } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -29,6 +29,7 @@ import {
   type UserPreferences,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import {
   notifyCheckoffStarted,
   useCheckoffMaster,
@@ -48,11 +49,13 @@ export default function Checkoff() {
 
   const [experiments, setExperiments] = useState<CheckoffExperiment[]>([])
   const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
+  const [ratioError, setRatioError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [experiment, setExperiment] = useState<CheckoffExperiment | null>(null)
   const [student, setStudent] = useState<CheckoffStudent | null>(null)
   const [questions, setQuestions] = useState<CheckoffQuestion[]>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [questionsError, setQuestionsError] = useState<string | null>(null)
   const [drawn, setDrawn] = useState<CheckoffQuestion[]>([])
   const [marks, setMarks] = useState<Record<string, QuestionMark | undefined>>({})
   const [existingScores, setExistingScores] = useState<Score[]>([])
@@ -89,7 +92,7 @@ export default function Checkoff() {
         if (!cancelled) setExperiments(res.experiments)
       })
       .catch((error) => {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -102,12 +105,13 @@ export default function Checkoff() {
   useEffect(() => {
     if (!classId) return
     let cancelled = false
+    setRatioError(false)
     fetchClassSettings(classId)
       .then((res) => {
         if (!cancelled) setClassSettings(res.settings)
       })
       .catch(() => {
-        // 占比缺失时回退默认，不影响验收流程
+        if (!cancelled) setRatioError(true)
       })
     return () => {
       cancelled = true
@@ -125,11 +129,12 @@ export default function Checkoff() {
     setNameAsked(false)
     setStep(1)
     setQuestionsLoading(true)
+    setQuestionsError(null)
     try {
       const res = await fetchCheckoffQuestions(next.id)
       setQuestions(res.questions)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载题目失败')
+      setQuestionsError(getErrorMessage(error, '加载题目失败'))
     } finally {
       setQuestionsLoading(false)
     }
@@ -169,10 +174,14 @@ export default function Checkoff() {
     setStep(1)
   }, [])
 
-  const handleStep = useCallback((next: number) => {
-    if (next === 1) setNameAsked(false)
-    setStep(next)
-  }, [])
+  const handleStep = useCallback(
+    (next: number) => {
+      if (questionsError && next === 3) return
+      if (next === 1) setNameAsked(false)
+      setStep(next)
+    },
+    [questionsError],
+  )
 
   const handleQuestionIndex = useCallback(
     (index: number) => {
@@ -245,7 +254,7 @@ export default function Checkoff() {
         toast.success('偏好已保存')
         prefsState.close()
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : '保存失败')
+        toast.error(getErrorMessage(error, '保存失败'))
         throw error
       }
     },
@@ -308,6 +317,17 @@ export default function Checkoff() {
         hasStudent={Boolean(student)}
       />
 
+      {ratioError && (
+        <Alert className="mt-4" status="warning">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Description>
+              评分占比加载失败，总评按默认占比 2:5:0 估算，仅供参考
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
+      )}
+
       <div className="mt-6">
         <AnimatePresence mode="wait">
           <motion.div
@@ -339,7 +359,22 @@ export default function Checkoff() {
               />
             )}
             {step === 2 && experiment && student && <DemoStep onNext={() => setStep(3)} />}
-            {step === 3 && experiment && student && (
+            {step === 3 && experiment && student && questionsError !== null && (
+              <div className="rounded-2xl border border-danger/40 bg-danger/5 p-8 text-center">
+                <p className="text-sm font-semibold text-danger">{questionsError}</p>
+                <div className="mt-4">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    isPending={questionsLoading}
+                    onPress={() => void selectExperiment(experiment)}
+                  >
+                    重试
+                  </Button>
+                </div>
+              </div>
+            )}
+            {step === 3 && experiment && student && questionsError === null && (
               <QuestionDrawer
                 mode={preferences.draw}
                 questions={questions}

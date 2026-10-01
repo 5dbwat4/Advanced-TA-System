@@ -8,6 +8,7 @@ import GraduationCap from '~icons/lucide/graduation-cap'
 import Settings2 from '~icons/lucide/settings-2'
 import UserPlus from '~icons/lucide/user-plus'
 import { Card } from '@/components/ui/Card'
+import { PendingButton } from '@/components/ui/PendingButton'
 import {
   addTa,
   apiFetch,
@@ -19,6 +20,7 @@ import {
   type Ta,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { cn } from '@/lib/utils'
 import { getZjuamCredential } from '@/lib/zjuam'
 
@@ -48,7 +50,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       })
       setCourses(data.courses)
     } catch (error) {
-      const message = error instanceof Error ? error.message : '获取课程失败'
+      const message = getErrorMessage(error, '获取课程失败')
       setError(message)
       toast.error(message)
     } finally {
@@ -62,7 +64,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
     try {
       setTas(await listTas())
     } catch (error) {
-      const message = error instanceof Error ? error.message : '获取助教失败'
+      const message = getErrorMessage(error, '获取助教失败')
       setTaError(message)
       toast.error(message)
     } finally {
@@ -74,7 +76,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
     try {
       setClasses(await listClasses())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '获取课程列表失败')
+      toast.error(getErrorMessage(error, '获取课程列表失败'))
     }
   }, [])
 
@@ -85,7 +87,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       await refresh()
       toast.success('已加入该课程')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加入失败')
+      toast.error(getErrorMessage(error, '加入失败'))
     } finally {
       setJoiningId(null)
     }
@@ -113,7 +115,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       setTaStudentId('')
       await fetchTas()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '添加失败')
+      toast.error(getErrorMessage(error, '添加失败'))
     } finally {
       setTaAdding(false)
     }
@@ -257,14 +259,9 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                     })}
                   </div>
                 )}
-                <Button isPending={loading} onPress={() => void fetchCourses()}>
-                  {({ isPending }) => (
-                    <>
-                      {isPending && <Spinner color="current" size="sm" />}
-                      开始获取课程
-                    </>
-                  )}
-                </Button>
+                <PendingButton isPending={loading} onPress={() => void fetchCourses()}>
+                  开始获取课程
+                </PendingButton>
               </Modal.Body>
               <Modal.Footer>
                 <Button slot="close" variant="secondary">
@@ -314,18 +311,13 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                     autoComplete="off"
                     aria-label="助教学号"
                   />
-                  <Button
+                  <PendingButton
                     isDisabled={taStudentId.trim().length === 0}
                     isPending={taAdding}
                     onPress={() => void submitTa()}
                   >
-                    {({ isPending }) => (
-                      <>
-                        {isPending && <Spinner color="current" size="sm" />}
-                        添加
-                      </>
-                    )}
-                  </Button>
+                    添加
+                  </PendingButton>
                 </div>
                 {taError ? (
                   <div className="rounded-xl border border-dashed border-danger/40 py-8 text-center text-xs text-danger">

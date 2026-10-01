@@ -1,4 +1,4 @@
-import { Button, Input, Skeleton, Spinner } from '@heroui/react'
+import { Button, Input } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
@@ -14,7 +14,10 @@ import { ExperimentStatusChip } from '@/components/experiments/ExperimentTimelin
 import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
+import { SkeletonList } from '@/components/ui/SkeletonList'
 import { apiFetch, type Experiment } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { useCurrentClass } from '@/lib/store'
 
 export default function Experiments() {
@@ -34,7 +37,7 @@ export default function Experiments() {
       const data = await apiFetch<{ experiments: Experiment[] }>('/api/experiments')
       setExperiments(data.experiments)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
+      toast.error(getErrorMessage(error, '加载失败'))
     }
   }, [])
 
@@ -45,7 +48,7 @@ export default function Experiments() {
         const data = await apiFetch<{ experiments: Experiment[] }>('/api/experiments')
         if (!cancelled) setExperiments(data.experiments)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -81,7 +84,7 @@ export default function Experiments() {
       setCreating(false)
       await reload()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '创建失败')
+      toast.error(getErrorMessage(error, '创建失败'))
     } finally {
       setSaving(false)
     }
@@ -160,34 +163,23 @@ export default function Experiments() {
               归属课程：{currentClass?.name ?? '未选择课程'}
             </div>
 
-            <Button
+            <PendingButton
               type="submit"
               fullWidth
               isPending={saving}
               isDisabled={!currentClass || !mark.trim() || !title.trim()}
               className="mt-1 bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
+              icon={Check}
+              pendingLabel="添加中"
             >
-              {({ isPending }) => (
-                <>
-                  {isPending ? (
-                    <Spinner color="current" size="sm" />
-                  ) : (
-                    <Check width={16} height={16} className="shrink-0" />
-                  )}
-                  {isPending ? '添加中' : '添加实验'}
-                </>
-              )}
-            </Button>
+              添加实验
+            </PendingButton>
           </motion.form>
         )}
       </AnimatePresence>
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-2xl" />
-          ))}
-        </div>
+        <SkeletonList rows={4} className="h-20 rounded-2xl" />
       ) : visible.length === 0 ? (
         <EmptyState icon={FlaskConical} title="暂无实验" hint="点击右上角新建实验" />
       ) : (

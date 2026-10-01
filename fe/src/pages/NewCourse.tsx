@@ -1,4 +1,4 @@
-import { Button, Input, Spinner } from '@heroui/react'
+import { Input } from '@heroui/react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -6,8 +6,10 @@ import { toast } from 'sonner'
 import Check from '~icons/lucide/check'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { createClass } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { cn } from '@/lib/utils'
 
 const TYPE_OPTIONS = [
@@ -34,7 +36,7 @@ export default function NewCourse() {
       toast.success('课程已添加')
       navigate('/console/settings')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -94,24 +96,17 @@ export default function NewCourse() {
             </div>
           </div>
 
-          <Button
+          <PendingButton
             type="submit"
             fullWidth
             isPending={saving}
             isDisabled={!xzzdClassId || !name.trim()}
             className="mt-2 bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
+            icon={Check}
+            pendingLabel="保存中"
           >
-            {({ isPending }) => (
-              <>
-                {isPending ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <Check width={16} height={16} className="shrink-0" />
-                )}
-                {isPending ? '保存中' : '保存'}
-              </>
-            )}
-          </Button>
+            保存
+          </PendingButton>
         </Card>
       </form>
     </div>

@@ -1,4 +1,12 @@
-import { Button, Input, Modal, Skeleton, Spinner, Tooltip, useOverlayState } from '@heroui/react'
+import {
+  Alert,
+  Button,
+  Modal,
+  NumberField,
+  Spinner,
+  Tooltip,
+  useOverlayState,
+} from '@heroui/react'
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -12,10 +20,13 @@ import UserRoundPlus from '~icons/lucide/user-round-plus'
 import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
+import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   apiFetch,
   applyRoster,
   fetchClassSettings,
+  fetchClassTables,
   previewRoster,
   type ClassSettings,
   type Experiment,
@@ -24,6 +35,8 @@ import {
   type Student,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
+import { formatLocaleDateTime } from '@/lib/format'
 import {
   connectScoreSocket,
   disconnectScoreSocket,
@@ -35,39 +48,8 @@ import { resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
-type ScoreData = {
-  students: Student[]
-  experiments: Experiment[]
-  scores: Score[]
-}
-
-async function fetchAll(): Promise<ScoreData> {
-  const [studentRes, experimentRes, scoreRes] = await Promise.all([
-    apiFetch<{ students: Student[] }>('/api/students'),
-    apiFetch<{ experiments: Experiment[] }>('/api/experiments'),
-    apiFetch<{ scores: Score[] }>('/api/scores'),
-  ])
-  return {
-    students: studentRes.students,
-    experiments: experimentRes.experiments,
-    scores: scoreRes.scores,
-  }
-}
-
 function toScoreMap(scores: Score[]): Map<string, Score> {
   return new Map(scores.map((item) => [scoreKey(item.stuId, item.type, item.indId), item]))
-}
-
-/** 形如 2026/9/24 21:51 */
-function formatUpdatedAt(value: string): string {
-  return new Date(value).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
 }
 
 type SortDir = 'asc' | 'desc'
@@ -159,71 +141,44 @@ function ScoreCell({
   onCommit: (next: number | null) => Promise<void>
 }) {
   const value = score?.score ?? null
-  const [draft, setDraft] = useState(value === null ? '' : String(value))
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    setDraft(value === null ? '' : String(value))
-  }, [value])
-
-  const current = value === null ? '' : String(value)
-
-  const commit = async () => {
-    const trimmed = draft.trim()
-    if (trimmed === current) return
-    if (trimmed === '') {
-      setSaving(true)
-      try {
-        await onCommit(null)
-      } catch {
-        setDraft(current)
-      } finally {
-        setSaving(false)
-      }
-      return
-    }
-    const parsed = Number(trimmed)
-    if (Number.isNaN(parsed) || parsed < 0 || parsed > SCORE_MAX) {
-      toast.error(`请输入 0~${SCORE_MAX} 的分数`)
-      setDraft(current)
-      return
-    }
+  const commit = async (next: number | null) => {
+    if (next === value) return
     setSaving(true)
-    try {
-      await onCommit(parsed)
-    } catch {
-      setDraft(current)
-    } finally {
-      setSaving(false)
-    }
+    await onCommit(next).catch(() => undefined)
+    setSaving(false)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' || event.key === 'Escape') {
       event.preventDefault()
-      event.currentTarget.blur()
-    } else if (event.key === 'Escape') {
-      setDraft(current)
       event.currentTarget.blur()
     }
   }
 
   const input = (
-    <Input
-      type="number"
-      min={0}
-      max={SCORE_MAX}
-      step="1"
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={onKeyDown}
+    <NumberField
       aria-label="分数"
-      className={cn(
-        'tabular w-16 rounded-lg border border-line bg-elevated px-2 py-1 text-center text-sm outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15',
-        saving && 'opacity-50',
-      )}
-    />
+      minValue={0}
+      maxValue={SCORE_MAX}
+      step={1}
+      value={value ?? undefined}
+      onChange={(next) => void commit(next ?? null)}
+      className="w-16"
+    >
+      <NumberField.Group
+        className={cn(
+          'rounded-lg border border-line bg-elevated px-2 py-1 text-sm transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/15',
+          saving && 'opacity-50',
+        )}
+      >
+        <NumberField.Input
+          className="tabular w-full bg-transparent text-center outline-none"
+          onKeyDown={onKeyDown}
+        />
+      </NumberField.Group>
+    </NumberField>
   )
 
   if (!score || !score.graderName) return input
@@ -232,11 +187,17 @@ function ScoreCell({
     <Tooltip closeDelay={0} delay={200}>
       <Tooltip.Trigger className="inline-block">{input}</Tooltip.Trigger>
       <Tooltip.Content placement="top" showArrow>
-        {`最后由 ${score.graderName} 于 ${formatUpdatedAt(score.updatedAt)} 更新`}
+        {`最后由 ${score.graderName} 于 ${formatLocaleDateTime(score.updatedAt)} 更新`}
       </Tooltip.Content>
     </Tooltip>
   )
 }
+
+const TH_STICKY =
+  'sticky left-0 z-30 border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold'
+const TH_CENTER = 'border-b border-r border-line bg-elevated px-4 py-2 text-center font-semibold'
+const TH_SUB =
+  'min-w-[5.5rem] border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted'
 
 export default function Scores() {
   const currentClass = useCurrentClass()
@@ -247,6 +208,7 @@ export default function Scores() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [scores, setScores] = useState<Map<string, Score>>(new Map())
   const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
+  const [ratioError, setRatioError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [rosterBusy, setRosterBusy] = useState(false)
   const [pendingDiff, setPendingDiff] = useState<RosterDiff | null>(null)
@@ -268,12 +230,12 @@ export default function Scores() {
 
   const reload = useCallback(async () => {
     try {
-      const data = await fetchAll()
+      const data = await fetchClassTables()
       setStudents(data.students)
       setExperiments(data.experiments)
       setScores(toScoreMap(data.scores))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
+      toast.error(getErrorMessage(error, '加载失败'))
     }
   }, [])
 
@@ -281,13 +243,13 @@ export default function Scores() {
     let cancelled = false
     const run = async () => {
       try {
-        const data = await fetchAll()
+        const data = await fetchClassTables()
         if (cancelled) return
         setStudents(data.students)
         setExperiments(data.experiments)
         setScores(toScoreMap(data.scores))
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -304,12 +266,13 @@ export default function Scores() {
       return
     }
     let cancelled = false
+    setRatioError(false)
     fetchClassSettings(classId)
       .then((res) => {
         if (!cancelled) setClassSettings(res.settings)
       })
       .catch(() => {
-        // 占比缺失时回退默认，不影响分数编辑
+        if (!cancelled) setRatioError(true)
       })
     return () => {
       cancelled = true
@@ -377,7 +340,7 @@ export default function Scores() {
           })
         }
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : '保存失败')
+        toast.error(getErrorMessage(error, '保存失败'))
         throw error
       }
     },
@@ -435,7 +398,7 @@ export default function Scores() {
       setPendingDiff(diff)
       rosterState.open()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '操作失败')
+      toast.error(getErrorMessage(error, '操作失败'))
     } finally {
       setRosterBusy(false)
     }
@@ -454,7 +417,7 @@ export default function Scores() {
       await reload()
       rosterState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '操作失败')
+      toast.error(getErrorMessage(error, '操作失败'))
     } finally {
       setRosterBusy(false)
     }
@@ -574,18 +537,13 @@ export default function Scores() {
                 <Button slot="close" variant="secondary">
                   取消
                 </Button>
-                <Button
+                <PendingButton
                   variant="danger"
                   isPending={rosterBusy}
                   onPress={() => void confirmRoster()}
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending && <Spinner color="current" size="sm" />}
-                      更新名单
-                    </>
-                  )}
-                </Button>
+                  更新名单
+                </PendingButton>
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
@@ -593,11 +551,7 @@ export default function Scores() {
       </Modal>
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 rounded-xl" />
-          ))}
-        </div>
+        <SkeletonList rows={5} className="h-12 rounded-xl" />
       ) : !currentClass ? (
         <EmptyState icon={School} title="尚未绑定班级" hint="请先在设置中绑定班级" />
       ) : (
@@ -612,6 +566,17 @@ export default function Scores() {
             </span>
           </div>
 
+          {ratioError && (
+            <Alert className="mb-4" status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>
+                  评分占比加载失败，总评按默认占比 2:5:0 估算，仅供参考
+                </Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
+
           {classExperiments.length === 0 ? (
             <EmptyState icon={FlaskConical} title="暂无实验" hint="请先在实验页创建实验" />
           ) : students.length === 0 ? (
@@ -624,7 +589,7 @@ export default function Scores() {
                     <th
                       rowSpan={2}
                       aria-sort={ariaSort(STUDENT_SORT_KEY)}
-                      className="sticky left-0 z-30 border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
+                      className={TH_STICKY}
                     >
                       <SortButton
                         label="学生"
@@ -637,7 +602,7 @@ export default function Scores() {
                       <th
                         key={exp.id}
                         colSpan={SCORE_TYPES.length + 1}
-                        className="border-b border-r border-line bg-elevated px-4 py-2 text-center font-semibold"
+                        className={TH_CENTER}
                       >
                         {exp.mark} · {exp.title}
                       </th>
@@ -649,7 +614,7 @@ export default function Scores() {
                         <th
                           key={`${exp.id}:${type.value}`}
                           aria-sort={ariaSort(`${exp.id}:${type.value}`)}
-                          className="min-w-[5.5rem] border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
+                          className={TH_SUB}
                         >
                           <SortButton
                             label={type.label}
@@ -659,10 +624,7 @@ export default function Scores() {
                           />
                         </th>
                       )),
-                      <th
-                        key={`${exp.id}:total`}
-                        className="min-w-[5.5rem] border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
-                      >
+                      <th key={`${exp.id}:total`} className={TH_SUB}>
                         总评
                       </th>,
                     ])}

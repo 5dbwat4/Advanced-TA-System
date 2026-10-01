@@ -9,8 +9,6 @@ import {
   ListBox,
   Modal,
   SearchField,
-  Skeleton,
-  Spinner,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -19,33 +17,35 @@ import {
   type Key,
 } from '@heroui/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import ArrowLeft from '~icons/lucide/arrow-left'
 import Check from '~icons/lucide/check'
 import FlipHorizontal2 from '~icons/lucide/flip-horizontal-2'
 import Import from '~icons/lucide/import'
 import Pen from '~icons/lucide/pen'
 import Plus from '~icons/lucide/plus'
 import School from '~icons/lucide/school'
-import Search from '~icons/lucide/search'
 import SquareCheckBig from '~icons/lucide/square-check-big'
 import Trash2 from '~icons/lucide/trash-2'
+import { BackLink } from '@/components/ui/BackLink'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/Card'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
+import { SearchInput } from '@/components/ui/SearchInput'
+import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   addFocusStudent,
-  apiFetch,
   deleteFocusStudents,
+  fetchClassTables,
   listFocusStudents,
   updateFocusStudent,
-  type Experiment,
   type FocusStudent,
-  type Score,
-  type Student,
 } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { matchStudent } from '@/lib/pinyin'
+import { useAsyncData } from '@/lib/request'
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -60,33 +60,17 @@ type FocusStatus = {
   color: 'success' | 'danger'
 }
 
-function focusStatus(stuId: string): FocusStatus {
+function focusStatus(): FocusStatus {
   // TODO: 挂科风险判定见 TODO.md（未实现）
-  // 当前临时实现：一律视为正常，stuId 预留给后续风险判定
-  void stuId
   return { label: '正常', tooltip: '一切正常', color: 'success' }
 }
 
-type TableData = {
-  students: Student[]
-  experiments: Experiment[]
-  scores: Score[]
-}
-
-async function fetchTableData(): Promise<TableData> {
-  const [studentRes, experimentRes, scoreRes] = await Promise.all([
-    apiFetch<{ students: Student[] }>('/api/students'),
-    apiFetch<{ experiments: Experiment[] }>('/api/experiments'),
-    apiFetch<{ scores: Score[] }>('/api/scores'),
-  ])
-  return {
-    students: studentRes.students,
-    experiments: experimentRes.experiments,
-    scores: scoreRes.scores,
-  }
-}
-
 type DeleteTarget = { kind: 'single'; target: FocusStudent } | { kind: 'bulk' }
+
+const TH = 'border-b border-r border-line bg-elevated px-4 py-2'
+const TH_LEFT = `${TH} text-left font-semibold`
+const TH_CENTER = `${TH} text-center font-semibold`
+const TH_SUB = 'border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted'
 
 export default function FocusStudents() {
   const currentClass = useCurrentClass()
@@ -102,10 +86,27 @@ export default function FocusStudents() {
   const [focusStudents, setFocusStudents] = useState<FocusStudent[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [students, setStudents] = useState<Student[]>([])
-  const [experiments, setExperiments] = useState<Experiment[]>([])
-  const [scores, setScores] = useState<Map<string, number>>(new Map())
-  const [tableLoading, setTableLoading] = useState(true)
+  const {
+    data: tableData,
+    loading: tableLoading,
+    error: tableError,
+  } = useAsyncData(fetchClassTables, [])
+
+  const students = useMemo(() => tableData?.students ?? [], [tableData])
+  const experiments = useMemo(() => tableData?.experiments ?? [], [tableData])
+  const scores = useMemo(
+    () =>
+      new Map<string, number>(
+        (tableData?.scores ?? []).map(
+          (item) => [scoreKey(item.stuId, item.type, item.indId), item.score] as const,
+        ),
+      ),
+    [tableData],
+  )
+
+  useEffect(() => {
+    if (tableError) toast.error(tableError)
+  }, [tableError])
 
   const reload = useCallback(async () => {
     if (!classId) {
@@ -117,7 +118,7 @@ export default function FocusStudents() {
       const data = await listFocusStudents(classId)
       setFocusStudents(data.focusStudents)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载重点关注学生失败')
+      toast.error(getErrorMessage(error, '加载重点关注学生失败'))
     } finally {
       setLoading(false)
     }
@@ -126,35 +127,6 @@ export default function FocusStudents() {
   useEffect(() => {
     void reload()
   }, [reload])
-
-  // 表格数据只拉取一次，按当前班级在客户端过滤
-  useEffect(() => {
-    let cancelled = false
-    setTableLoading(true)
-    fetchTableData()
-      .then((data) => {
-        if (cancelled) return
-        setStudents(data.students)
-        setExperiments(data.experiments)
-        setScores(
-          new Map(
-            data.scores.map((score) => [
-              scoreKey(score.stuId, score.type, score.indId),
-              score.score,
-            ]),
-          ),
-        )
-      })
-      .catch((error) => {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载数据失败')
-      })
-      .finally(() => {
-        if (!cancelled) setTableLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const classStudents = useMemo(
     () => students.filter((student) => student.classId === classId),
@@ -244,7 +216,7 @@ export default function FocusStudents() {
       toast.success('已保存')
       reasonState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSavingReason(false)
     }
@@ -275,7 +247,7 @@ export default function FocusStudents() {
       toast.success('已添加重点关注学生')
       addState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '添加失败')
+      toast.error(getErrorMessage(error, '添加失败'))
     } finally {
       setAdding(false)
     }
@@ -318,7 +290,7 @@ export default function FocusStudents() {
       toast.success('已移除')
       confirmState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败')
+      toast.error(getErrorMessage(error, '删除失败'))
     } finally {
       setDeleting(false)
     }
@@ -329,33 +301,19 @@ export default function FocusStudents() {
   const constantRowSpan = hasScoreCols ? 2 : 1
 
   const searchBox = (
-    <div className="relative min-w-[12rem] flex-1">
-      <Search
-        width={15}
-        height={15}
-        className="pointer-events-none absolute left-3.5 top-1/2 shrink-0 -translate-y-1/2 text-fg-subtle"
-      />
-      <Input
-        fullWidth
-        className="pl-10"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="搜索姓名 / 学号 / 拼音"
-        aria-label="搜索重点关注学生"
-      />
-    </div>
+    <SearchInput
+      value={query}
+      onChange={setQuery}
+      placeholder="搜索姓名 / 学号 / 拼音"
+      ariaLabel="搜索重点关注学生"
+      className="min-w-[12rem] flex-1"
+    />
   )
 
   return (
     <>
       <div className="mx-auto max-w-6xl">
-        <Link
-          to="/console/courses/settings"
-          className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-fg-subtle transition-colors hover:text-fg-muted"
-        >
-          <ArrowLeft width={14} height={14} className="shrink-0" />
-          返回课程设置
-        </Link>
+        <BackLink to="/console/courses/settings">返回课程设置</BackLink>
 
         <PageHeader title="“重点关注学生”名单" />
 
@@ -366,68 +324,33 @@ export default function FocusStudents() {
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {editing ? (
                 <>
-                  <Tooltip delay={0}>
-                    <Tooltip.Trigger className="inline-flex">
-                      <Button
-                        size="sm"
-                        isIconOnly
-                        variant="secondary"
-                        aria-label="完成"
-                        onPress={() => {
-                          setEditing(false)
-                          setSelected(new Set())
-                        }}
-                      >
-                        <Check width={15} height={15} className="shrink-0" />
-                      </Button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>完成</Tooltip.Content>
-                  </Tooltip>
+                  <IconAction
+                    label="完成"
+                    variant="secondary"
+                    onPress={() => {
+                      setEditing(false)
+                      setSelected(new Set())
+                    }}
+                  >
+                    <Check width={15} height={15} className="shrink-0" />
+                  </IconAction>
                   {searchBox}
                   <div className="ms-auto flex flex-wrap items-center gap-2">
-                    <Tooltip delay={0}>
-                      <Tooltip.Trigger className="inline-flex">
-                        <Button
-                          size="sm"
-                          isIconOnly
-                          variant="danger-soft"
-                          aria-label="删除所选"
-                          isDisabled={selected.size === 0}
-                          onPress={openDeleteBulk}
-                        >
-                          <Trash2 width={15} height={15} className="shrink-0" />
-                        </Button>
-                      </Tooltip.Trigger>
-                      <Tooltip.Content>删除所选</Tooltip.Content>
-                    </Tooltip>
-                    <Tooltip delay={0}>
-                      <Tooltip.Trigger className="inline-flex">
-                        <Button
-                          size="sm"
-                          isIconOnly
-                          variant="secondary"
-                          aria-label="反选"
-                          onPress={invertSelection}
-                        >
-                          <FlipHorizontal2 width={15} height={15} className="shrink-0" />
-                        </Button>
-                      </Tooltip.Trigger>
-                      <Tooltip.Content>反选</Tooltip.Content>
-                    </Tooltip>
-                    <Tooltip delay={0}>
-                      <Tooltip.Trigger className="inline-flex">
-                        <Button
-                          size="sm"
-                          isIconOnly
-                          variant="secondary"
-                          aria-label="全选"
-                          onPress={selectAll}
-                        >
-                          <SquareCheckBig width={15} height={15} className="shrink-0" />
-                        </Button>
-                      </Tooltip.Trigger>
-                      <Tooltip.Content>全选</Tooltip.Content>
-                    </Tooltip>
+                    <IconAction
+                      label="删除所选"
+                      variant="danger-soft"
+                      onPress={() => {
+                        if (selected.size > 0) openDeleteBulk()
+                      }}
+                    >
+                      <Trash2 width={15} height={15} className="shrink-0" />
+                    </IconAction>
+                    <IconAction label="反选" variant="secondary" onPress={invertSelection}>
+                      <FlipHorizontal2 width={15} height={15} className="shrink-0" />
+                    </IconAction>
+                    <IconAction label="全选" variant="secondary" onPress={selectAll}>
+                      <SquareCheckBig width={15} height={15} className="shrink-0" />
+                    </IconAction>
                     <span className="tabular text-xs font-semibold text-fg-muted">
                       当前已选中（{selected.size}）
                     </span>
@@ -435,38 +358,24 @@ export default function FocusStudents() {
                 </>
               ) : (
                 <>
-                  <Tooltip delay={0}>
-                    <Tooltip.Trigger className="inline-flex">
-                      <Button
-                        size="sm"
-                        isIconOnly
-                        variant="secondary"
-                        aria-label="编辑"
-                        onPress={() => {
-                          setEditing(true)
-                          setSelected(new Set())
-                        }}
-                      >
-                        <Pen width={15} height={15} className="shrink-0" />
-                      </Button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>编辑</Tooltip.Content>
-                  </Tooltip>
+                  <IconAction
+                    label="编辑"
+                    variant="secondary"
+                    onPress={() => {
+                      setEditing(true)
+                      setSelected(new Set())
+                    }}
+                  >
+                    <Pen width={15} height={15} className="shrink-0" />
+                  </IconAction>
                   {searchBox}
-                  <Tooltip delay={0}>
-                    <Tooltip.Trigger className="inline-flex">
-                      <Button
-                        size="sm"
-                        isIconOnly
-                        variant="ghost"
-                        aria-label="一键导入"
-                        onPress={() => toast('一键导入功能开发中')}
-                      >
-                        <Import width={15} height={15} className="shrink-0" />
-                      </Button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>一键导入（开发中）</Tooltip.Content>
-                  </Tooltip>
+                  <IconAction
+                    label="一键导入（开发中）"
+                    variant="ghost"
+                    onPress={() => toast('一键导入功能开发中')}
+                  >
+                    <Import width={15} height={15} className="shrink-0" />
+                  </IconAction>
                   <Button size="sm" variant="primary" onPress={addState.open}>
                     <Plus width={15} height={15} className="shrink-0" />
                     添加
@@ -504,10 +413,8 @@ export default function FocusStudents() {
 
             <div className="max-h-[65vh] overflow-auto rounded-2xl border border-line bg-elevated">
               {loading || tableLoading ? (
-                <div className="flex flex-col gap-2 p-4">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-10 rounded-xl" />
-                  ))}
+                <div className="p-4">
+                  <SkeletonList rows={4} className="h-10 rounded-xl" />
                 </div>
               ) : rows.length === 0 ? (
                 <div className="py-10 text-center text-sm text-fg-subtle">
@@ -518,7 +425,7 @@ export default function FocusStudents() {
                   <thead className="sticky top-0 z-20">
                     <tr>
                       {editing && (
-                        <th className="border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold">
+                        <th className={TH_LEFT}>
                           <Checkbox
                             aria-label="全选"
                             isSelected={allSelected}
@@ -533,28 +440,16 @@ export default function FocusStudents() {
                           </Checkbox>
                         </th>
                       )}
-                      <th
-                        rowSpan={constantRowSpan}
-                        className="sticky left-0 z-30 border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
-                      >
+                      <th rowSpan={constantRowSpan} className={`sticky left-0 z-30 ${TH_LEFT}`}>
                         姓名
                       </th>
-                      <th
-                        rowSpan={constantRowSpan}
-                        className="border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
-                      >
+                      <th rowSpan={constantRowSpan} className={TH_LEFT}>
                         学号
                       </th>
-                      <th
-                        rowSpan={constantRowSpan}
-                        className="border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
-                      >
+                      <th rowSpan={constantRowSpan} className={TH_LEFT}>
                         重点关注原因
                       </th>
-                      <th
-                        rowSpan={constantRowSpan}
-                        className="border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
-                      >
+                      <th rowSpan={constantRowSpan} className={TH_LEFT}>
                         当前状态
                       </th>
                       {hasScoreCols &&
@@ -562,30 +457,25 @@ export default function FocusStudents() {
                           <th
                             key={experiment.id}
                             colSpan={SCORE_TYPES.length}
-                            className="border-b border-r border-line bg-elevated px-4 py-2 text-center font-semibold"
+                            className={TH_CENTER}
                           >
                             {experiment.mark} · {experiment.title}
                           </th>
                         ))}
                       {hasActions && (
-                        <th
-                          rowSpan={constantRowSpan}
-                          className="border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold"
-                        >
+                        <th rowSpan={constantRowSpan} className={TH_LEFT}>
                           操作
                         </th>
                       )}
                     </tr>
                     {hasScoreCols && (
                       <tr>
-                        {editing && (
-                          <th className="border-b border-r border-line bg-elevated px-4 py-2" />
-                        )}
+                        {editing && <th className={TH} />}
                         {classExperiments.flatMap((experiment) =>
                           SCORE_TYPES.map((type) => (
                             <th
                               key={`${experiment.id}:${type.value}`}
-                              className="border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
+                              className={TH_SUB}
                             >
                               {type.label}
                             </th>
@@ -598,7 +488,7 @@ export default function FocusStudents() {
                     {rows.map((item) => {
                       const name = item.student?.name ?? '—'
                       const studentNo = item.student?.studentNo ?? ''
-                      const status = focusStatus(item.stuId)
+                       const status = focusStatus()
                       return (
                         <tr key={item.id} className="transition-colors hover:bg-sunken/40">
                           {editing && (
@@ -728,19 +618,16 @@ export default function FocusStudents() {
                 <Button slot="close" variant="secondary">
                   取消
                 </Button>
-                <Button
+                <PendingButton
                   variant="primary"
+                  icon={Pen}
+                  pendingLabel="保存中"
                   isDisabled={!reasonTarget}
                   isPending={savingReason}
                   onPress={() => void saveReason()}
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending && <Spinner color="current" size="sm" />}
-                      保存
-                    </>
-                  )}
-                </Button>
+                  保存
+                </PendingButton>
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
@@ -813,67 +700,33 @@ export default function FocusStudents() {
                 <Button slot="close" variant="secondary">
                   取消
                 </Button>
-                <Button
+                <PendingButton
                   variant="primary"
+                  icon={Plus}
+                  pendingLabel="添加中"
                   isDisabled={addStuId == null}
                   isPending={adding}
                   onPress={() => void submitAdd()}
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending && <Spinner color="current" size="sm" />}
-                      添加
-                    </>
-                  )}
-                </Button>
+                  添加
+                </PendingButton>
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
 
-      <Modal state={confirmState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-danger/10 text-danger">
-                  <Trash2 width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>
-                  {confirm?.kind === 'single' ? '移除重点关注学生' : '移除所选学生'}
-                </Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <p className="text-sm text-fg-muted">
-                  {confirm?.kind === 'single'
-                    ? `确定将 ${confirm.target.student?.name ?? '该学生'} 从重点关注名单中移除吗？`
-                    : `确定将选中的 ${selected.size} 名学生从重点关注名单中移除吗？`}
-                </p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">
-                  取消
-                </Button>
-                <Button
-                  variant="danger"
-                  isDisabled={!confirm}
-                  isPending={deleting}
-                  onPress={() => void submitDelete()}
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending && <Spinner color="current" size="sm" />}
-                      删除
-                    </>
-                  )}
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <ConfirmDialog
+        state={confirmState}
+        title={confirm?.kind === 'single' ? '移除重点关注学生' : '移除所选学生'}
+        description={
+          confirm?.kind === 'single'
+            ? `确定将 ${confirm.target.student?.name ?? '该学生'} 从重点关注名单中移除吗？`
+            : `确定将选中的 ${selected.size} 名学生从重点关注名单中移除吗？`
+        }
+        isPending={deleting}
+        onConfirm={() => void submitDelete()}
+      />
     </>
   )
 }

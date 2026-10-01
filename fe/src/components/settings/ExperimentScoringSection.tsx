@@ -1,19 +1,16 @@
-import { Button, Modal, Spinner, Switch, useOverlayState } from '@heroui/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useDebounce } from 'react-use'
+import { Alert, Button, Modal, Spinner, Switch, useOverlayState } from '@heroui/react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import Percent from '~icons/lucide/percent'
 import { ScoreRatioEditor } from '@/components/settings/ScoreRatioEditor'
 import { Card } from '@/components/ui/Card'
-import {
-  apiFetch,
-  fetchClassSettings,
-  updateClassSettings,
-  type Experiment,
-} from '@/lib/api'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { apiFetch, fetchClassSettings, updateClassSettings, type Experiment } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { DEFAULT_SCORE_RATIO, sanitizeScoreRatio } from '@/lib/scoring'
 import { useCurrentClass } from '@/lib/store'
+import { useDebouncedSave } from '@/lib/use-class-settings'
 
 export function ExperimentScoringSection({ index }: { index: number }) {
   const currentClass = useCurrentClass()
@@ -27,7 +24,6 @@ export function ExperimentScoringSection({ index }: { index: number }) {
   const [draft, setDraft] = useState<number[]>(DEFAULT_SCORE_RATIO)
 
   const oneClickState = useOverlayState()
-  const ratioDirty = useRef(false)
 
   useEffect(() => {
     if (!classId) return
@@ -44,7 +40,7 @@ export function ExperimentScoringSection({ index }: { index: number }) {
         setRatio(sanitizeScoreRatio(settings.scoreRatio))
         setExperiments(expRes.experiments.filter((exp) => exp.classId === classId))
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载课程设置失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载课程设置失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -68,13 +64,15 @@ export function ExperimentScoringSection({ index }: { index: number }) {
 
   const patch = useCallback(
     async (body: Parameters<typeof updateClassSettings>[1]) => {
-      if (!classId) return
+      if (!classId) return false
       setSaving(true)
       try {
         await updateClassSettings(classId, body)
+        return true
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : '保存失败')
+        toast.error(getErrorMessage(error, '保存失败'))
         await syncFromServer()
+        return false
       } finally {
         setSaving(false)
       }
@@ -82,25 +80,19 @@ export function ExperimentScoringSection({ index }: { index: number }) {
     [classId, syncFromServer],
   )
 
-  const [, cancelRatioSave] = useDebounce(
-    () => {
-      if (!ratioDirty.current) return
-      ratioDirty.current = false
-      void patch({ scoreRatio: ratio })
-    },
-    700,
-    [ratio],
-  )
+  const ratioSave = useDebouncedSave(async () => {
+    const ok = await patch({ scoreRatio: ratio })
+    if (!ok) throw new Error('score ratio save failed')
+  }, 700)
 
   const toggleUnified = (selected: boolean) => {
-    cancelRatioSave()
-    ratioDirty.current = false
+    ratioSave.cancel()
     setUnified(selected)
     void patch({ scoreRatioUnified: selected, scoreRatio: ratio })
   }
 
   const changeRatio = (next: number[]) => {
-    ratioDirty.current = true
+    ratioSave.schedule()
     setRatio(next)
   }
 
@@ -125,7 +117,7 @@ export function ExperimentScoringSection({ index }: { index: number }) {
       toast.success(`已应用到 ${experiments.length} 个实验`)
       oneClickState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -135,11 +127,9 @@ export function ExperimentScoringSection({ index }: { index: number }) {
 
   return (
     <Card index={index}>
-      <div className="flex items-center gap-2">
-        <Percent width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
-        <h2 className="text-sm font-bold">实验计分方式</h2>
-        {busy && <Spinner size="sm" />}
-      </div>
+      <SectionHeader icon={Percent} busy={busy}>
+        实验计分方式
+      </SectionHeader>
 
       {!classId ? (
         <p className="mt-3 text-xs text-fg-subtle">请先在右上角选择或绑定一个课程。</p>
@@ -173,6 +163,15 @@ export function ExperimentScoringSection({ index }: { index: number }) {
             <Button variant="secondary" className="self-start" onPress={openOneClick}>
               一键应用评分占比
             </Button>
+          )}
+
+          {ratioSave.saveFailed && (
+            <Alert status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>自动保存失败，修改尚未保存</Alert.Description>
+              </Alert.Content>
+            </Alert>
           )}
         </div>
       )}

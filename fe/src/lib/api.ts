@@ -98,7 +98,7 @@ export type Experiment = {
   reportDeadline: string | null
   lastXzzdDownSyncAt: string | null
   lastXzzdUpSyncAt: string | null
-  klass: { id: string; name: string; xzzdClassId: string | null } | null
+  klass: { id: string; name: string; xzzdClassId: string | null }
   questionBank: { id: string; name: string } | null
   createdAt: string
   updatedAt: string
@@ -179,31 +179,47 @@ export class ApiError extends Error {
   }
 }
 
-function parseJson(text: string): unknown {
-  if (!text) return null
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
-}
-
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   const token = getToken()
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(path, { ...init, headers })
-  const data = parseJson(await res.text()) as Record<string, unknown> | null
+  const res = await fetch(path, { ...init, headers }).catch(() => {
+    throw new ApiError(0, 'NETWORK_ERROR', '网络错误，请检查连接后重试')
+  })
+
+  let data: unknown = null
+  let parseFailed = false
+  const text = await res.text()
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      parseFailed = true
+    }
+  }
 
   if (!res.ok) {
-    const code = typeof data?.error === 'string' ? data.error : 'UNKNOWN'
-    const message = typeof data?.message === 'string' ? data.message : '请求失败，请稍后重试'
+    const shaped = typeof data === 'object' && data !== null ? data : null
+    const code =
+      shaped !== null && 'error' in shaped && typeof shaped.error === 'string'
+        ? shaped.error
+        : 'UNKNOWN'
+    const message =
+      shaped !== null && 'message' in shaped && typeof shaped.message === 'string'
+        ? shaped.message
+        : parseFailed
+          ? '请求失败，且响应不是有效的 JSON'
+          : '请求失败，请稍后重试'
     throw new ApiError(res.status, code, message)
   }
 
-  return data as T
+  if (parseFailed) {
+    throw new ApiError(res.status, 'INVALID_RESPONSE', '服务器返回了无法解析的数据')
+  }
+
+  return (data ?? null) as T
 }
 
 export async function listTas(): Promise<Ta[]> {
@@ -525,7 +541,6 @@ export type ClassSettings = {
   checkoutCommentTemplate?: string
   /** 报告评语模板 */
   reportCommentTemplate?: string
-  [key: string]: unknown
 }
 
 export function fetchClassSettings(classId: string): Promise<{ settings: ClassSettings }> {
@@ -558,7 +573,7 @@ export type FocusStudent = {
   reason: string
   createdAt: string
   updatedAt: string
-  student: { name: string; studentNo: string } | null
+  student: { name: string; studentNo: string }
 }
 
 export function listFocusStudents(classId: string): Promise<{ focusStudents: FocusStudent[] }> {
@@ -606,7 +621,7 @@ export type CheckpointClaim = {
   appliedRules: number
   createdAt: string
   updatedAt: string
-  student: { name: string; studentNo: string } | null
+  student: { name: string; studentNo: string }
 }
 
 export function fetchCheckpointClaims(classId: string): Promise<{ claims: CheckpointClaim[] }> {
@@ -690,4 +705,15 @@ export type McpAuditLog = {
 
 export function listAuditLogs(limit = 50): Promise<{ logs: McpAuditLog[] }> {
   return apiFetch<{ logs: McpAuditLog[] }>(`/api/tokens/audit?limit=${limit}`)
+}
+
+export type ClassTables = { students: Student[]; experiments: Experiment[]; scores: Score[] }
+
+export async function fetchClassTables(): Promise<ClassTables> {
+  const [studentRes, experimentRes, scoreRes] = await Promise.all([
+    apiFetch<{ students: Student[] }>('/api/students'),
+    apiFetch<{ experiments: Experiment[] }>('/api/experiments'),
+    apiFetch<{ scores: Score[] }>('/api/scores'),
+  ])
+  return { students: studentRes.students, experiments: experimentRes.experiments, scores: scoreRes.scores }
 }

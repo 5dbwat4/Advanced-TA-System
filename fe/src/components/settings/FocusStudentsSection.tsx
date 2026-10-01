@@ -1,4 +1,4 @@
-import { Button, Spinner, Switch } from '@heroui/react'
+import { Alert, Button, CloseButton, Switch } from '@heroui/react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -6,13 +6,10 @@ import { toast } from 'sonner'
 import ListChecks from '~icons/lucide/list-checks'
 import UserSearch from '~icons/lucide/user-search'
 import { Card } from '@/components/ui/Card'
-import {
-  fetchClassSettings,
-  listFocusStudents,
-  updateClassSettings,
-  type ClassSettings,
-  type FocusStudent,
-} from '@/lib/api'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { listFocusStudents, type FocusStudent } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
+import { useClassSettingsPatch } from '@/lib/use-class-settings'
 import { useCurrentClass } from '@/lib/store'
 
 export function FocusStudentsSection({ index = 0 }: { index?: number }) {
@@ -20,32 +17,17 @@ export function FocusStudentsSection({ index = 0 }: { index?: number }) {
   const classId = currentClass?.id ?? null
   const navigate = useNavigate()
 
-  const [settings, setSettings] = useState<ClassSettings | null>(null)
-  const [settingsLoading, setSettingsLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const {
+    settings,
+    settingsLoading,
+    patch,
+    saving,
+    rollbackFailed,
+    dismissRollbackFailure,
+  } = useClassSettingsPatch(classId)
 
   const [focusStudents, setFocusStudents] = useState<FocusStudent[]>([])
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (!classId) return
-    let cancelled = false
-    const run = async () => {
-      setSettingsLoading(true)
-      try {
-        const data = await fetchClassSettings(classId)
-        if (!cancelled) setSettings(data.settings)
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载课程设置失败')
-      } finally {
-        if (!cancelled) setSettingsLoading(false)
-      }
-    }
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [classId])
 
   const reload = useCallback(async () => {
     if (!classId) {
@@ -57,7 +39,7 @@ export function FocusStudentsSection({ index = 0 }: { index?: number }) {
       const data = await listFocusStudents(classId)
       setFocusStudents(data.focusStudents)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载重点关注学生失败')
+      toast.error(getErrorMessage(error, '加载重点关注学生失败'))
     } finally {
       setLoading(false)
     }
@@ -67,40 +49,13 @@ export function FocusStudentsSection({ index = 0 }: { index?: number }) {
     void reload()
   }, [reload])
 
-  const patch = async (body: { focusEnabled?: boolean }) => {
-    if (!classId) return
-    setSaving(true)
-    // 乐观更新
-    setSettings((prev) => ({ ...prev, ...body }))
-    try {
-      const { settings: updated } = await updateClassSettings(classId, body)
-      setSettings(updated)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
-      try {
-        const { settings: fresh } = await fetchClassSettings(classId)
-        setSettings(fresh)
-      } catch {
-        // 回滚失败时忽略，保持乐观值
-      }
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const busy = settingsLoading || saving || loading
 
   return (
     <Card index={index}>
-      <div className="flex items-center gap-2">
-        <UserSearch
-          width={16}
-          height={16}
-          className="shrink-0 text-brand-600 dark:text-brand-300"
-        />
-        <h2 className="text-sm font-bold">重点关注学生</h2>
-        {busy && <Spinner size="sm" />}
-      </div>
+      <SectionHeader icon={UserSearch} busy={busy}>
+        重点关注学生
+      </SectionHeader>
 
       {!classId ? (
         <p className="mt-3 text-xs text-fg-subtle">请先在右上角选择或绑定一个课程。</p>
@@ -117,7 +72,12 @@ export function FocusStudentsSection({ index = 0 }: { index?: number }) {
               aria-label="启用重点关注学生"
               isSelected={settings?.focusEnabled ?? false}
               isDisabled={busy}
-              onChange={(selected) => void patch({ focusEnabled: selected })}
+              onChange={(selected) =>
+                void patch({ focusEnabled: selected }, (prev) => ({
+                  ...prev,
+                  focusEnabled: selected,
+                }))
+              }
             >
               <Switch.Content>
                 <Switch.Control>
@@ -143,6 +103,16 @@ export function FocusStudentsSection({ index = 0 }: { index?: number }) {
               重点关注学生列表（{focusStudents.length}人）
             </Button>
           </div>
+
+          {rollbackFailed && (
+            <Alert status="danger">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>设置保存失败且无法恢复，请刷新页面</Alert.Description>
+              </Alert.Content>
+              <CloseButton aria-label="关闭" onPress={dismissRollbackFailure} />
+            </Alert>
+          )}
         </div>
       )}
     </Card>

@@ -1,4 +1,3 @@
-import { Button, Spinner } from '@heroui/react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -8,7 +7,9 @@ import { PreferenceFields } from '@/components/checkoff/PreferenceOnboarding'
 import { MarkdownEditorChoice } from '@/components/settings/MarkdownEditorChoice'
 import { MarkdownStyleChoice } from '@/components/settings/MarkdownStyleChoice'
 import { Card } from '@/components/ui/Card'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import type { MarkdownEditorId, MarkdownStyleId } from '@/lib/api'
 
 export function PreferenceSection({ index = 0 }: { index?: number }) {
@@ -39,7 +40,7 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
       await updatePreferences({ device, draw, markdownEditor, markdownStyle, drawCount })
       toast.success('偏好已保存')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -72,18 +73,9 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
       <MarkdownStyleChoice value={markdownStyle} onChange={setMarkdownStyle} />
 
       <div className="flex justify-end">
-        <Button size="sm" isDisabled={!dirty} isPending={saving} onPress={save}>
-          {({ isPending }) => (
-            <>
-              {isPending ? (
-                <Spinner color="current" size="sm" />
-              ) : (
-                <Check width={16} height={16} className="shrink-0" />
-              )}
-              保存偏好
-            </>
-          )}
-        </Button>
+        <PendingButton size="sm" isDisabled={!dirty} isPending={saving} onPress={save} icon={Check}>
+          保存偏好
+        </PendingButton>
       </div>
     </Card>
   )

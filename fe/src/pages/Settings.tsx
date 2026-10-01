@@ -1,4 +1,4 @@
-import { Button, Input, Modal, Spinner, useOverlayState } from '@heroui/react'
+import { Button, Input, Modal, useOverlayState } from '@heroui/react'
 import { useCallback, useState } from 'react'
 import { useTimeoutFn } from 'react-use'
 import { toast } from 'sonner'
@@ -17,8 +17,10 @@ import { SystemSection } from '@/components/settings/SystemSection'
 import { ZjuamSection } from '@/components/settings/ZjuamSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { useScrollToHash } from '@/lib/hash'
 import { registerPasskey } from '@/lib/passkey'
 import { cn } from '@/lib/utils'
@@ -73,7 +75,7 @@ export default function Settings() {
       setPasswordOpen(false)
       setPassword('')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSavingPassword(false)
     }
@@ -87,7 +89,7 @@ export default function Settings() {
       await refresh()
       toast.success('已绑定通行密钥')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '绑定失败')
+      toast.error(getErrorMessage(error, '绑定失败'))
     } finally {
       setBinding(false)
     }
@@ -99,7 +101,7 @@ export default function Settings() {
       await updateSettings({ action: 'remove_passkey', passkeyId })
       toast.success('已解绑')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '解绑失败')
+      toast.error(getErrorMessage(error, '解绑失败'))
     } finally {
       setRemovingId(null)
     }
@@ -119,7 +121,7 @@ export default function Settings() {
       toast.success('用户名已更新')
       nameState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSavingName(false)
     }
@@ -215,23 +217,15 @@ export default function Settings() {
                   >
                     取消
                   </Button>
-                  <Button
+                  <PendingButton
                     size="sm"
                     isDisabled={password.length < 8}
                     isPending={savingPassword}
                     onPress={savePassword}
+                    icon={Check}
                   >
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : (
-                          <Check width={16} height={16} className="shrink-0" />
-                        )}
-                        保存
-                      </>
-                    )}
-                  </Button>
+                    保存
+                  </PendingButton>
                 </div>
               </div>
             )}
@@ -246,18 +240,15 @@ export default function Settings() {
                 <div className="text-xs font-semibold text-fg-muted">通行密钥</div>
                 <div className="text-[11px] text-fg-subtle">Touch ID · Face ID · Windows Hello</div>
               </div>
-              <Button size="sm" variant="secondary" isPending={binding} onPress={bindPasskey}>
-                {({ isPending }) => (
-                  <>
-                    {isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      <Plus width={16} height={16} className="shrink-0" />
-                    )}
-                    绑定本设备
-                  </>
-                )}
-              </Button>
+              <PendingButton
+                size="sm"
+                variant="secondary"
+                isPending={binding}
+                onPress={bindPasskey}
+                icon={Plus}
+              >
+                绑定本设备
+              </PendingButton>
             </div>
 
             <div className="mt-3 flex flex-col gap-2">
@@ -283,24 +274,15 @@ export default function Settings() {
                       {' · '}
                       {passkey.deviceType === 'multiDevice' ? '同步' : '本设备'}
                     </div>
-                    <Button
+                    <PendingButton
                       isIconOnly
                       size="sm"
                       variant="ghost"
                       aria-label="解绑"
                       isPending={removingId === passkey.id}
                       onPress={() => removePasskey(passkey.id)}
-                    >
-                      {({ isPending }) => (
-                        <>
-                          {isPending ? (
-                            <Spinner color="current" size="sm" />
-                          ) : (
-                            <Trash2 width={16} height={16} className="shrink-0" />
-                          )}
-                        </>
-                      )}
-                    </Button>
+                      icon={Trash2}
+                    />
                   </div>
                 ))
               )}
@@ -342,22 +324,14 @@ export default function Settings() {
                   <Button slot="close" variant="secondary">
                     取消
                   </Button>
-                  <Button
+                  <PendingButton
                     isDisabled={!nameDraft.trim() || nameDraft.trim() === (user?.username ?? '')}
                     isPending={savingName}
                     onPress={saveName}
+                    icon={Check}
                   >
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : (
-                          <Check width={16} height={16} className="shrink-0" />
-                        )}
-                        保存
-                      </>
-                    )}
-                  </Button>
+                    保存
+                  </PendingButton>
                 </Modal.Footer>
               </Modal.Dialog>
             </Modal.Container>

@@ -1,8 +1,7 @@
-import { Button, ListBox, Select, Spinner, Switch } from '@heroui/react'
-import { useCallback, useEffect, useState } from 'react'
+import { Alert, Button, CloseButton, ListBox, Select, Switch } from '@heroui/react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTimeoutFn } from 'react-use'
-import { toast } from 'sonner'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { CommentTemplateSection } from '@/components/settings/CommentTemplateSection'
@@ -10,8 +9,9 @@ import { ExperimentScoringSection } from '@/components/settings/ExperimentScorin
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { SectionHeader } from '@/components/ui/SectionHeader'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
-import { fetchClassSettings, updateClassSettings, type ClassSettings } from '@/lib/api'
+import { useClassSettingsPatch } from '@/lib/use-class-settings'
 import { useScrollToHash } from '@/lib/hash'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -99,64 +99,22 @@ function CheckpointSettingsSection({ index }: { index: number }) {
   const classId = currentClass?.id ?? null
   const navigate = useNavigate()
 
-  const [settings, setSettings] = useState<ClassSettings | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (!classId) return
-    let cancelled = false
-    const run = async () => {
-      setLoading(true)
-      try {
-        const data = await fetchClassSettings(classId)
-        if (!cancelled) setSettings(data.settings)
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载课程设置失败')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [classId])
-
-  const patch = async (body: { checkpointEnabled?: boolean; checkpointRule?: string | null }) => {
-    if (!classId) return
-    setSaving(true)
-    // 乐观更新
-    setSettings((prev) => ({ ...prev, ...body }))
-    try {
-      const { settings: updated } = await updateClassSettings(classId, body)
-      setSettings(updated)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
-      try {
-        const { settings: fresh } = await fetchClassSettings(classId)
-        setSettings(fresh)
-      } catch {
-        // 回滚失败时忽略，保持乐观值
-      }
-    } finally {
-      setSaving(false)
-    }
-  }
+  const {
+    settings,
+    settingsLoading: loading,
+    patch,
+    saving,
+    rollbackFailed,
+    dismissRollbackFailure,
+  } = useClassSettingsPatch(classId)
 
   const busy = loading || saving
 
   return (
     <Card index={index}>
-      <div className="flex items-center gap-2">
-        <SlidersHorizontal
-          width={16}
-          height={16}
-          className="shrink-0 text-brand-600 dark:text-brand-300"
-        />
-        <h2 className="text-sm font-bold">Checkpoint Settings</h2>
-        {busy && <Spinner size="sm" />}
-      </div>
+      <SectionHeader icon={SlidersHorizontal} busy={busy}>
+        Checkpoint Settings
+      </SectionHeader>
 
       {!classId ? (
         <p className="mt-3 text-xs text-fg-subtle">请先在右上角选择或绑定一个课程。</p>
@@ -173,7 +131,12 @@ function CheckpointSettingsSection({ index }: { index: number }) {
               aria-label="开启Checkpoint机制"
               isSelected={settings?.checkpointEnabled ?? false}
               isDisabled={busy}
-              onChange={(selected) => void patch({ checkpointEnabled: selected })}
+              onChange={(selected) =>
+                void patch({ checkpointEnabled: selected }, (prev) => ({
+                  ...prev,
+                  checkpointEnabled: selected,
+                }))
+              }
             >
               <Switch.Content>
                 <Switch.Control>
@@ -191,7 +154,12 @@ function CheckpointSettingsSection({ index }: { index: number }) {
               isDisabled={busy}
               value={settings?.checkpointRule ?? null}
               placeholder="未选择规则"
-              onChange={(key) => void patch({ checkpointRule: key == null ? null : String(key) })}
+              onChange={(key) =>
+                void patch({ checkpointRule: key == null ? null : String(key) }, (prev) => ({
+                  ...prev,
+                  checkpointRule: key == null ? null : String(key),
+                }))
+              }
             >
               <Select.Trigger>
                 <Select.Value />
@@ -217,6 +185,16 @@ function CheckpointSettingsSection({ index }: { index: number }) {
           >
             管理 Checkpoints
           </Button>
+
+          {rollbackFailed && (
+            <Alert status="danger">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>设置保存失败且无法恢复，请刷新页面</Alert.Description>
+              </Alert.Content>
+              <CloseButton aria-label="关闭" onPress={dismissRollbackFailure} />
+            </Alert>
+          )}
         </div>
       )}
     </Card>

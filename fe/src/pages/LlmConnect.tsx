@@ -14,6 +14,7 @@ import Trash2 from '~icons/lucide/trash-2'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
 import {
   createToken,
   listAuditLogs,
@@ -23,6 +24,7 @@ import {
   type McpScope,
   type PersonalAccessToken,
 } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { cn } from '@/lib/utils'
 
 const SCOPE_OPTIONS: { value: McpScope; label: string; desc: string }[] = [
@@ -84,7 +86,7 @@ export default function LlmConnect() {
   const [newToken, setNewToken] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  const endpoint = typeof window !== 'undefined' ? `${window.location.origin}/mcp` : '/mcp'
+  const endpoint = `${window.location.origin}/mcp`
 
   const createState = useOverlayState({
     onOpenChange: (open) => {
@@ -110,7 +112,7 @@ export default function LlmConnect() {
       const data = await listTokens()
       setTokens(data.tokens)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
+      toast.error(getErrorMessage(error, '加载失败'))
     }
   }, [])
 
@@ -119,7 +121,7 @@ export default function LlmConnect() {
       const data = await listAuditLogs()
       setAuditLogs(data.logs)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
+      toast.error(getErrorMessage(error, '加载失败'))
     }
   }, [])
 
@@ -132,7 +134,7 @@ export default function LlmConnect() {
         setTokens(tokenData.tokens)
         setAuditLogs(auditData.logs)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -165,7 +167,7 @@ export default function LlmConnect() {
       toast.success('已创建令牌')
       await reload()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '创建失败')
+      toast.error(getErrorMessage(error, '创建失败'))
     } finally {
       setSaving(false)
     }
@@ -179,7 +181,7 @@ export default function LlmConnect() {
       await reload()
       await reloadAudit()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '撤销失败')
+      toast.error(getErrorMessage(error, '撤销失败'))
     } finally {
       setBusyId(null)
     }
@@ -407,23 +409,15 @@ export default function LlmConnect() {
                         ))}
                       </div>
                       {!revoked && (
-                        <Button
+                        <PendingButton
                           size="sm"
                           variant="ghost"
                           isPending={busyId === item.id}
                           onPress={() => revoke(item.id)}
+                          icon={Trash2}
                         >
-                          {({ isPending }) => (
-                            <>
-                              {isPending ? (
-                                <Spinner color="current" size="sm" />
-                              ) : (
-                                <Trash2 width={14} height={14} className="shrink-0" />
-                              )}
-                              撤销
-                            </>
-                          )}
-                        </Button>
+                          撤销
+                        </PendingButton>
                       )}
                     </div>
                   </div>
@@ -681,22 +675,14 @@ export default function LlmConnect() {
                     <Button slot="close" variant="secondary">
                       取消
                     </Button>
-                    <Button
+                    <PendingButton
                       isPending={saving}
                       isDisabled={!name.trim() || scopes.length === 0}
                       onPress={submit}
+                      icon={KeyRound}
                     >
-                      {({ isPending }) => (
-                        <>
-                          {isPending ? (
-                            <Spinner color="current" size="sm" />
-                          ) : (
-                             <KeyRound width={15} height={15} className="shrink-0" />
-                          )}
-                          创建令牌
-                        </>
-                      )}
-                    </Button>
+                      创建令牌
+                    </PendingButton>
                   </>
                 )}
               </Modal.Footer>

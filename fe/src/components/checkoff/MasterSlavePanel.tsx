@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import QrCode from '~icons/lucide/qr-code'
+import { ProgressRing } from '@/components/ui/ProgressRing'
 import { useTotp } from '@/lib/totp'
 import { cn } from '@/lib/utils'
 
@@ -19,27 +20,11 @@ type MasterSessionView = {
 }
 
 function CountdownRing({ remaining, period }: { remaining: number; period: number }) {
-  const radius = 14
-  const circumference = 2 * Math.PI * radius
   const progress = Math.max(0, Math.min(1, remaining / period))
   return (
-    <span className="relative inline-flex h-9 w-9 items-center justify-center">
-      <svg viewBox="0 0 36 36" className="h-9 w-9 -rotate-90">
-        <circle cx="18" cy="18" r={radius} fill="none" strokeWidth={3} className="stroke-line" />
-        <circle
-          cx="18"
-          cy="18"
-          r={radius}
-          fill="none"
-          strokeWidth={3}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - progress)}
-          className="stroke-brand-500 transition-[stroke-dashoffset] duration-1000 ease-linear"
-        />
-      </svg>
-      <span className="tabular absolute text-[10px] font-bold text-fg-muted">{remaining}</span>
-    </span>
+    <ProgressRing value={progress} size={36} stroke={3} showLabel={false}>
+      <span className="tabular text-[10px] font-bold text-fg-muted">{remaining}</span>
+    </ProgressRing>
   )
 }
 

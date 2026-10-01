@@ -14,6 +14,7 @@ import {
   type Question,
   type QuestionBank,
 } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
@@ -56,7 +57,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
         setSelected(data.questions.map((item) => item.id))
         register(data.questions)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       }
     }
     run()
@@ -79,7 +80,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
         register(data.questions)
       } catch (error) {
         if (seq !== searchSeq.current) return
-        toast.error(error instanceof Error ? error.message : '加载失败')
+        toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (seq === searchSeq.current) setLoading(false)
       }
@@ -100,7 +101,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
       setTotal(data.total)
       register(data.questions)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载失败')
+      toast.error(getErrorMessage(error, '加载失败'))
     } finally {
       setLoadingMore(false)
     }
@@ -120,7 +121,7 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
       toast.success('题目集已保存')
       onSaved()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }

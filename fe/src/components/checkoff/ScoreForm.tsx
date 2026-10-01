@@ -1,4 +1,4 @@
-import { Button, Input, Slider, Spinner } from '@heroui/react'
+import { Input, Slider } from '@heroui/react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -7,7 +7,9 @@ import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Info from '~icons/lucide/info'
 import MessageCircleQuestion from '~icons/lucide/message-circle-question'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { submitCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { SCORE_MAX } from '@/lib/scores'
 import { weightedTotal } from '@/lib/scoring'
 
@@ -68,7 +70,7 @@ export function ScoreForm({
       toast.success(`已保存 · ${student.name}`)
       onSaved()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -174,23 +176,15 @@ export function ScoreForm({
           <kbd className="rounded-md border border-line bg-sunken px-1.5 py-0.5 font-mono text-[10px]">↵</kbd>
           保存并继续
         </span>
-        <Button
+        <PendingButton
           size="lg"
           isPending={saving}
           onPress={save}
           className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 shadow-lg shadow-emerald-600/25 sm:w-auto sm:min-w-64"
+          icon={Check}
         >
-          {({ isPending }) => (
-            <>
-              {isPending ? (
-                <Spinner color="current" size="sm" />
-              ) : (
-                <Check width={16} height={16} className="shrink-0" />
-              )}
-              保存并下一位
-            </>
-          )}
-        </Button>
+          保存并下一位
+        </PendingButton>
       </div>
     </div>
   )

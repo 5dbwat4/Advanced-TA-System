@@ -1,4 +1,4 @@
-import { Button, NumberField, Spinner, ToggleButton, ToggleButtonGroup } from '@heroui/react'
+import { Button, NumberField, ToggleButton, ToggleButtonGroup } from '@heroui/react'
 import { useState } from 'react'
 
 import Check from '~icons/lucide/check'
@@ -10,6 +10,7 @@ import Rocket from '~icons/lucide/rocket'
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { PreferenceRow } from '@/components/settings/PreferenceRow'
 import { Card } from '@/components/ui/Card'
+import { PendingButton } from '@/components/ui/PendingButton'
 import type { UserPreferences } from '@/lib/api'
 import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
@@ -274,24 +275,16 @@ export function PreferenceOnboarding({
             取消
           </Button>
         )}
-        <Button
+        <PendingButton
           type="button"
           size="lg"
           isPending={saving}
           onPress={save}
           className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
+          icon={Rocket}
         >
-          {({ isPending }) => (
-            <>
-              {isPending ? (
-                <Spinner color="current" size="sm" />
-              ) : (
-                <Rocket width={16} height={16} className="shrink-0" />
-              )}
-              {initial ? '保存' : '开始验收'}
-            </>
-          )}
-        </Button>
+          {initial ? '保存' : '开始验收'}
+        </PendingButton>
       </div>
     </Card>
   )

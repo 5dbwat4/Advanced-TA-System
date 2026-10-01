@@ -1,4 +1,4 @@
-import { Button, Input, Spinner, Tooltip } from '@heroui/react'
+import { Button, Input, Tooltip } from '@heroui/react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,8 +9,10 @@ import Lock from '~icons/lucide/lock'
 import School from '~icons/lucide/school'
 import Trash2 from '~icons/lucide/trash-2'
 import { Card } from '@/components/ui/Card'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { useAppStore } from '@/lib/store'
 import { getZjuamCredential, setZjuamCredential } from '@/lib/zjuam'
 
@@ -62,7 +64,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
       toast.success('已保存在远端')
       closeForm()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -81,7 +83,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
       }
       toast.success('已从远端删除')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败')
+      toast.error(getErrorMessage(error, '删除失败'))
     } finally {
       setSaving(false)
     }
@@ -102,7 +104,7 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
       await refresh()
       toast.success('已保存在远端')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -165,41 +167,25 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
               <Button size="sm" variant="ghost" onPress={closeForm}>
                 取消
               </Button>
-              <Button
+              <PendingButton
                 size="sm"
                 variant="secondary"
                 isDisabled={!account.trim() || !password}
                 isPending={saving}
                 onPress={saveLocal}
+                icon={HardDrive}
               >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      <HardDrive width={16} height={16} className="shrink-0" />
-                    )}
-                    仅保存在本地
-                  </>
-                )}
-              </Button>
-              <Button
+                仅保存在本地
+              </PendingButton>
+              <PendingButton
                 size="sm"
                 isDisabled={!account.trim() || !password}
                 isPending={saving}
                 onPress={saveRemote}
+                icon={CloudUpload}
               >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? (
-                      <Spinner color="current" size="sm" />
-                    ) : (
-                      <CloudUpload width={16} height={16} className="shrink-0" />
-                    )}
-                    保存在远端
-                  </>
-                )}
-              </Button>
+                保存在远端
+              </PendingButton>
             </div>
           </div>
         )}
@@ -221,31 +207,25 @@ export function ZjuamSection({ index = 0 }: { index?: number }) {
           </div>
         </div>
         {user?.hasZjuamPassword ? (
-          <Button size="sm" variant="secondary" isPending={saving} onPress={deleteRemote}>
-            {({ isPending }) => (
-              <>
-                {isPending ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <Trash2 width={16} height={16} className="shrink-0" />
-                )}
-                从远端删除
-              </>
-            )}
-          </Button>
+          <PendingButton
+            size="sm"
+            variant="secondary"
+            isPending={saving}
+            onPress={deleteRemote}
+            icon={Trash2}
+          >
+            从远端删除
+          </PendingButton>
         ) : (
-          <Button size="sm" variant="secondary" isPending={saving} onPress={uploadLocal}>
-            {({ isPending }) => (
-              <>
-                {isPending ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <CloudUpload width={16} height={16} className="shrink-0" />
-                )}
-                保存到远端
-              </>
-            )}
-          </Button>
+          <PendingButton
+            size="sm"
+            variant="secondary"
+            isPending={saving}
+            onPress={uploadLocal}
+            icon={CloudUpload}
+          >
+            保存到远端
+          </PendingButton>
         )}
       </div>
 

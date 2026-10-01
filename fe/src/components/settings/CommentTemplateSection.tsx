@@ -1,12 +1,14 @@
-import { Spinner, TextArea } from '@heroui/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useDebounce } from 'react-use'
+import { Alert, TextArea } from '@heroui/react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import MessageSquareText from '~icons/lucide/message-square-text'
 import { Card } from '@/components/ui/Card'
+import { SectionHeader } from '@/components/ui/SectionHeader'
 import { fetchClassSettings, updateClassSettings } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { useCurrentClass } from '@/lib/store'
+import { useDebouncedSave } from '@/lib/use-class-settings'
 
 export function CommentTemplateSection({ index }: { index: number }) {
   const currentClass = useCurrentClass()
@@ -16,7 +18,6 @@ export function CommentTemplateSection({ index }: { index: number }) {
   const [saving, setSaving] = useState(false)
   const [checkoutTemplate, setCheckoutTemplate] = useState('')
   const [reportTemplate, setReportTemplate] = useState('')
-  const dirty = useRef(false)
 
   useEffect(() => {
     if (!classId) return
@@ -29,7 +30,7 @@ export function CommentTemplateSection({ index }: { index: number }) {
         setCheckoutTemplate(settings.checkoutCommentTemplate ?? '')
         setReportTemplate(settings.reportCommentTemplate ?? '')
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载课程设置失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载课程设置失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -42,12 +43,13 @@ export function CommentTemplateSection({ index }: { index: number }) {
 
   const patch = useCallback(
     async (body: Parameters<typeof updateClassSettings>[1]) => {
-      if (!classId) return
+      if (!classId) throw new Error('no class')
       setSaving(true)
       try {
         await updateClassSettings(classId, body)
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : '保存失败')
+        toast.error(getErrorMessage(error, '保存失败'))
+        throw error
       } finally {
         setSaving(false)
       }
@@ -55,32 +57,20 @@ export function CommentTemplateSection({ index }: { index: number }) {
     [classId],
   )
 
-  useDebounce(
-    () => {
-      if (!dirty.current) return
-      dirty.current = false
-      void patch({
-        checkoutCommentTemplate: checkoutTemplate,
-        reportCommentTemplate: reportTemplate,
-      })
-    },
-    700,
-    [checkoutTemplate, reportTemplate],
-  )
+  const templateSave = useDebouncedSave(() =>
+    patch({
+      checkoutCommentTemplate: checkoutTemplate,
+      reportCommentTemplate: reportTemplate,
+    }),
+  700)
 
   const busy = loading || saving
 
   return (
     <Card index={index}>
-      <div className="flex items-center gap-2">
-        <MessageSquareText
-          width={16}
-          height={16}
-          className="shrink-0 text-brand-600 dark:text-brand-300"
-        />
-        <h2 className="text-sm font-bold">评语模板</h2>
-        {busy && <Spinner size="sm" />}
-      </div>
+      <SectionHeader icon={MessageSquareText} busy={busy}>
+        评语模板
+      </SectionHeader>
 
       {!classId ? (
         <p className="mt-3 text-xs text-fg-subtle">请先在右上角选择或绑定一个课程。</p>
@@ -93,7 +83,7 @@ export function CommentTemplateSection({ index }: { index: number }) {
             value={checkoutTemplate}
             disabled={loading}
             onChange={(value) => {
-              dirty.current = true
+              templateSave.schedule()
               setCheckoutTemplate(value)
             }}
           />
@@ -104,10 +94,19 @@ export function CommentTemplateSection({ index }: { index: number }) {
             value={reportTemplate}
             disabled={loading}
             onChange={(value) => {
-              dirty.current = true
+              templateSave.schedule()
               setReportTemplate(value)
             }}
           />
+
+          {templateSave.saveFailed && (
+            <Alert status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>自动保存失败，修改尚未保存</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
         </div>
       )}
     </Card>

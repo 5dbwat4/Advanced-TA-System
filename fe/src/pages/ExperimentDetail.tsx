@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   ListBox,
   Modal,
@@ -10,7 +11,6 @@ import {
 } from '@heroui/react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
 
 import ArrowDown from '~icons/lucide/arrow-down'
@@ -48,23 +48,18 @@ import {
   type QuestionBank,
   type ZjuamHomework,
 } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
+import { formatDateTime, formatLocaleDateTime } from '@/lib/format'
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, weightedTotal } from '@/lib/scoring'
-
-function formatDateTime(value: string | null): string {
-  if (!value) return '未指定'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '未指定'
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
+import { useDebouncedSave } from '@/lib/use-class-settings'
 
 function TimeStat({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
       <div className="text-xs font-semibold text-fg-muted">{label}</div>
       <div className={value ? 'tabular mt-1.5 text-sm' : 'tabular mt-1.5 text-sm text-fg-subtle'}>
-        {formatDateTime(value)}
+        {formatDateTime(value, '未指定')}
       </div>
     </div>
   )
@@ -80,7 +75,6 @@ export default function ExperimentDetail() {
   const [settings, setSettings] = useState<ClassSettings | null>(null)
   const [ratio, setRatio] = useState<number[]>(DEFAULT_SCORE_RATIO)
   const [savingRatio, setSavingRatio] = useState(false)
-  const ratioDirty = useRef(false)
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
 
@@ -109,7 +103,7 @@ export default function ExperimentDetail() {
       const { homeworks: list } = await fetchExperimentHomeworks(id)
       setHomeworks(list)
     } catch (error) {
-      setHomeworksError(error instanceof Error ? error.message : '获取学在浙大作业失败')
+      setHomeworksError(getErrorMessage(error, '获取学在浙大作业失败'))
     } finally {
       setHomeworksLoading(false)
     }
@@ -145,7 +139,7 @@ export default function ExperimentDetail() {
       try {
         await load(id)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -156,22 +150,26 @@ export default function ExperimentDetail() {
     }
   }, [id, load])
 
-  useDebounce(
-    () => {
-      if (!ratioDirty.current || !experiment) return
-      ratioDirty.current = false
-      setSavingRatio(true)
-      updateClassSettings(experiment.classId, {
-        experimentScoreRatios: { [experiment.id]: ratio },
+  const experimentRef = useRef<Experiment | null>(null)
+  useEffect(() => {
+    experimentRef.current = experiment
+  }, [experiment])
+
+  const ratioSave = useDebouncedSave(async () => {
+    const current = experimentRef.current
+    if (!current) return
+    setSavingRatio(true)
+    try {
+      await updateClassSettings(current.classId, {
+        experimentScoreRatios: { [current.id]: ratio },
       })
-        .catch((error) => {
-          toast.error(error instanceof Error ? error.message : '保存评分占比失败')
-        })
-        .finally(() => setSavingRatio(false))
-    },
-    700,
-    [ratio],
-  )
+    } catch (error) {
+      toast.error(getErrorMessage(error, '保存评分占比失败'))
+      throw error
+    } finally {
+      setSavingRatio(false)
+    }
+  }, 700)
 
   const bind = async (bankId: string) => {
     if (!experiment) return
@@ -183,7 +181,7 @@ export default function ExperimentDetail() {
       setExperiment(updated)
       toast.success(bankId ? '已绑定题目集' : '已解绑题目集')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '操作失败')
+      toast.error(getErrorMessage(error, '操作失败'))
     } finally {
       setBinding(false)
     }
@@ -245,7 +243,7 @@ export default function ExperimentDetail() {
       toast.success('已保存学在浙大作业绑定')
       bindState.close()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSavingXzzd(false)
     }
@@ -288,14 +286,14 @@ export default function ExperimentDetail() {
       setEditingTimeline(false)
       toast.success('时间线已保存')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSavingTimeline(false)
     }
   }
 
   const changeRatio = (next: number[]) => {
-    ratioDirty.current = true
+    ratioSave.schedule()
     setRatio(next)
   }
 
@@ -509,6 +507,14 @@ export default function ExperimentDetail() {
         </div>
         <div className="mt-4">
           <ScoreRatioEditor value={ratio} onChange={changeRatio} disabled={unifiedRatio} />
+          {ratioSave.saveFailed && (
+            <Alert className="mt-3" status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>自动保存失败，修改尚未保存</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          )}
         </div>
       </div>
 
@@ -551,12 +557,12 @@ export default function ExperimentDetail() {
               <SyncStat
                 icon={<ArrowUp width={14} height={14} className="shrink-0" />}
                 tooltip="向上游推送成绩时间"
-                time={formatSync(experiment.lastXzzdUpSyncAt)}
+                time={formatLocaleDateTime(experiment.lastXzzdUpSyncAt, '—')}
               />
               <SyncStat
                 icon={<ArrowDown width={14} height={14} className="shrink-0" />}
                 tooltip="从上游同步提交情况时间"
-                time={formatSync(experiment.lastXzzdDownSyncAt)}
+                time={formatLocaleDateTime(experiment.lastXzzdDownSyncAt, '—')}
               />
             </div>
             <div className="mt-3 flex items-stretch gap-2">
@@ -777,18 +783,6 @@ export default function ExperimentDetail() {
       </Modal>
     </div>
   )
-}
-
-function formatSync(value: string | null): string {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
 }
 
 function HomeworkTag({ id, courseId }: { id: string | null; courseId: string | null }) {

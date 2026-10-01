@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 
 import { apiFetch, type ClassInfo, type Course } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { getZjuamCredential } from '@/lib/zjuam'
 
 export type ZjuamStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -48,7 +49,7 @@ export const useAppStore = create<AppState>()(
         } catch (error) {
           set({
             zjuamStatus: 'error',
-            zjuamError: error instanceof Error ? error.message : '获取课程失败',
+            zjuamError: getErrorMessage(error, '获取课程失败'),
           })
         }
       },

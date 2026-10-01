@@ -1,4 +1,4 @@
-import { Button, Input, Spinner } from '@heroui/react'
+import { Input } from '@heroui/react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -8,8 +8,10 @@ import ArrowRight from '~icons/lucide/arrow-right'
 import Check from '~icons/lucide/check'
 import Fingerprint from '~icons/lucide/fingerprint'
 import Plus from '~icons/lucide/plus'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { registerPasskey } from '@/lib/passkey'
 
 export default function Setup() {
@@ -29,7 +31,7 @@ export default function Setup() {
       setBound(true)
       toast.success('已绑定通行密钥')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '绑定失败')
+      toast.error(getErrorMessage(error, '绑定失败'))
     } finally {
       setBinding(false)
     }
@@ -43,7 +45,7 @@ export default function Setup() {
       toast.success('资料已完善')
       navigate('/console', { replace: true })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存失败')
+      toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
@@ -109,51 +111,32 @@ export default function Setup() {
                   <Fingerprint width={18} height={18} className="shrink-0" />
                 </div>
                 <span className="flex-1 text-xs font-semibold text-fg-muted">Webauthn（选填）</span>
-                <Button
+                <PendingButton
                   size="sm"
                   variant={bound ? 'ghost' : 'secondary'}
                   isPending={binding}
                   isDisabled={bound}
                   onPress={bindPasskey}
+                  icon={bound ? Check : Plus}
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        bound ? (
-                          <Check width={16} height={16} className="shrink-0" />
-                        ) : (
-                          <Plus width={16} height={16} className="shrink-0" />
-                        )
-                      )}
-                      {bound ? '已绑定' : '立即绑定本设备'}
-                    </>
-                  )}
-                </Button>
+                  {bound ? '已绑定' : '立即绑定本设备'}
+                </PendingButton>
               </div>
               <p className="text-[11px] text-fg-subtle">Touch ID · Face ID · Windows Hello</p>
             </div>
           </div>
 
-          <Button
+          <PendingButton
             type="submit"
             fullWidth
             size="lg"
             isPending={saving}
             className="mt-2 bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
+            icon={ArrowRight}
+            pendingLabel="保存中"
           >
-            {({ isPending }) => (
-              <>
-                {isPending ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <ArrowRight width={16} height={16} className="shrink-0" />
-                )}
-                {isPending ? '保存中' : '完成'}
-              </>
-            )}
-          </Button>
+            完成
+          </PendingButton>
         </form>
       </motion.div>
     </div>

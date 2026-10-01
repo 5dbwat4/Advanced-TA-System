@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import ChevronRight from '~icons/lucide/chevron-right'
 import ScanSearch from '~icons/lucide/scan-search'
 import { fetchCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { matchStudent } from '@/lib/pinyin'
 
 const SUMMARY_LABELS: Record<number, string> = {
@@ -53,7 +54,7 @@ export function StudentFinder({
         setScores(res.scores)
       })
       .catch((error) => {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载名单失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载名单失败'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

@@ -22,7 +22,8 @@ let socket: Socket | null = null
 /** 共享的验收 Socket.IO 连接（master 已登录时携带 JWT；slave 无需登录） */
 export function getCheckoffSocket(): Socket {
   if (!socket) {
-    socket = io({ auth: { token: getToken() ?? '' }, transports: ['websocket', 'polling'] })
+    const token = getToken()
+    socket = io({ auth: token ? { token } : {}, transports: ['websocket', 'polling'] })
   }
   return socket
 }

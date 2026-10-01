@@ -20,6 +20,7 @@ import TriangleAlert from '~icons/lucide/triangle-alert'
 import Upload from '~icons/lucide/upload'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   apiFetch,
   fetchXzzdPushPreview,
@@ -31,6 +32,8 @@ import {
   type ZjuamHomeworkSubmission,
   type ZjuamHomeworkSyncData,
 } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
+import { formatBytes, formatDateTime } from '@/lib/format'
 
 type HomeworkKind = 'checkout' | 'report'
 
@@ -85,7 +88,7 @@ export default function XzzdPush() {
         )
         if (!cancelled) setExperiment(detail)
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载实验失败')
+        if (!cancelled) toast.error(getErrorMessage(error, '加载实验失败'))
       } finally {
         if (!cancelled) setLoadingExperiment(false)
       }
@@ -105,7 +108,7 @@ export default function XzzdPush() {
       setData(payload)
     } catch (err) {
       setData(null)
-      setError(err instanceof Error ? err.message : '获取上游数据失败')
+      setError(getErrorMessage(err, '获取上游数据失败'))
     } finally {
       setLoading(false)
     }
@@ -191,7 +194,7 @@ export default function XzzdPush() {
       void loadPreview()
     } catch (err) {
       if (!controller.signal.aborted) {
-        setPushError(err instanceof Error ? err.message : '推送失败')
+        setPushError(getErrorMessage(err, '推送失败'))
       }
     } finally {
       setPushing(false)
@@ -306,9 +309,7 @@ export default function XzzdPush() {
               </Alert>
             ) : loading && !data ? (
               <div className="flex flex-col gap-2">
-                <Skeleton className="h-10 rounded-xl" />
-                <Skeleton className="h-10 rounded-xl" />
-                <Skeleton className="h-10 rounded-xl" />
+                <SkeletonList rows={3} className="h-10 rounded-xl" />
               </div>
             ) : data ? (
               <>
@@ -627,17 +628,3 @@ function ScoreTable({ scores, students }: { scores: ZjuamHomeworkScore[]; studen
   )
 }
 
-function formatDateTime(value: string | null): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function formatBytes(value: number | undefined): string {
-  if (value == null) return '—'
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-  return `${(value / 1024 / 1024).toFixed(1)} MB`
-}

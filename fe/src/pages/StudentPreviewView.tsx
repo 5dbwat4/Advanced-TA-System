@@ -8,6 +8,8 @@ import Cpu from '~icons/lucide/cpu'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import FlaskConical from '~icons/lucide/flask-conical'
 import { ApiError, fetchStudentPreview, type StudentPreviewData } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
+import { formatDateTime } from '@/lib/format'
 import { ratioPercentages } from '@/lib/scoring'
 import { SCORE_TYPES } from '@/lib/scores'
 
@@ -33,7 +35,7 @@ export default function StudentPreviewView() {
         if (!cancelled) setData(result)
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : '加载失败，请稍后重试')
+        if (!cancelled) setError(err instanceof ApiError ? err.message : getErrorMessage(err, '加载失败，请稍后重试'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -170,14 +172,6 @@ function InfoItem({ icon, label, value }: { icon: ReactNode; label: string; valu
       <div className="tabular mt-1 text-sm font-semibold text-fg">{value}</div>
     </div>
   )
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function formatScore(value: number): string {
