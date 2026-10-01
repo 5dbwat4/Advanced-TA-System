@@ -516,7 +516,7 @@ export async function previewRoster(classId: string): Promise<RosterDiff> {
 
 export async function applyRoster(
   classId: string,
-  diff: { added: RosterEntry[]; removed: string[] },
+  diff: { added: RosterEntry[]; removed: string[]; expectedSyncAt?: string },
 ): Promise<{ addedCount: number; removedCount: number; lastRosterSyncAt: string }> {
   return apiFetch<{ addedCount: number; removedCount: number; lastRosterSyncAt: string }>(
     `/api/classes/${classId}/roster/apply`,
@@ -631,19 +631,22 @@ export function fetchCheckpointClaims(classId: string): Promise<{ claims: Checkp
 export function fetchCheckoff(params: {
   classId: string
   experimentId?: string
-}): Promise<{ experiments: CheckoffExperiment[]; students: CheckoffStudent[]; scores: Score[] }> {
+  includeQuestions?: boolean
+}): Promise<{
+  experiments: CheckoffExperiment[]
+  students: CheckoffStudent[]
+  scores: Score[]
+  questions?: CheckoffQuestion[]
+}> {
   const search = new URLSearchParams({ classId: params.classId })
   if (params.experimentId) search.set('experimentId', params.experimentId)
+  if (params.includeQuestions) search.set('includeQuestions', 'true')
   return apiFetch<{
     experiments: CheckoffExperiment[]
     students: CheckoffStudent[]
     scores: Score[]
+    questions?: CheckoffQuestion[]
   }>(`/api/checkoff?${search.toString()}`)
-}
-
-export function fetchCheckoffQuestions(experimentId: string): Promise<{ questions: CheckoffQuestion[] }> {
-  const search = new URLSearchParams({ experimentId })
-  return apiFetch<{ questions: CheckoffQuestion[] }>(`/api/checkoff/questions?${search.toString()}`)
 }
 
 export function submitCheckoff(body: {
@@ -709,11 +712,11 @@ export function listAuditLogs(limit = 50): Promise<{ logs: McpAuditLog[] }> {
 
 export type ClassTables = { students: Student[]; experiments: Experiment[]; scores: Score[] }
 
-export async function fetchClassTables(): Promise<ClassTables> {
+export async function fetchClassTables(classId?: string): Promise<ClassTables> {
   const [studentRes, experimentRes, scoreRes] = await Promise.all([
-    apiFetch<{ students: Student[] }>('/api/students'),
+    apiFetch<{ students: Student[] }>(classId ? `/api/students?classId=${encodeURIComponent(classId)}` : '/api/students'),
     apiFetch<{ experiments: Experiment[] }>('/api/experiments'),
-    apiFetch<{ scores: Score[] }>('/api/scores'),
+    apiFetch<{ scores: Score[] }>(classId ? `/api/scores?classId=${encodeURIComponent(classId)}` : '/api/scores'),
   ])
   return { students: studentRes.students, experiments: experimentRes.experiments, scores: scoreRes.scores }
 }

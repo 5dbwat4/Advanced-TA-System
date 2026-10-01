@@ -25,6 +25,7 @@ import { PendingButton } from '@/components/ui/PendingButton'
 import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   apiFetch,
+  ApiError,
   applyRoster,
   fetchClassSettings,
   fetchClassTables,
@@ -231,20 +232,21 @@ export default function Scores() {
 
   const reload = useCallback(async () => {
     try {
-      const data = await fetchClassTables()
+      const data = await fetchClassTables(classId ?? undefined)
       setStudents(data.students)
       setExperiments(data.experiments)
       setScores(toScoreMap(data.scores))
     } catch (error) {
       toast.error(getErrorMessage(error, '加载失败'))
     }
-  }, [])
+  }, [classId])
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
     const run = async () => {
       try {
-        const data = await fetchClassTables()
+        const data = await fetchClassTables(classId ?? undefined)
         if (cancelled) return
         setStudents(data.students)
         setExperiments(data.experiments)
@@ -259,7 +261,7 @@ export default function Scores() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [classId])
 
   useEffect(() => {
     if (!classId) {
@@ -412,12 +414,19 @@ export default function Scores() {
       await applyRoster(currentClass.id, {
         added: pendingDiff.added,
         removed: pendingDiff.removed.map((item) => item.studentNo),
+        expectedSyncAt: currentClass.lastRosterSyncAt ?? undefined,
       })
       toast.success('名单已更新')
       await refresh()
       await reload()
       rosterState.close()
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'ROSTER_STALE') {
+        toast.error(error.message)
+        rosterState.close()
+        await refresh()
+        return
+      }
       toast.error(getErrorMessage(error, '操作失败'))
     } finally {
       setRosterBusy(false)

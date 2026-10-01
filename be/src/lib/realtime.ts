@@ -83,25 +83,6 @@ async function loadBroadcastContext(
   return { name: me.name, role: me.role, classIds: me.classes.map((c) => c.id) }
 }
 
-/** 将 socket 加入其所属班级房间并回传班级列表（失败时回退为空列表） */
-async function syncRooms(socket: Socket): Promise<void> {
-  try {
-    const userId = socket.data.user?.sub as string | undefined
-    if (!userId) {
-      socket.emit('scores:ready', { classIds: [] })
-      return
-    }
-
-    const classIds = await loadClassIds(userId)
-    for (const classId of classIds) {
-      await socket.join(roomName(classId))
-    }
-    socket.emit('scores:ready', { classIds })
-  } catch {
-    socket.emit('scores:ready', { classIds: [] })
-  }
-}
-
 export type SlaveCardState =
   | { kind: 'idle'; experimentMark: string; experimentTitle: string }
   | { kind: 'ask_name' }
@@ -218,6 +199,26 @@ function emitSlaveState(session: CheckoffSession): void {
 /** 创建并绑定 Socket.IO 实时服务（模块单例） */
 export function createRealtime(fastify: FastifyInstance): Server {
   const server = new Server(fastify.server, { cors: { origin: true } })
+
+  /** 将 socket 加入其所属班级房间并回传班级列表（失败时记录日志并回退为空列表） */
+  async function syncRooms(socket: Socket): Promise<void> {
+    try {
+      const userId = socket.data.user?.sub as string | undefined
+      if (!userId) {
+        socket.emit('scores:ready', { classIds: [] })
+        return
+      }
+
+      const classIds = await loadClassIds(userId)
+      for (const classId of classIds) {
+        await socket.join(roomName(classId))
+      }
+      socket.emit('scores:ready', { classIds })
+    } catch (error) {
+      fastify.log.error(error)
+      socket.emit('scores:ready', { classIds: [] })
+    }
+  }
 
   server.use((socket, next) => {
     const token = extractToken(socket)

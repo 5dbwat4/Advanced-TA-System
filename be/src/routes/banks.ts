@@ -3,36 +3,18 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import {
+  bankInclude,
   filterExistingQuestionIds,
   normalizeQuestionIds,
   parseBankQuestions,
+  serializeBank,
 } from '../lib/banks'
+import { requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
-import { isStaff } from '../lib/roles'
-
-const bankInclude = {
-  owner: { select: { id: true, username: true, name: true } },
-  _count: { select: { experiments: true } },
-} satisfies Prisma.QuestionBankInclude
 
 const questionInclude = {
   user: { select: { id: true, username: true, name: true } },
 } satisfies Prisma.QuestionInclude
-
-type BankWithInclude = Prisma.QuestionBankGetPayload<{ include: typeof bankInclude }>
-
-/** 题库对外结构：questions 由 JSON 字符串转为数组 */
-function serializeBank(bank: BankWithInclude) {
-  return {
-    id: bank.id,
-    name: bank.name,
-    owner: bank.owner,
-    questions: parseBankQuestions(bank.questions),
-    experimentCount: bank._count.experiments,
-    createdAt: bank.createdAt,
-    updatedAt: bank.updatedAt,
-  }
-}
 
 const nameSchema = z.object({
   name: z.string().trim().min(1).max(64),
@@ -54,10 +36,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 题库内的题目（按题目集内顺序，含出题人） */
   fastify.get('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
     const bank = await prisma.questionBank.findUnique({
@@ -85,10 +64,8 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 新建题库（所有人 = staff 均可） */
   fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub?: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    const { sub } = request.user as { sub?: string }
+    if (!requireStaff(request, reply)) return reply
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -108,10 +85,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 重命名题库（任意 staff；前端对非 owner 会先确认） */
   fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
     const parsed = nameSchema.safeParse(request.body)
@@ -135,10 +109,8 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 复制题库（任意 staff，新 owner = 当前用户） */
   fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub?: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    const { sub } = request.user as { sub?: string }
+    if (!requireStaff(request, reply)) return reply
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -164,10 +136,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 删除题库（任意 staff；绑定它的实验会自动解绑） */
   fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
 
@@ -183,10 +152,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 追加题目（去重，忽略不存在的题目 id） */
   fastify.post('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
     const parsed = idsSchema.safeParse(request.body)
@@ -227,10 +193,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 移除题目 */
   fastify.delete('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
     const parsed = idsSchema.safeParse(request.body)
@@ -262,10 +225,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 覆盖 / 重排题目列表 */
   fastify.put('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
     const parsed = idsSchema.safeParse(request.body)

@@ -1,9 +1,10 @@
+import { Prisma } from '@prisma/client'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { decryptSecret } from '../lib/crypto'
+import { compareExperimentMark } from '../lib/banks'
+import { myClassIds, requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
-import { isStaff } from '../lib/roles'
 import { studentViewUrl as buildStudentViewUrl } from '../lib/student-view'
 import {
   assemblePushTargets,
@@ -21,6 +22,7 @@ import {
   type ZjuamHomeworkSubmission,
   ZjuamError,
 } from '../lib/zjuam'
+import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
 
 /** 时间线字段（ISO 8601 字符串，null 表示清空） */
 const timelineFields = {
@@ -88,51 +90,6 @@ function latestSubmissionOf(
 }
 
 export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 读取当前用户所属班级 id 列表 */
-  async function myClassIds(request: FastifyRequest): Promise<string[]> {
-    const { sub } = request.user as { sub: string }
-    const me = await prisma.user.findUnique({ where: { id: sub }, include: { classes: true } })
-    return (me?.classes ?? []).map((c) => c.id)
-  }
-
-  /**
-   * 解析学在浙大凭据：优先请求体（"密码保存在本地" 模式），否则回退到已保存的凭据。
-   * 密文损坏 / 密钥不匹配时按“未保存密码”处理，返回 null。
-   */
-  async function resolveZjuamCredentials(
-    request: FastifyRequest,
-    body: { account?: string; password?: string },
-  ): Promise<{ account: string; password: string } | null> {
-    const { sub } = request.user as { sub: string }
-    const user = await prisma.user.findUnique({ where: { id: sub } })
-    const account = body.account?.trim() || user?.zjuamAccount
-    let password = body.password
-    if (!password && user?.zjuamPassword) {
-      try {
-        password = decryptSecret(user.zjuamPassword)
-      } catch {
-        password = undefined
-      }
-    }
-    if (!account || !password) return null
-    return { account, password }
-  }
-
-  /** 将 ZjuamError 映射为 HTTP 响应；其它异常原样抛出 */
-  function sendZjuamError(reply: FastifyReply, error: unknown): FastifyReply | never {
-    if (error instanceof ZjuamError) {
-      if (error.code === 'ZJUAM_AUTH_FAILED') {
-        return reply
-          .code(401)
-          .send({ error: 'ZJUAM_AUTH_FAILED', message: '统一身份认证账号或密码错误' })
-      }
-      return reply
-        .code(502)
-        .send({ error: 'ZJUAM_UNAVAILABLE', message: '统一身份认证服务暂时不可用' })
-    }
-    throw error
-  }
-
   /**
    * 推送 / 预览共用的前置校验：staff、实验归属、作业绑定、请求体与凭据。
    * 校验失败时已通过 reply 发送错误响应，返回 null。
@@ -150,11 +107,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     account: string
     password: string
   } | null> {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-      return null
-    }
+    if (!requireStaff(request, reply)) return null
 
     const experiment = await prisma.experiment.findUnique({
       where: { id: experimentId },
@@ -192,13 +145,13 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       return null
     }
 
-    const credentials = await resolveZjuamCredentials(request, parsedBody.data)
-    if (!credentials) {
-      reply
-        .code(400)
-        .send({ error: 'ZJUAM_CREDENTIALS_MISSING', message: '请先保存浙大统一身份认证账号和密码' })
-      return null
-    }
+      const { sub } = request.user as { sub: string }
+      const credentials = await resolveZjuamCredentials(sub, parsedBody.data)
+      if (!credentials) {
+        return reply
+          .code(400)
+          .send({ error: 'ZJUAM_CREDENTIALS_MISSING', message: '请先保存浙大统一身份认证账号和密码' })
+      }
 
     return {
       activityId,
@@ -211,9 +164,13 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
   }
 
   /** 实验列表 */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async () => {
-    const experiments = await prisma.experiment.findMany({ include: experimentInclude })
-    experiments.sort((a, b) => a.mark.localeCompare(b.mark, 'zh-CN', { numeric: true }))
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
+    const classIds = await myClassIds(request)
+    const experiments = await prisma.experiment.findMany({
+      where: { classId: { in: classIds } },
+      include: experimentInclude,
+    })
+    experiments.sort((a, b) => compareExperimentMark(a.mark, b.mark))
     return { experiments }
   })
 
@@ -227,6 +184,10 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!experiment) {
       return reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
     }
+    const classIds = await myClassIds(request)
+    if (!classIds.includes(experiment.classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级的实验' })
+    }
     return { experiment }
   })
 
@@ -238,10 +199,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/xzzd-homeworks',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      const { role } = request.user as { role?: string }
-      if (typeof role !== 'string' || !isStaff(role)) {
-        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-      }
+      if (!requireStaff(request, reply)) return reply
 
       const { id } = request.params as { id: string }
       const experiment = await prisma.experiment.findUnique({
@@ -269,7 +227,8 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const credentials = await resolveZjuamCredentials(request, parsedBody.data)
+    const { sub } = request.user as { sub: string }
+    const credentials = await resolveZjuamCredentials(sub, parsedBody.data)
       if (!credentials) {
         return reply
           .code(400)
@@ -608,10 +567,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 新建实验 */
   fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const parsed = createExperimentSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -633,35 +589,36 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const existing = await prisma.experiment.findUnique({
-      where: { classId_mark: { classId, mark } },
-    })
-    if (existing) {
-      return reply.code(409).send({ error: 'EXPERIMENT_EXISTS', message: '该实验已存在' })
+    let experiment
+    try {
+      experiment = await prisma.experiment.create({
+        data: {
+          mark,
+          title,
+          classId,
+          questionBankId: questionBankId ?? null,
+          publishTime: toTimelineDate(publishTime) ?? null,
+          checkoffDeadline: toTimelineDate(checkoffDeadline) ?? null,
+          reportDeadline: toTimelineDate(reportDeadline) ?? null,
+        },
+        include: experimentInclude,
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return reply.code(409).send({ error: 'EXPERIMENT_EXISTS', message: '该实验已存在' })
+      }
+      throw error
     }
-
-    const experiment = await prisma.experiment.create({
-      data: {
-        mark,
-        title,
-        classId,
-        questionBankId: questionBankId ?? null,
-        publishTime: toTimelineDate(publishTime) ?? null,
-        checkoffDeadline: toTimelineDate(checkoffDeadline) ?? null,
-        reportDeadline: toTimelineDate(reportDeadline) ?? null,
-      },
-      include: experimentInclude,
-    })
 
     return reply.code(201).send({ experiment })
   })
 
   /** 更新实验（改编号 / 标题 / 绑定题库 / 绑定学在浙大作业），需属于该实验班级 */
   fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const { id } = request.params as { id: string }
 
@@ -687,15 +644,6 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    if (parsed.data.mark && parsed.data.mark !== existing.mark) {
-      const conflict = await prisma.experiment.findUnique({
-        where: { classId_mark: { classId: existing.classId, mark: parsed.data.mark } },
-      })
-      if (conflict) {
-        return reply.code(409).send({ error: 'EXPERIMENT_EXISTS', message: '该实验编号已存在' })
-      }
-    }
-
     const { publishTime, checkoffDeadline, reportDeadline, ...rest } = parsed.data
     const data = {
       ...rest,
@@ -704,11 +652,22 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       ...(reportDeadline !== undefined ? { reportDeadline: toTimelineDate(reportDeadline) } : {}),
     }
 
-    const experiment = await prisma.experiment.update({
-      where: { id },
-      data,
-      include: experimentInclude,
-    })
+    let experiment
+    try {
+      experiment = await prisma.experiment.update({
+        where: { id },
+        data,
+        include: experimentInclude,
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return reply.code(409).send({ error: 'EXPERIMENT_EXISTS', message: '该实验编号已存在' })
+      }
+      throw error
+    }
 
     return reply.send({ experiment })
   })

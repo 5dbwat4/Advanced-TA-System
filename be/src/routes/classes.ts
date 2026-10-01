@@ -1,13 +1,13 @@
-import type { Class } from '@prisma/client'
+import { Prisma, type Class } from '@prisma/client'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { decryptSecret } from '../lib/crypto'
+import { requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
-import { isStaff } from '../lib/roles'
 import { publicUser } from '../lib/user'
 import type { ZjuamEnrollment } from '../lib/zjuam'
-import { listEnrollments, ZjuamError } from '../lib/zjuam'
+import { listEnrollments } from '../lib/zjuam'
+import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
 
 const createClassSchema = z.object({
   xzzdClassId: z.string().trim().min(1).max(64),
@@ -32,6 +32,7 @@ const rosterApplySchema = z.object({
     }),
   ),
   removed: z.array(z.string().trim().min(1)),
+  expectedSyncAt: z.string().datetime().optional(),
 })
 
 /** 评分占比：功能测试 / 验收问答 / 报告，三个非负整数 */
@@ -72,12 +73,6 @@ const focusParamsSchema = z.object({ id: z.string().min(1), focusId: z.string().
 const focusInclude = { student: { select: { name: true, studentNo: true } } } as const
 
 export const classesRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 当前登录用户是否为助教 / 教师 */
-  function requireStaff(request: FastifyRequest): boolean {
-    const payload = request.user as { role?: string }
-    return isStaff(payload.role ?? '')
-  }
-
   /** 解析课程设置 JSON 字符串（损坏时按空对象处理） */
   function parseClassSettings(raw: string | null): Record<string, unknown> {
     if (!raw) return {}
@@ -115,34 +110,9 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     return klass
   }
 
-  /** 解析请求体或用户已保存的统一身份认证凭据 */
-  async function resolveCredentials(
-    userId: string,
-    input: { account?: string; password?: string },
-  ): Promise<{ account: string; password: string } | null> {
-    const user = await prisma.user.findUnique({ where: { id: userId } })
-    if (!user) return null
-
-    const account = input.account?.trim() || user.zjuamAccount
-    let password = input.password
-    if (!password && user.zjuamPassword) {
-      // 密文损坏 / 密钥不匹配时按“未保存密码”处理，避免 500。
-      try {
-        password = decryptSecret(user.zjuamPassword)
-      } catch {
-        password = undefined
-      }
-    }
-
-    if (!account || !password) return null
-    return { account, password }
-  }
-
   /** 新建班级并将当前用户关联到该班级 */
   fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const parsed = createClassSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -150,12 +120,19 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { xzzdClassId, name, type } = parsed.data
-    const existing = await prisma.class.findFirst({ where: { xzzdClassId } })
-    if (existing) {
-      return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该课程已存在' })
-    }
 
-    const klass = await prisma.class.create({ data: { xzzdClassId, name, type } })
+    let klass
+    try {
+      klass = await prisma.class.create({ data: { xzzdClassId, name, type } })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该课程已存在' })
+      }
+      throw error
+    }
 
     const { sub } = request.user as { sub: string }
     const updatedUser = await prisma.user.update({
@@ -172,9 +149,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 将当前用户关联到指定班级 */
   fastify.post('/:id/join', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
@@ -201,9 +176,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/roster/preview',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request)) {
-        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-      }
+      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -225,7 +198,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const { sub } = request.user as { sub: string }
-      const credentials = await resolveCredentials(sub, parsedBody.data)
+      const credentials = await resolveZjuamCredentials(sub, parsedBody.data)
       if (!credentials) {
         return reply
           .code(400)
@@ -240,15 +213,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
           klass.xzzdClassId,
         )
       } catch (error) {
-        if (error instanceof ZjuamError) {
-          if (error.code === 'ZJUAM_AUTH_FAILED') {
-            return reply.code(401).send({ error: 'ZJUAM_AUTH_FAILED' })
-          }
-          return reply
-            .code(502)
-            .send({ error: 'ZJUAM_UNAVAILABLE', message: '统一身份认证服务暂时不可用' })
-        }
-        throw error
+        return sendZjuamError(reply, error)
       }
 
       const currentStudents = await prisma.student.findMany({ where: { classId: klass.id } })
@@ -275,9 +240,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/roster/apply',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request)) {
-        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-      }
+      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -292,33 +255,56 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const { added, removed } = parsedBody.data
-
-      for (const entry of added) {
-        const existing = await prisma.student.findFirst({
-          where: { classId: klass.id, studentNo: entry.studentNo },
-        })
-        if (existing) {
-          await prisma.student.update({
-            where: { stuId: existing.stuId },
-            data: { name: entry.name },
-          })
-        } else {
-          await prisma.student.create({
-            data: { studentNo: entry.studentNo, name: entry.name, classId: klass.id },
-          })
-        }
-      }
-
-      for (const studentNo of removed) {
-        await prisma.student.deleteMany({ where: { classId: klass.id, studentNo } })
-      }
+      const { added, removed, expectedSyncAt } = parsedBody.data
 
       const syncedAt = new Date()
-      await prisma.class.update({
-        where: { id: klass.id },
-        data: { lastRosterSyncAt: syncedAt },
+      const stale = await prisma.$transaction(async (tx) => {
+        const fresh = await tx.class.findUnique({
+          where: { id: klass.id },
+          select: { lastRosterSyncAt: true },
+        })
+        if (
+          expectedSyncAt !== undefined &&
+          (fresh?.lastRosterSyncAt?.toISOString() ?? null) !== expectedSyncAt
+        ) {
+          return true
+        }
+
+        for (const entry of added) {
+          const existing = await tx.student.findFirst({
+            where: { classId: klass.id, studentNo: entry.studentNo },
+          })
+          if (existing) {
+            await tx.student.update({
+              where: { stuId: existing.stuId },
+              data: { name: entry.name },
+            })
+          } else {
+            await tx.student.create({
+              data: { studentNo: entry.studentNo, name: entry.name, classId: klass.id },
+            })
+          }
+        }
+
+        if (removed.length > 0) {
+          await tx.student.deleteMany({
+            where: { classId: klass.id, studentNo: { in: removed } },
+          })
+        }
+
+        await tx.class.update({
+          where: { id: klass.id },
+          data: { lastRosterSyncAt: syncedAt },
+        })
+        return false
       })
+
+      if (stale) {
+        return reply.code(409).send({
+          error: 'ROSTER_STALE',
+          message: '名单已被其他人更新，请重新预览后再应用',
+        })
+      }
 
       return reply.send({
         addedCount: added.length,
@@ -343,9 +329,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 更新课程设置（局部合并） */
   fastify.patch('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const parsedParams = classParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -428,9 +412,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/focus-students',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request)) {
-        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-      }
+      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -452,17 +434,21 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
       }
 
-      const existing = await prisma.focusStudent.findUnique({
-        where: { classId_stuId: { classId: klass.id, stuId } },
-      })
-      if (existing) {
-        return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该学生已在重点关注名单中' })
+      let focusStudent
+      try {
+        focusStudent = await prisma.focusStudent.create({
+          data: { classId: klass.id, stuId, reason: reason ?? '' },
+          include: focusInclude,
+        })
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该学生已在重点关注名单中' })
+        }
+        throw error
       }
-
-      const focusStudent = await prisma.focusStudent.create({
-        data: { classId: klass.id, stuId, reason: reason ?? '' },
-        include: focusInclude,
-      })
 
       return reply.code(201).send({ focusStudent })
     },
@@ -473,9 +459,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/focus-students/:focusId',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request)) {
-        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-      }
+      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = focusParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -514,9 +498,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/focus-students',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request)) {
-        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅助教或教师可操作' })
-      }
+      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {

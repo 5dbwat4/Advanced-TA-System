@@ -20,7 +20,6 @@ import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   fetchCheckoff,
-  fetchCheckoffQuestions,
   fetchClassSettings,
   type CheckoffExperiment,
   type CheckoffQuestion,
@@ -55,8 +54,9 @@ export default function Checkoff() {
   const [experiment, setExperiment] = useState<CheckoffExperiment | null>(null)
   const [student, setStudent] = useState<CheckoffStudent | null>(null)
   const [questions, setQuestions] = useState<CheckoffQuestion[]>([])
-  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
+  const [finderReloadKey, setFinderReloadKey] = useState(0)
   const [drawn, setDrawn] = useState<CheckoffQuestion[]>([])
   const [marks, setMarks] = useState<Record<string, QuestionMark | undefined>>({})
   const [existingScores, setExistingScores] = useState<Score[]>([])
@@ -126,19 +126,11 @@ export default function Checkoff() {
     setMarks({})
     setExistingScores([])
     setQuestions([])
+    setQuestionsLoaded(false)
+    setQuestionsError(null)
     setQuestionIndex(0)
     setNameAsked(false)
     setStep(1)
-    setQuestionsLoading(true)
-    setQuestionsError(null)
-    try {
-      const res = await fetchCheckoffQuestions(next.id)
-      setQuestions(res.questions)
-    } catch (error) {
-      setQuestionsError(getErrorMessage(error, '加载题目失败'))
-    } finally {
-      setQuestionsLoading(false)
-    }
   }, [])
 
   useEffect(() => {
@@ -352,7 +344,18 @@ export default function Checkoff() {
               <StudentFinder
                 classId={currentClass.id}
                 experimentId={experiment.id}
+                reloadKey={finderReloadKey}
+                includeQuestions
                 onSelect={selectStudent}
+                onQuestionsLoaded={(loaded) => {
+                  setQuestions(loaded)
+                  setQuestionsLoaded(true)
+                  setQuestionsError(null)
+                }}
+                onLoadError={(message) => {
+                  setQuestionsError(message)
+                  setQuestionsLoaded(false)
+                }}
                 onSearchBlur={() => {
                   if (step === 1) setNameAsked(true)
                 }}
@@ -366,8 +369,11 @@ export default function Checkoff() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    isPending={questionsLoading}
-                    onPress={() => void selectExperiment(experiment)}
+                    isPending={!questionsLoaded && questionsError === null}
+                    onPress={() => {
+                      setQuestionsError(null)
+                      setFinderReloadKey((key) => key + 1)
+                    }}
                   >
                     重试
                   </Button>
@@ -386,7 +392,7 @@ export default function Checkoff() {
                 onNext={() => setStep(4)}
                 onSkip={() => setStep(4)}
                 student={student}
-                loading={questionsLoading}
+                loading={!questionsLoaded}
                 questionIndex={questionIndex}
                 onQuestionIndex={handleQuestionIndex}
                 showPager={isMulti}

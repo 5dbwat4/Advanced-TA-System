@@ -1,4 +1,30 @@
+import type { Prisma } from '@prisma/client'
+
 import { prisma } from './prisma'
+
+/** 题库查询的关联加载（含 owner 与绑定实验数） */
+export const bankInclude = {
+  owner: { select: { id: true, username: true, name: true } },
+  _count: { select: { experiments: true } },
+} satisfies Prisma.QuestionBankInclude
+
+/** 题库对外结构：questions 由 JSON 字符串转为数组 */
+export function serializeBank(bank: Prisma.QuestionBankGetPayload<{ include: typeof bankInclude }>) {
+  return {
+    id: bank.id,
+    name: bank.name,
+    owner: bank.owner,
+    questions: parseBankQuestions(bank.questions),
+    experimentCount: bank._count.experiments,
+    createdAt: bank.createdAt,
+    updatedAt: bank.updatedAt,
+  }
+}
+
+/** 实验编号排序（中文环境数字感知，如 "Lab 2" < "Lab 10"） */
+export function compareExperimentMark(a: string, b: string): number {
+  return a.localeCompare(b, 'zh-CN', { numeric: true })
+}
 
 /** 解析题库的题目 id 列表 JSON，非法时返回空数组（不抛错） */
 export function parseBankQuestions(raw: string | null | undefined): string[] {

@@ -1,10 +1,10 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { parseBankQuestions } from '../lib/banks'
+import { compareExperimentMark, parseBankQuestions } from '../lib/banks'
+import { myClassIds, requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
 import { emitScoreChange, type ScoreChangeEvent } from '../lib/realtime'
-import { isStaff } from '../lib/roles'
 import { toScoreDto } from '../lib/score'
 
 const submitSchema = z.object({
@@ -21,24 +21,15 @@ const submitSchema = z.object({
 })
 
 export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 读取当前用户所属班级 id 列表 */
-  async function myClassIds(request: FastifyRequest): Promise<string[]> {
-    const { sub } = request.user as { sub: string }
-    const me = await prisma.user.findUnique({ where: { id: sub }, include: { classes: true } })
-    return (me?.classes ?? []).map((c) => c.id)
-  }
-
-  /** 验收面板数据（实验 / 学生 / 已有分数） */
+  /** 验收面板数据（实验 / 学生 / 已有分数，可内嵌指定实验的题目） */
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
-    const query = request.query as { classId?: unknown; experimentId?: unknown }
+    const query = request.query as { classId?: unknown; experimentId?: unknown; includeQuestions?: unknown }
     const classId = typeof query.classId === 'string' ? query.classId : ''
     const experimentId =
       typeof query.experimentId === 'string' && query.experimentId.length > 0 ? query.experimentId : undefined
+    const includeQuestions = query.includeQuestions === 'true' || query.includeQuestions === '1'
 
     const classIds = await myClassIds(request)
     if (!classId || !classIds.includes(classId)) {
@@ -57,7 +48,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         classId: e.classId,
         questionCount: parseBankQuestions(e.questionBank?.questions).length,
       }))
-      .sort((a, b) => a.mark.localeCompare(b.mark, 'zh-CN', { numeric: true }))
+      .sort((a, b) => compareExperimentMark(a.mark, b.mark))
 
     // 班级人数不多，一次返回完整名单供前端本地检索（含拼音）
     const students = await prisma.student.findMany({
@@ -78,15 +69,41 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
           })
         : []
 
-    return { experiments, students, scores: scores.map(toScoreDto) }
+    let questions: { id: string; question: string; answer: string }[] | undefined
+    if (includeQuestions && experimentId) {
+      const experiment = await prisma.experiment.findUnique({
+        where: { id: experimentId },
+        select: { questionBankId: true },
+      })
+      const bank = experiment?.questionBankId
+        ? await prisma.questionBank.findUnique({
+            where: { id: experiment.questionBankId },
+            select: { questions: true },
+          })
+        : null
+      const ids = parseBankQuestions(bank?.questions)
+
+      const questionRows =
+        ids.length > 0
+          ? await prisma.question.findMany({
+              where: { id: { in: ids } },
+              select: { id: true, question: true, answer: true },
+            })
+          : []
+      const byId = new Map(questionRows.map((row) => [row.id, row]))
+      questions = []
+      for (const id of ids) {
+        const row = byId.get(id)
+        if (row) questions.push(row)
+      }
+    }
+
+    return { experiments, students, scores: scores.map(toScoreDto), questions }
   })
 
   /** 实验题目列表（含答案） */
   fastify.get('/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
 
     const query = request.query as { experimentId?: unknown }
     const experimentId = typeof query.experimentId === 'string' ? query.experimentId : ''
@@ -131,10 +148,8 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 提交验收成绩（助教 / 教师） */
   fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
+    const { sub } = request.user as { sub: string }
 
     const parsed = submitSchema.safeParse(request.body)
     if (!parsed.success) {

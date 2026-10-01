@@ -149,8 +149,8 @@ model Class {
   name        String
   /// 2026-sys1 | 2026-sys2 | 2026-sys3
   type        String
-  /// 学在浙大 课程 / 班级 id（系统II 硬编码为 100199）
-  xzzdClassId String?
+  /// 学在浙大 课程 / 班级 id（系统II 硬编码为 100199），全局唯一（可空）
+  xzzdClassId String? @unique
   /// 最近一次获取 / 更新学生名单的时间
   lastRosterSyncAt DateTime?
   /// 课程级设置（JSON 字符串），如 { checkpointEnabled, checkpointRule, scoreRatioUnified, scoreRatio, experimentScoreRatios }

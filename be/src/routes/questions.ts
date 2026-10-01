@@ -3,8 +3,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { removeQuestionsFromBanks } from '../lib/banks'
+import { requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
-import { isStaff } from '../lib/roles'
 
 const questionInclude = {
   user: { select: { id: true, username: true, name: true } },
@@ -20,16 +20,22 @@ const updateQuestionSchema = z.object({
   answer: z.string().trim().min(1).max(20000).optional(),
 })
 
+const listQuestionsQuerySchema = z.object({
+  q: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
 export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
   /** 题目列表（支持关键词搜索 + 分页，含出题人） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
-    const query = request.query as { q?: unknown; limit?: unknown; offset?: unknown }
-    const keyword = typeof query.q === 'string' ? query.q.trim() : ''
-
-    const rawLimit = typeof query.limit === 'string' ? Number.parseInt(query.limit, 10) : 20
-    const rawOffset = typeof query.offset === 'string' ? Number.parseInt(query.offset, 10) : 0
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 20
-    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const parsedQuery = listQuestionsQuerySchema.safeParse(request.query)
+    if (!parsedQuery.success) {
+      return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
+    }
+    const keyword = parsedQuery.data.q?.trim() ?? ''
+    const limit = parsedQuery.data.limit
+    const offset = parsedQuery.data.offset
 
     const where = keyword ? { question: { contains: keyword } } : undefined
 
@@ -49,10 +55,8 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 新建题目（所有 staff 均可上传，出题人 = 当前用户） */
   fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub?: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
+    const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -72,10 +76,8 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 更新题目（仅出题人；其他 staff 可复制一份再改） */
   fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub?: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
+    const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -108,10 +110,8 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 复制题目（任意 staff，出题人 = 当前用户） */
   fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub?: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
+    const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -133,10 +133,8 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 删除题目（仅出题人），并清理所有题库中的引用 */
   fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub, role } = request.user as { sub?: string; role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
+    if (!requireStaff(request, reply)) return reply
+    const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }

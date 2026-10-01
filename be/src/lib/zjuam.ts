@@ -361,7 +361,6 @@ export async function listCourses(account: string, password: string): Promise<Zj
 
     for (let page = 1; page <= LIST_COURSES_MAX_PAGES; page += 1) {
       const pageCourses = await fetchPage(page, LIST_COURSES_PAGE_SIZE)
-      console.log(pageCourses)
 
       for (const course of pageCourses) {
         summaries.push({

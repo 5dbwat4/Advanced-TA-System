@@ -90,7 +90,7 @@ export default function FocusStudents() {
     data: tableData,
     loading: tableLoading,
     error: tableError,
-  } = useAsyncData(fetchClassTables, [])
+  } = useAsyncData(() => fetchClassTables(classId ?? undefined), [classId])
 
   const students = useMemo(() => tableData?.students ?? [], [tableData])
   const experiments = useMemo(() => tableData?.experiments ?? [], [tableData])

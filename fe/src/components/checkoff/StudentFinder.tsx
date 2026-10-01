@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import ChevronRight from '~icons/lucide/chevron-right'
 import ScanSearch from '~icons/lucide/scan-search'
-import { fetchCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
+import { fetchCheckoff, type CheckoffQuestion, type CheckoffStudent, type Score } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { matchStudent } from '@/lib/pinyin'
 
@@ -25,12 +25,20 @@ function summaryFor(scores: Score[]): string | null {
 export function StudentFinder({
   classId,
   experimentId,
+  reloadKey = 0,
+  includeQuestions = false,
   onSelect,
+  onQuestionsLoaded,
+  onLoadError,
   onSearchBlur,
 }: {
   classId: string
   experimentId: string
+  reloadKey?: number
+  includeQuestions?: boolean
   onSelect: (student: CheckoffStudent, scores: Score[]) => void
+  onQuestionsLoaded?: (questions: CheckoffQuestion[]) => void
+  onLoadError?: (message: string) => void
   onSearchBlur?: () => void
 }) {
   const [query, setQuery] = useState('')
@@ -43,18 +51,26 @@ export function StudentFinder({
     inputRef.current?.focus()
   }, [])
 
-  // 班级人数不多，一次加载完整名单，检索（含拼音）在前端完成
+  // 班级人数不多，一次加载完整名单（可选同请求内嵌题目），检索（含拼音）在前端完成
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchCheckoff({ classId, experimentId })
+    fetchCheckoff({ classId, experimentId, includeQuestions })
       .then((res) => {
         if (cancelled) return
         setStudents(res.students)
         setScores(res.scores)
+        if (includeQuestions) {
+          onQuestionsLoaded?.(res.questions ?? [])
+        }
       })
       .catch((error) => {
-        if (!cancelled) toast.error(getErrorMessage(error, '加载名单失败'))
+        if (cancelled) return
+        const message = getErrorMessage(error, '加载名单失败')
+        toast.error(message)
+        if (includeQuestions) {
+          onLoadError?.(getErrorMessage(error, '加载题目失败'))
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -62,7 +78,7 @@ export function StudentFinder({
     return () => {
       cancelled = true
     }
-  }, [classId, experimentId])
+  }, [classId, experimentId, reloadKey, includeQuestions, onQuestionsLoaded, onLoadError])
 
   const filtered = useMemo(
     () => students.filter((student) => matchStudent(query, student)),

@@ -1,31 +1,16 @@
-import type { Prisma } from '@prisma/client'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
-import { filterExistingQuestionIds, normalizeQuestionIds, parseBankQuestions } from '../../lib/banks'
+import {
+  bankInclude,
+  filterExistingQuestionIds,
+  normalizeQuestionIds,
+  parseBankQuestions,
+  serializeBank,
+} from '../../lib/banks'
 import { prisma } from '../../lib/prisma'
 import { jsonResult, runTool } from '../helpers'
 import type { McpPrincipal } from '../principal'
-
-const bankInclude = {
-  owner: { select: { id: true, username: true, name: true } },
-  _count: { select: { experiments: true } },
-} satisfies Prisma.QuestionBankInclude
-
-type BankWithInclude = Prisma.QuestionBankGetPayload<{ include: typeof bankInclude }>
-
-/** 题目集对外结构：questions 由 JSON 字符串转为数组 */
-function serializeBank(bank: BankWithInclude) {
-  return {
-    id: bank.id,
-    name: bank.name,
-    owner: bank.owner,
-    questions: parseBankQuestions(bank.questions),
-    experimentCount: bank._count.experiments,
-    createdAt: bank.createdAt,
-    updatedAt: bank.updatedAt,
-  }
-}
 
 async function loadQuestionsInOrder(ids: string[]) {
   if (ids.length === 0) return []
