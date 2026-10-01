@@ -1,4 +1,4 @@
-import { Button, Spinner, Tooltip } from '@heroui/react'
+import { Spinner, Tooltip } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { motion } from 'motion/react'
 import { QRCodeSVG } from 'qrcode.react'
@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import QrCode from '~icons/lucide/qr-code'
+import { IconAction } from '@/components/ui/IconAction'
 import { ProgressRing } from '@/components/ui/ProgressRing'
 import { useTotp } from '@/lib/totp'
 import { cn } from '@/lib/utils'
@@ -119,14 +120,12 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
           </Tooltip>
         </div>
 
-        <Tooltip delay={0}>
-          <Tooltip.Trigger className="inline-flex">
-            <Button size="sm" variant="secondary" isIconOnly aria-label="显示二维码">
-              <QrCode width={14} height={14} className="shrink-0" />
-            </Button>
-          </Tooltip.Trigger>
-          <Tooltip.Content placement="bottom" offset={8} className="w-auto max-w-none p-2">
-            <div className="flex flex-col items-center gap-2">
+        <IconAction
+          label="显示二维码"
+          variant="secondary"
+          placement="bottom"
+          tooltip={
+            <div className="flex w-auto max-w-none flex-col items-center gap-2">
               <QRCodeSVG
                 value={url}
                 size={168}
@@ -137,8 +136,10 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
               />
               <span className="text-xs text-fg-subtle">扫码在从机打开</span>
             </div>
-          </Tooltip.Content>
-        </Tooltip>
+          }
+        >
+          <QrCode width={14} height={14} className="shrink-0" />
+        </IconAction>
 
         <div className="flex items-center gap-2 text-xs font-semibold">
           <span

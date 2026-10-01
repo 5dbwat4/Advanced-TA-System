@@ -19,6 +19,7 @@ import School from '~icons/lucide/school'
 import UserRoundPlus from '~icons/lucide/user-round-plus'
 import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { SkeletonList } from '@/components/ui/SkeletonList'
@@ -450,10 +451,9 @@ export default function Scores() {
                 )}
               </Button>
             )}
-            <Button size="sm" variant="ghost" isDisabled={loading} onPress={reload}>
+            <IconAction label="刷新" isDisabled={loading} onPress={reload}>
               <RefreshCw width={15} height={15} className="shrink-0" />
-              刷新
-            </Button>
+            </IconAction>
           </>
         }
       />

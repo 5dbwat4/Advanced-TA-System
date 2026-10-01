@@ -13,6 +13,7 @@ import Sparkles from '~icons/lucide/sparkles'
 import Trash2 from '~icons/lucide/trash-2'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import { Card, EmptyState } from '@/components/ui/Card'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
 import {
@@ -510,15 +511,13 @@ export default function LlmConnect() {
                         <code className="min-w-0 flex-1 break-all rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs text-fg">
                           {newToken}
                         </code>
-                        <Button
-                          isIconOnly
-                          size="sm"
+                        <IconAction
+                          label="复制令牌"
                           variant="secondary"
-                          aria-label="复制令牌"
                           onPress={() => copyText(newToken, '令牌')}
                         >
                           <Copy width={15} height={15} className="shrink-0" />
-                        </Button>
+                        </IconAction>
                       </div>
                     </div>
 
@@ -528,15 +527,9 @@ export default function LlmConnect() {
                         <pre className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap rounded-xl border border-line bg-sunken p-3 font-mono text-[11px] text-fg">
                           {agentPrompt}
                         </pre>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="ghost"
-                          aria-label="复制提示词"
-                          onPress={() => copyText(agentPrompt, '提示词')}
-                        >
-                                      <Copy width={14} height={14} className="shrink-0" />
-                        </Button>
+                        <IconAction label="复制提示词" onPress={() => copyText(agentPrompt, '提示词')}>
+                          <Copy width={14} height={14} className="shrink-0" />
+                        </IconAction>
                       </div>
                     </div>
 
@@ -584,15 +577,12 @@ export default function LlmConnect() {
                                     <pre className="min-w-0 flex-1 overflow-auto rounded-xl border border-line bg-sunken p-3 font-mono text-[11px] text-fg">
                                       {guide.extra}
                                     </pre>
-                                    <Button
-                                      isIconOnly
-                                      size="sm"
-                                      variant="ghost"
-                                      aria-label="复制命令"
+                                    <IconAction
+                                      label="复制命令"
                                       onPress={() => copyText(guide.extra ?? '', '命令')}
                                     >
-                          <Copy width={14} height={14} className="shrink-0" />
-                                    </Button>
+                                      <Copy width={14} height={14} className="shrink-0" />
+                                    </IconAction>
                                   </div>
                                 )}
                               </Accordion.Body>

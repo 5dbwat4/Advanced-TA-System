@@ -15,6 +15,7 @@ import Minus from '~icons/lucide/minus'
 import Shuffle from '~icons/lucide/shuffle'
 import SkipForward from '~icons/lucide/skip-forward'
 import X from '~icons/lucide/x'
+import { IconAction } from '@/components/ui/IconAction'
 import { Markdown } from '@/components/ui/Markdown'
 import type { CheckoffQuestion, CheckoffStudent } from '@/lib/api'
 import type { IconComponent } from '@/lib/icon'
@@ -102,14 +103,16 @@ function AnswerReveal({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <Button size="sm" variant="ghost" onPress={() => onToggle(questionId)}>
+      <IconAction
+        label={revealed[questionId] ? '隐藏答案' : '显示答案'}
+        onPress={() => onToggle(questionId)}
+      >
         {revealed[questionId] ? (
           <EyeOff width={14} height={14} className="shrink-0" />
         ) : (
           <Eye width={14} height={14} className="shrink-0" />
         )}
-        {revealed[questionId] ? '隐藏答案' : '显示答案'}
-      </Button>
+      </IconAction>
       <AnimatePresence initial={false}>
         {revealed[questionId] && (
           <motion.div

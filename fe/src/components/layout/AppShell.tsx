@@ -11,6 +11,7 @@ import LogOut from '~icons/lucide/log-out'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
+import { IconAction } from '@/components/ui/IconAction'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
 import { MOBILE_NAV_ITEMS, MORE_PATH, NAV_ITEMS, isMoreSection } from '@/lib/nav'
@@ -152,15 +153,9 @@ export function AppShell() {
                   {user?.username ?? '未登录'}
                 </Tooltip.Content>
               </Tooltip>
-              <Button
-                isIconOnly
-                variant="ghost"
-                size="sm"
-                aria-label="退出登录"
-                onPress={handleLogout}
-              >
+              <IconAction label="退出登录" onPress={handleLogout}>
                 <LogOut width={16} height={16} className="shrink-0 text-fg-muted" />
-              </Button>
+              </IconAction>
             </div>
           ) : (
             <div className="flex items-center gap-3 rounded-xl px-2 py-2">
@@ -173,15 +168,9 @@ export function AppShell() {
                   {user?.studentId ?? '—'}
                 </div>
               </div>
-              <Button
-                isIconOnly
-                variant="ghost"
-                size="sm"
-                aria-label="退出登录"
-                onPress={handleLogout}
-              >
+              <IconAction label="退出登录" onPress={handleLogout}>
                 <LogOut width={16} height={16} className="shrink-0 text-fg-muted" />
-              </Button>
+              </IconAction>
             </div>
           )}
         </div>
@@ -201,20 +190,19 @@ export function AppShell() {
             </div>
             <span className="text-sm font-bold">TA 助教台</span>
           </div>
-          <Button
-            isIconOnly
-            variant="ghost"
-            size="sm"
-            className="hidden md:inline-flex"
-            aria-label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
-            onPress={toggleSidebar}
-          >
-            {sidebarCollapsed ? (
-              <PanelLeftOpen width={18} height={18} className="shrink-0 text-fg-muted" />
-            ) : (
-              <PanelLeftClose width={18} height={18} className="shrink-0 text-fg-muted" />
-            )}
-          </Button>
+          <div className="hidden md:inline-flex">
+            <IconAction
+              label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
+              placement="bottom"
+              onPress={toggleSidebar}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen width={18} height={18} className="shrink-0 text-fg-muted" />
+              ) : (
+                <PanelLeftClose width={18} height={18} className="shrink-0 text-fg-muted" />
+              )}
+            </IconAction>
+          </div>
           <div className="flex items-center gap-1">
             {hasXzzd && (
               <School
@@ -258,16 +246,11 @@ export function AppShell() {
               </Dropdown>
             )}
             <ThemeToggle />
-            <Button
-              isIconOnly
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
-              aria-label="退出登录"
-              onPress={handleLogout}
-            >
-              <LogOut width={16} height={16} className="shrink-0" />
-            </Button>
+            <div className="md:hidden">
+              <IconAction label="退出登录" onPress={handleLogout}>
+                <LogOut width={16} height={16} className="shrink-0" />
+              </IconAction>
+            </div>
           </div>
         </header>
 

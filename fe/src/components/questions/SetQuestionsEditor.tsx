@@ -7,6 +7,7 @@ import Check from '~icons/lucide/check'
 import ChevronDown from '~icons/lucide/chevron-down'
 import ListChecks from '~icons/lucide/list-checks'
 import X from '~icons/lucide/x'
+import { IconAction } from '@/components/ui/IconAction'
 import {
   fetchBankQuestions,
   listQuestions,
@@ -154,14 +155,9 @@ export function SetQuestionsEditor({ bank, onSaved }: { bank: QuestionBank; onSa
                   className="flex items-center gap-2 rounded-lg border border-line bg-elevated px-2.5 py-1.5"
                 >
                   <span className="min-w-0 flex-1 truncate text-xs">{plain(item.question)}</span>
-                  <button
-                    type="button"
-                    aria-label="移出"
-                    onClick={() => toggle(item)}
-                    className="shrink-0 text-fg-subtle transition-colors hover:text-danger"
-                  >
-                    <X width={14} height={14} className="shrink-0" />
-                  </button>
+                  <IconAction label="移出" onPress={() => toggle(item)}>
+                    <X width={14} height={14} className="shrink-0 text-fg-subtle" />
+                  </IconAction>
                 </div>
               )
             })}

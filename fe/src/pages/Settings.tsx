@@ -16,6 +16,7 @@ import { PreferenceSection } from '@/components/settings/PreferenceSection'
 import { SystemSection } from '@/components/settings/SystemSection'
 import { ZjuamSection } from '@/components/settings/ZjuamSection'
 import { Card } from '@/components/ui/Card'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
@@ -152,15 +153,9 @@ export default function Settings() {
               </div>
               <div className="mt-1 flex items-center gap-1.5">
                 <div className="min-w-0 flex-1 truncate text-sm text-fg">{user?.username ?? '—'}</div>
-                <Button
-                  isIconOnly
-                  size="sm"
-                  variant="ghost"
-                  aria-label="修改用户名"
-                  onPress={openNameEdit}
-                >
+                <IconAction label="修改用户名" onPress={openNameEdit}>
                   <Pencil width={14} height={14} className="shrink-0" />
-                </Button>
+                </IconAction>
               </div>
             </div>
             <div className="rounded-xl border border-line bg-sunken px-4 py-3">
@@ -274,15 +269,13 @@ export default function Settings() {
                       {' · '}
                       {passkey.deviceType === 'multiDevice' ? '同步' : '本设备'}
                     </div>
-                    <PendingButton
-                      isIconOnly
-                      size="sm"
-                      variant="ghost"
-                      aria-label="解绑"
+                    <IconAction
+                      label="解绑"
                       isPending={removingId === passkey.id}
                       onPress={() => removePasskey(passkey.id)}
-                      icon={Trash2}
-                    />
+                    >
+                      <Trash2 width={16} height={16} className="shrink-0" />
+                    </IconAction>
                   </div>
                 ))
               )}

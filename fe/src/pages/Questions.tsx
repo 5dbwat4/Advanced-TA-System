@@ -223,14 +223,14 @@ function QuestionsPanel() {
           <Plus width={16} height={16} className="shrink-0" />
           新建题目
         </Button>
-        <Button
-          isIconOnly
+        <IconAction
+          label="连接你的 Agent"
           variant="secondary"
-          aria-label="连接你的Agent"
+          size="md"
           onPress={() => navigate('/console/llm-connect')}
         >
-            <Bot width={16} height={16} className="shrink-0" />
-        </Button>
+          <Bot width={16} height={16} className="shrink-0" />
+        </IconAction>
       </div>
 
       {!loading && (
@@ -304,23 +304,23 @@ function QuestionsPanel() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-1">
-                  <Button size="sm" variant="ghost" onPress={() => setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }))}>
+                  <IconAction
+                    label={expanded[item.id] ? '隐藏答案' : '显示答案'}
+                    onPress={() => setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }))}
+                  >
                     {expanded[item.id] ? (
                       <EyeOff width={14} height={14} className="shrink-0" />
                     ) : (
                       <Eye width={14} height={14} className="shrink-0" />
                     )}
-                    {expanded[item.id] ? '隐藏答案' : '显示答案'}
-                  </Button>
-                  <Button size="sm" variant="ghost" onPress={() => void copyText(item.question, '题目')}>
+                  </IconAction>
+                  <IconAction label="复制题目" onPress={() => void copyText(item.question, '题目')}>
                     <Copy width={14} height={14} className="shrink-0" />
-                    复制题目
-                  </Button>
+                  </IconAction>
                   {expanded[item.id] && (
-                    <Button size="sm" variant="ghost" onPress={() => void copyText(item.answer, '答案')}>
+                    <IconAction label="复制答案" onPress={() => void copyText(item.answer, '答案')}>
                       <Copy width={14} height={14} className="shrink-0" />
-                      复制答案
-                    </Button>
+                    </IconAction>
                   )}
                 </div>
 
@@ -561,14 +561,14 @@ function SetsPanel() {
             )}
             新建题目集
           </Button>
-          <Button
-            isIconOnly
+          <IconAction
+            label="连接你的 Agent"
             variant="secondary"
-            aria-label="连接你的Agent"
+            size="md"
             onPress={() => navigate('/console/llm-connect')}
           >
-          <Bot width={16} height={16} className="shrink-0" />
-          </Button>
+            <Bot width={16} height={16} className="shrink-0" />
+          </IconAction>
         </div>
       </div>
 
@@ -661,26 +661,22 @@ function SetsPanel() {
                   </span>
 
                   <div className="ml-auto flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                    <IconAction
+                      label="重命名"
                       onPress={() => {
                         setRenamingId(bank.id)
                         setRenameValue(bank.name)
                       }}
                     >
                       <Pen width={14} height={14} className="shrink-0" />
-                      重命名
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                    </IconAction>
+                    <IconAction
+                      label="复制"
                       isPending={busyId === bank.id}
                       onPress={() => duplicate(bank.id)}
                     >
                       <Copy width={14} height={14} className="shrink-0" />
-                      复制
-                    </Button>
+                    </IconAction>
                     <IconAction
                       label="删除"
                       onPress={() => {

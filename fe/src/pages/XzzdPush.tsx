@@ -5,7 +5,6 @@ import {
   Spinner,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
 } from '@heroui/react'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -19,6 +18,7 @@ import RefreshCw from '~icons/lucide/refresh-cw'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import Upload from '~icons/lucide/upload'
 import { Card, EmptyState } from '@/components/ui/Card'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
@@ -268,23 +268,16 @@ export default function XzzdPush() {
                   报告作业
                 </ToggleButton>
               </ToggleButtonGroup>
-              <Tooltip delay={0}>
-                <Tooltip.Trigger className="inline-flex">
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="secondary"
-                    aria-label="重新获取"
-                    isDisabled={loading}
-                    onPress={() => void loadPreview()}
-                  >
-                    <RefreshCw width={15} height={15} className="shrink-0" />
-                  </Button>
-                </Tooltip.Trigger>
-                <Tooltip.Content placement="bottom" showArrow>
-                  重新获取
-                </Tooltip.Content>
-              </Tooltip>
+              <IconAction
+                label="重新获取"
+                tooltip="重新获取"
+                placement="bottom"
+                variant="secondary"
+                isDisabled={loading}
+                onPress={() => void loadPreview()}
+              >
+                <RefreshCw width={15} height={15} className="shrink-0" />
+              </IconAction>
               {loading && <Spinner size="sm" />}
             </div>
           </div>

@@ -16,6 +16,7 @@ import { StudentFinder } from '@/components/checkoff/StudentFinder'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
 import { EmptyState } from '@/components/ui/Card'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   fetchCheckoff,
@@ -297,10 +298,9 @@ export default function Checkoff() {
       <PageHeader
         title="验收"
         actions={
-          <Button size="sm" variant="ghost" onPress={prefsState.open}>
+          <IconAction label="偏好" onPress={prefsState.open}>
             <Settings2 width={15} height={15} className="shrink-0" />
-            偏好
-          </Button>
+          </IconAction>
         }
       />
 

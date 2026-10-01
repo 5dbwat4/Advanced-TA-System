@@ -33,6 +33,7 @@ import X from '~icons/lucide/x'
 import { ScoreRatioEditor } from '@/components/settings/ScoreRatioEditor'
 import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
+import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
@@ -390,65 +391,38 @@ export default function ExperimentDetail() {
             {showTimelineEditor ? (
               <>
                 {hasTimeline && (
-                  <Tooltip delay={0}>
-                    <Tooltip.Trigger className="inline-flex">
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="secondary"
-                        isDisabled={savingTimeline}
-                        aria-label="取消编辑"
-                        onPress={cancelEditTimeline}
-                      >
-                        <X width={15} height={15} className="shrink-0" />
-                      </Button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content placement="bottom" showArrow>
-                      取消
-                    </Tooltip.Content>
-                  </Tooltip>
+                  <IconAction
+                    label="取消编辑"
+                    tooltip="取消"
+                    placement="bottom"
+                    variant="secondary"
+                    isDisabled={savingTimeline}
+                    onPress={cancelEditTimeline}
+                  >
+                    <X width={15} height={15} className="shrink-0" />
+                  </IconAction>
                 )}
-                <Tooltip delay={0}>
-                  <Tooltip.Trigger className="inline-flex">
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      isDisabled={!dirty}
-                      isPending={savingTimeline}
-                      aria-label="保存时间线"
-                      onPress={saveTimeline}
-                    >
-                      {({ isPending }) =>
-                        isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : (
-                          <Check width={16} height={16} className="shrink-0" />
-                        )
-                      }
-                    </Button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Content placement="bottom" showArrow>
-                    保存
-                  </Tooltip.Content>
-                </Tooltip>
+                <IconAction
+                  label="保存时间线"
+                  tooltip="保存"
+                  placement="bottom"
+                  isDisabled={!dirty}
+                  isPending={savingTimeline}
+                  onPress={saveTimeline}
+                >
+                  <Check width={16} height={16} className="shrink-0" />
+                </IconAction>
               </>
             ) : (
-              <Tooltip delay={0}>
-                <Tooltip.Trigger className="inline-flex">
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="secondary"
-                    aria-label="编辑时间线"
-                    onPress={() => setEditingTimeline(true)}
-                  >
-                    <Pencil width={15} height={15} className="shrink-0" />
-                  </Button>
-                </Tooltip.Trigger>
-                <Tooltip.Content placement="bottom" showArrow>
-                  编辑
-                </Tooltip.Content>
-              </Tooltip>
+              <IconAction
+                label="编辑时间线"
+                tooltip="编辑"
+                placement="bottom"
+                variant="secondary"
+                onPress={() => setEditingTimeline(true)}
+              >
+                <Pencil width={15} height={15} className="shrink-0" />
+              </IconAction>
             )}
           </div>
         </div>
@@ -577,21 +551,14 @@ export default function ExperimentDetail() {
                   从上游同步提交情况
                 </Button>
               </div>
-              <Tooltip delay={0}>
-                <Tooltip.Trigger className="inline-flex">
-                  <Button
-                    isIconOnly
-                    variant="secondary"
-                    aria-label="偏好设置"
-                    onPress={preferencesState.open}
-                  >
-                    <SlidersHorizontal width={16} height={16} className="shrink-0" />
-                  </Button>
-                </Tooltip.Trigger>
-                <Tooltip.Content placement="top" showArrow>
-                  偏好设置
-                </Tooltip.Content>
-              </Tooltip>
+              <IconAction
+                label="偏好设置"
+                variant="secondary"
+                size="md"
+                onPress={preferencesState.open}
+              >
+                <SlidersHorizontal width={16} height={16} className="shrink-0" />
+              </IconAction>
             </div>
           </div>
         </div>
