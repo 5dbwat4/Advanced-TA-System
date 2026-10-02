@@ -16,6 +16,9 @@ const ACTIVITY_URL = 'https://courses.zju.edu.cn/api/activities'
 /** 学在浙大课程活动接口基址（提交评分等） */
 const COURSE_ACTIVITIES_URL = 'https://courses.zju.edu.cn/api/course/activities'
 
+/** 学在浙大上传文件接口基址（/blob 会 302 到 tcmedia 签名下载链接） */
+const UPLOADS_URL = 'https://courses.zju.edu.cn/api/uploads'
+
 /** 提交评分接口的 fields 参数 */
 const SUBMISSION_SCORE_FIELDS = 'id,score,instructor_comment,rubric_score,final_score,marked_submitted'
 
@@ -506,6 +509,95 @@ export async function fetchHomeworkSubmissions(
     )
     const submissions = (payload as { submissions?: ZjuamHomeworkSubmission[] }).submissions
     return Array.isArray(submissions) ? submissions : []
+  })
+}
+
+/** 学在浙大提交附件（submission_list 接口，已裁剪为下载所需字段） */
+export type ZjuamSubmissionAttachment = {
+  /** 附件 id */
+  id: number
+  /** 文件名 */
+  name: string
+  /** 文件大小（字节） */
+  size: number
+  /** tcmedia 下载 key（hex） */
+  key: string
+  /** tcmedia 签名下载链接（HEAD /api/uploads/{id}/blob 的 Location）；获取失败为 null */
+  url: string | null
+}
+
+interface SubmissionListResponse {
+  list?: Array<{
+    uploads?: Array<{
+      id?: unknown
+      name?: unknown
+      size?: unknown
+      key?: unknown
+    }>
+  }>
+}
+
+/**
+ * HEAD 上传文件接口，取 302 Location（tcmedia 签名下载链接）。
+ * 鉴权失效时抛出 ZJUAM_AUTH_FAILED；其余异常按无链接返回 null。
+ */
+async function fetchUploadBlobUrl(client: COURSES, uploadId: number): Promise<string | null> {
+  let response: Response
+  try {
+    response = await client.fetch(`${UPLOADS_URL}/${uploadId}/blob`, {
+      method: 'HEAD',
+      redirect: 'manual',
+    })
+  } catch {
+    return null
+  }
+
+  if (response.status === 401) {
+    throw new ZjuamError('ZJUAM_AUTH_FAILED', '统一身份认证账号或密码错误')
+  }
+
+  return response.headers.get('location')
+}
+
+/**
+ * 拉取某学生（person id）在指定作业（activityId）下的提交附件列表。
+ * 只保留下载所需字段：文件名 / 大小 / id / key（hex），按附件 id 去重；
+ * 并逐一 HEAD 上传文件接口，附带 tcmedia 签名下载链接（获取失败为 null）。
+ */
+export async function fetchStudentSubmissionAttachments(
+  account: string,
+  password: string,
+  activityId: string,
+  personId: number,
+): Promise<ZjuamSubmissionAttachment[]> {
+  return withCourses(account, password, async (client) => {
+    const payload = await fetchCourseJson(
+      client,
+      `${ACTIVITY_URL}/${activityId}/students/${personId}/submission_list`,
+    )
+
+    const list = (payload as SubmissionListResponse).list
+    const seen = new Set<number>()
+    const attachments: Array<Omit<ZjuamSubmissionAttachment, 'url'>> = []
+
+    for (const entry of Array.isArray(list) ? list : []) {
+      if (!Array.isArray(entry.uploads)) continue
+      for (const upload of entry.uploads) {
+        const id = Number(upload.id)
+        const name = String(upload.name ?? '').trim()
+        const key = String(upload.key ?? '').trim()
+        if (!Number.isInteger(id) || id <= 0 || !name || !key || seen.has(id)) continue
+        seen.add(id)
+        attachments.push({ id, name, size: Number(upload.size ?? 0), key })
+      }
+    }
+
+    return Promise.all(
+      attachments.map(async (attachment) => ({
+        ...attachment,
+        url: await fetchUploadBlobUrl(client, attachment.id),
+      })),
+    )
   })
 }
 

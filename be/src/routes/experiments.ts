@@ -17,6 +17,7 @@ import {
   fetchHomeworkScores,
   fetchHomeworkSubmissions,
   fetchHomeworkSyncData,
+  fetchStudentSubmissionAttachments,
   listHomeworkActivities,
   pushSubmissionScore,
   type ZjuamHomeworkSubmission,
@@ -174,6 +175,51 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     return { experiments }
   })
 
+  /**
+   * 指定课程的实验列表 + 截止时间最早的进行中实验编号（mark）。
+   * 进行中：已发布（publishTime 为空视为已发布）且验收 / 报告截止时间至少一个未过期；
+   * 截止时间取未过期者中最早的一个；无进行中实验时 currentMark 为 null。
+   */
+  fastify.get(
+    '/with-current',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const query = request.query as { classId?: unknown }
+      const classId = typeof query.classId === 'string' ? query.classId : ''
+      if (!classId) {
+        return reply.code(400).send({ error: 'INVALID_QUERY', message: '缺少 classId 参数' })
+      }
+
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+      }
+
+      const now = Date.now()
+      const experiments = await prisma.experiment.findMany({
+        where: { classId },
+        include: experimentInclude,
+      })
+      experiments.sort((a, b) => compareExperimentMark(a.mark, b.mark))
+
+      let currentMark: string | null = null
+      let earliestDeadline = Number.POSITIVE_INFINITY
+      for (const experiment of experiments) {
+        if (experiment.publishTime && experiment.publishTime.getTime() > now) continue
+        const upcoming = [experiment.checkoffDeadline, experiment.reportDeadline]
+          .filter((deadline): deadline is Date => deadline !== null && deadline.getTime() > now)
+        if (upcoming.length === 0) continue
+        const nearest = Math.min(...upcoming.map((deadline) => deadline.getTime()))
+        if (nearest < earliestDeadline) {
+          earliestDeadline = nearest
+          currentMark = experiment.mark
+        }
+      }
+
+      return { experiments, currentMark }
+    },
+  )
+
   /** 实验详情 */
   fastify.get('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string }
@@ -242,6 +288,37 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
           xzzdClassId,
         )
         return reply.send({ homeworks })
+      } catch (error) {
+        return sendZjuamError(reply, error)
+      }
+    },
+  )
+
+  /**
+   * 拉取某学生（学在浙大 person id）在绑定作业下的提交附件列表（仅元数据）。
+   * kind=checkout 取验收作业，kind=report 取报告作业；不写库。
+   */
+  fastify.post(
+    '/:id/xzzd-submissions/:personId',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const { id, personId: rawPersonId } = request.params as { id: string; personId: string }
+      const personId = Number(rawPersonId)
+      if (!Number.isInteger(personId) || personId <= 0) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const context = await resolveXzzdPushContext(request, reply, id, request.body)
+      if (!context) return reply
+
+      try {
+        const attachments = await fetchStudentSubmissionAttachments(
+          context.account,
+          context.password,
+          context.activityId,
+          personId,
+        )
+        return reply.send({ activityId: context.activityId, attachments })
       } catch (error) {
         return sendZjuamError(reply, error)
       }
@@ -580,6 +657,11 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     const klass = await prisma.class.findUnique({ where: { id: classId } })
     if (!klass) {
       return reply.code(404).send({ error: 'CLASS_NOT_FOUND', message: '课程不存在' })
+    }
+
+    const classIds = await myClassIds(request)
+    if (!classIds.includes(classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级的实验' })
     }
 
     if (questionBankId) {

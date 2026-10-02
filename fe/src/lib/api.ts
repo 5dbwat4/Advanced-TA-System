@@ -362,6 +362,18 @@ export function updateExperiment(
   })
 }
 
+export type ExperimentsWithCurrent = {
+  experiments: Experiment[]
+  /** 截止时间最早的进行中实验编号；无进行中实验时为 null */
+  currentMark: string | null
+}
+
+export function fetchExperimentsWithCurrent(classId: string): Promise<ExperimentsWithCurrent> {
+  return apiFetch<ExperimentsWithCurrent>(
+    `/api/experiments/with-current?classId=${encodeURIComponent(classId)}`,
+  )
+}
+
 export type ZjuamHomework = {
   id: number
   title: string
@@ -453,6 +465,30 @@ export function fetchXzzdPushPreview(
   const local = getZjuamCredential()
   const body = local ? { kind, account: local.account, password: local.password } : { kind }
   return apiFetch<ZjuamHomeworkSyncData>(`/api/experiments/${experimentId}/xzzd-push/preview`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 学在浙大提交附件（submission_list 接口裁剪） */
+export type ZjuamSubmissionAttachment = {
+  id: number
+  name: string
+  size: number
+  /** tcmedia 下载 key（hex） */
+  key: string
+  /** tcmedia 签名下载链接；获取失败为 null */
+  url: string | null
+}
+
+export function fetchXzzdSubmissionAttachments(
+  experimentId: string,
+  personId: number,
+  kind: 'checkout' | 'report' = 'report',
+): Promise<{ activityId: string; attachments: ZjuamSubmissionAttachment[] }> {
+  const local = getZjuamCredential()
+  const body = local ? { kind, account: local.account, password: local.password } : { kind }
+  return apiFetch(`/api/experiments/${experimentId}/xzzd-submissions/${personId}`, {
     method: 'POST',
     body: JSON.stringify(body),
   })

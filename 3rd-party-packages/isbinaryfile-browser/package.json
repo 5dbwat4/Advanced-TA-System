@@ -1,0 +1,30 @@
+{
+  "name": "isbinaryfile-browser",
+  "version": "1.0.0",
+  "description": "Browser port of isbinaryfile (based on v5.0.2): detect whether a buffer is binary. No Node.js dependencies, ESM, TypeScript types included.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "binary",
+    "text",
+    "isbinary",
+    "istext",
+    "browser",
+    "buffer"
+  ],
+  "license": "MIT"
+}
