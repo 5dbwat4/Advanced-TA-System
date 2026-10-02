@@ -41,10 +41,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  questions    Question[]
-  banks        QuestionBank[]
-  tokens       PersonalAccessToken[]
-  gradedScores Score[]               @relation("ScoreGrader")
+  questions     Question[]
+  banks         QuestionBank[]
+  tokens        PersonalAccessToken[]
+  gradedScores  Score[]               @relation("ScoreGrader")
+  criteria      Criteria[]
+  reportReviews ReportReview[]        @relation("ReportReviewRemarkBy")
 }
 
 /// 实验
@@ -82,7 +84,8 @@ model Experiment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  scores Score[]
+  scores        Score[]
+  reportReviews ReportReview[]
 
   /// 学在浙大作业缓存（一对一）
   xzzdHomework XzzdHomework?
@@ -180,6 +183,7 @@ model Student {
   scores           Score[]
   checkpointClaims CheckpointClaimed[]
   focusStudents    FocusStudent[]
+  reportReviews    ReportReview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -309,6 +313,44 @@ model PersonalAccessToken {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// 报告批阅记录：每个 (学生, 实验) 一条，保存评分标准的勾选/给分/附注
+model ReportReview {
+  /// 学生（Student.stuId）
+  stuId        String
+  student      Student    @relation(fields: [stuId], references: [stuId], onDelete: Cascade)
+  /// 实验 id
+  experimentId String
+  experiment   Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  /// 评分标准分享码（48 位 hex）
+  ruleId       String
+  /// 批阅内容（JSON 字符串）：每项选中/range 给分/appendix 等
+  ruleContent  String
+  /// 最后批阅人（账号删除时置空）
+  remarkById   String?
+  remarkBy     User?      @relation("ReportReviewRemarkBy", fields: [remarkById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([stuId, experimentId])
+  @@index([experimentId])
+  @@index([ruleId])
+  @@index([remarkById])
+}
+
+/// 评分标准分享（KV）：key 为随机 48 位 hex 分享码
+model Criteria {
+  /// 分享码（48 位 hex）
+  key       String   @id
+  /// 评分标准内容（JSON 字符串）
+  payload   String
+  creatorId String
+  creator   User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([creatorId])
 }
 
 /// MCP 工具调用审计日志

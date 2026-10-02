@@ -1,30 +1,38 @@
 {
   "name": "isbinaryfile-browser",
-  "version": "1.0.0",
-  "description": "Browser port of isbinaryfile (based on v5.0.2): detect whether a buffer is binary. No Node.js dependencies, ESM, TypeScript types included.",
+  "version": "6.0.0",
+  "description": "Browser port of isbinaryfile 6.0.0: detect whether a Uint8Array is binary. No Node.js dependencies, ESM, TypeScript types included.",
   "type": "module",
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "default": "./index.js"
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
     }
   },
   "files": [
-    "index.js",
-    "index.d.ts",
+    "lib/**/*",
     "README.md",
     "LICENSE"
   ],
   "sideEffects": false,
   "keywords": [
-    "binary",
     "text",
-    "isbinary",
+    "binary",
+    "encoding",
     "istext",
+    "is text",
+    "isbinary",
+    "is binary",
+    "is text or binary",
+    "is text or binary file",
+    "isbinaryfile",
+    "is binary file",
+    "istextfile",
+    "is text file",
     "browser",
-    "buffer"
+    "uint8array"
   ],
   "license": "MIT"
 }

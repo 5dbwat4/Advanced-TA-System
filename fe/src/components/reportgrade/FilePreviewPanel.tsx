@@ -322,9 +322,9 @@ export function FilePreviewPanel({
             progress={currentFile?.progress ?? null}
           />
         ) : fileExtension(active.name) === 'zip' ? (
-          <ZipViewer bytes={currentFile.bytes} />
+          <ZipViewer bytes={currentFile.bytes} attachmentId={active.id} />
         ) : (
-          <FileViewer name={active.name} bytes={currentFile.bytes} />
+          <FileViewer name={active.name} bytes={currentFile.bytes} storageKey={`${active.id}`} />
         )}
       </div>
     </div>
@@ -368,7 +368,7 @@ function DownloadingHint({
   )
 }
 
-function ZipViewer({ bytes }: { bytes: Uint8Array }) {
+function ZipViewer({ bytes, attachmentId }: { bytes: Uint8Array; attachmentId: number }) {
   const entries = useMemo(() => {
     try {
       return Object.entries(unzipSync(bytes))
@@ -432,7 +432,13 @@ function ZipViewer({ bytes }: { bytes: Uint8Array }) {
         </div>
       )}
       <div className="min-w-0 flex-1">
-        {active && <FileViewer name={active.name} bytes={active.data} />}
+        {active && (
+          <FileViewer
+            name={active.name}
+            bytes={active.data}
+            storageKey={`${attachmentId}/${active.name}`}
+          />
+        )}
       </div>
       {!sidebarOpen && (
         <div className="absolute left-3 top-3 z-20">
@@ -452,9 +458,17 @@ function ZipViewer({ bytes }: { bytes: Uint8Array }) {
   )
 }
 
-function FileViewer({ name, bytes }: { name: string; bytes: Uint8Array }) {
+function FileViewer({
+  name,
+  bytes,
+  storageKey,
+}: {
+  name: string
+  bytes: Uint8Array
+  storageKey?: string
+}) {
   const kind = detectFileKind(name)
-  if (kind === 'pdf') return <PdfViewer bytes={bytes} />
+  if (kind === 'pdf') return <PdfViewer bytes={bytes} storageKey={storageKey} />
   if (kind === 'image') return <ImagePreview name={name} bytes={bytes} />
   if (isProbablyText(bytes)) return <TextPreview name={name} bytes={bytes} />
   return (

@@ -852,3 +852,46 @@ export function importDevBoards(
     body: JSON.stringify({ classId, rows }),
   })
 }
+
+export function saveCriteria(payload: unknown): Promise<{ key: string; createdAt: string }> {
+  return apiFetch<{ key: string; createdAt: string }>('/api/criteria', {
+    method: 'POST',
+    body: JSON.stringify({ payload }),
+  })
+}
+
+export function fetchCriteria(key: string): Promise<{ payload: unknown; createdAt: string }> {
+  return apiFetch<{ payload: unknown; createdAt: string }>(`/api/criteria/${key}`)
+}
+
+export type ReportReview = {
+  stuId: string
+  experimentId: string
+  ruleId: string
+  ruleContent: unknown
+  remarkById: string | null
+  remarkByName: string | null
+  updatedAt: string
+}
+
+export async function fetchReportReview(
+  stuId: string,
+  experimentId: string,
+): Promise<ReportReview | null> {
+  const res = await apiFetch<{ review: ReportReview | null }>(
+    `/api/report-reviews?stuId=${encodeURIComponent(stuId)}&experimentId=${encodeURIComponent(experimentId)}`,
+  )
+  return res.review
+}
+
+export function saveReportReview(body: {
+  stuId: string
+  experimentId: string
+  ruleId: string
+  ruleContent: unknown
+}): Promise<{ review: ReportReview }> {
+  return apiFetch<{ review: ReportReview }>('/api/report-reviews', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}

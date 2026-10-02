@@ -19,6 +19,7 @@ import NewCourse from '@/pages/NewCourse'
 import LlmConnect from '@/pages/LlmConnect'
 import More from '@/pages/More'
 import Questions from '@/pages/Questions'
+import ReportCriteria from '@/pages/ReportCriteria'
 import ReportGrade from '@/pages/ReportGrade'
 import Reports from '@/pages/Reports'
 import Scores from '@/pages/Scores'
@@ -38,6 +39,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route path="/setup" element={<Setup />} />
         <Route path="/console/reports/:id" element={<ReportGrade />} />
+        <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
         <Route path="/console" element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="checkoff" element={<Checkoff />} />

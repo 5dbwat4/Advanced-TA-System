@@ -25,16 +25,27 @@ const PAGE_PADDING = 24
 
 type BaseSize = { width: number; height: number }
 
-export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
+type PendingScroll = { page: number; offset: number }
+
+/** 阅读位置：页码 + 页内偏移比例（0–1） */
+type SavedPosition = {
+  page: number
+  offset: number
+  mode: 'scroll' | 'single'
+}
+
+export function PdfViewer({ bytes, storageKey }: { bytes: Uint8Array; storageKey?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number | null>(null)
+  const positionRef = useRef<SavedPosition | null>(null)
+  const saveTimerRef = useRef<number | null>(null)
 
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [baseSizes, setBaseSizes] = useState<BaseSize[] | null>(null)
   const [mode, setMode] = useState<'scroll' | 'single'>('scroll')
   const [pageNumber, setPageNumber] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pendingScrollPage, setPendingScrollPage] = useState<number | null>(null)
+  const [pendingScroll, setPendingScroll] = useState<PendingScroll | null>(null)
   const [scale, setScale] = useState<number | null>(null)
   const [autoFit, setAutoFit] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -44,11 +55,22 @@ export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
     let cancelled = false
     setDoc(null)
     setBaseSizes(null)
-    setPageNumber(1)
-    setCurrentPage(1)
     setScale(null)
     setAutoFit(true)
     setError(null)
+
+    const saved = storageKey ? loadSavedPosition(storageKey) : null
+    positionRef.current = saved
+    if (saved) {
+      setMode(saved.mode)
+      setPageNumber(saved.page)
+      setCurrentPage(saved.page)
+      setPendingScroll({ page: saved.page, offset: saved.offset })
+    } else {
+      setPageNumber(1)
+      setCurrentPage(1)
+      setPendingScroll({ page: 1, offset: 0 })
+    }
 
     // pdfjs 会把 data 的底层 buffer 转移给 worker，这里复制一份避免污染调用方
     const task = getDocument({ data: bytes.slice() })
@@ -65,6 +87,7 @@ export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
         if (cancelled) return
         setDoc(pdf)
         setBaseSizes(sizes)
+        setPageNumber((current) => Math.min(current, pdf.numPages))
       },
       (err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : '无法解析 PDF')
@@ -75,7 +98,7 @@ export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
       cancelled = true
       void task.destroy()
     }
-  }, [bytes])
+  }, [bytes, storageKey])
 
   useEffect(() => {
     const element = scrollRef.current
@@ -96,18 +119,31 @@ export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
   }, [autoFit, baseSizes, containerWidth])
 
   useEffect(() => {
-    if (mode !== 'scroll' || pendingScrollPage == null || !baseSizes) return
+    if (mode !== 'scroll' || pendingScroll == null || !baseSizes || scale == null) return
     const container = scrollRef.current
     if (!container) return
-    const target = container.querySelector<HTMLElement>(`[data-pdf-page="${pendingScrollPage}"]`)
-    if (target) {
-      const offset =
-        target.getBoundingClientRect().top - container.getBoundingClientRect().top - PAGE_PADDING / 2
-      container.scrollTop += offset
-      setCurrentPage(pendingScrollPage)
-    }
-    setPendingScrollPage(null)
-  }, [mode, pendingScrollPage, baseSizes])
+    const page = Math.min(pendingScroll.page, baseSizes.length)
+    const target = container.querySelector<HTMLElement>(`[data-pdf-page="${page}"]`)
+    if (!target) return
+    const offset =
+      target.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      PAGE_PADDING / 2 +
+      pendingScroll.offset * target.offsetHeight
+    container.scrollTop += offset
+    setCurrentPage(page)
+    setPendingScroll(null)
+  }, [mode, pendingScroll, baseSizes, scale])
+
+  const scheduleSave = (position: SavedPosition) => {
+    positionRef.current = position
+    if (!storageKey) return
+    if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null
+      if (positionRef.current) writeSavedPosition(storageKey, positionRef.current)
+    }, 500)
+  }
 
   useEffect(
     () => () => {
@@ -116,20 +152,45 @@ export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
     [],
   )
 
+  useEffect(() => {
+    if (mode !== 'single') return
+    scheduleSave({ page: pageNumber, offset: 0, mode: 'single' })
+  }, [mode, pageNumber])
+
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
+      if (storageKey && positionRef.current) writeSavedPosition(storageKey, positionRef.current)
+    },
+    [storageKey],
+  )
+
   const handleScroll = () => {
     if (rafRef.current != null) return
     rafRef.current = window.requestAnimationFrame(() => {
       rafRef.current = null
       const container = scrollRef.current
       if (!container) return
-      const threshold = container.getBoundingClientRect().top + container.clientHeight * 0.35
+      const containerTop = container.getBoundingClientRect().top
+      const threshold = containerTop + container.clientHeight * 0.35
+      const anchor = containerTop + PAGE_PADDING / 2
       let current = 1
+      let currentElement: HTMLElement | null = null
       for (const element of container.querySelectorAll<HTMLElement>('[data-pdf-page]')) {
         if (element.getBoundingClientRect().top <= threshold) {
           current = Number(element.dataset.pdfPage)
+          currentElement = element
         }
       }
       setCurrentPage(current)
+      const offset = currentElement
+        ? clamp(
+            (anchor - currentElement.getBoundingClientRect().top) / currentElement.offsetHeight,
+            0,
+            1,
+          )
+        : 0
+      scheduleSave({ page: current, offset, mode: 'scroll' })
     })
   }
 
@@ -152,7 +213,7 @@ export function PdfViewer({ bytes }: { bytes: Uint8Array }) {
       setPageNumber(currentPage)
       setMode('single')
     } else {
-      setPendingScrollPage(currentPage)
+      setPendingScroll({ page: currentPage, offset: 0 })
       setMode('scroll')
     }
   }
@@ -373,4 +434,30 @@ function PdfPageView({
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+const POSITION_STORAGE_PREFIX = 'report-pdf:'
+
+function loadSavedPosition(key: string): SavedPosition | null {
+  try {
+    const raw = window.localStorage.getItem(POSITION_STORAGE_PREFIX + key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<SavedPosition> | null
+    if (!parsed || typeof parsed !== 'object') return null
+    const { page, offset, mode } = parsed
+    if (typeof page !== 'number' || !Number.isFinite(page) || page < 1) return null
+    if (typeof offset !== 'number' || !Number.isFinite(offset)) return null
+    if (mode !== 'scroll' && mode !== 'single') return null
+    return { page: Math.floor(page), offset: clamp(offset, 0, 1), mode }
+  } catch {
+    return null
+  }
+}
+
+function writeSavedPosition(key: string, position: SavedPosition): void {
+  try {
+    window.localStorage.setItem(POSITION_STORAGE_PREFIX + key, JSON.stringify(position))
+  } catch {
+    // localStorage 不可用时静默忽略
+  }
 }

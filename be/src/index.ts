@@ -14,11 +14,13 @@ import { authRoutes } from './routes/auth'
 import { banksRoutes } from './routes/banks'
 import { checkoffRoutes } from './routes/checkoff'
 import { classesRoutes } from './routes/classes'
+import { criteriaRoutes } from './routes/criteria'
 import { devboardsRoutes } from './routes/devboards'
 import { experimentsRoutes } from './routes/experiments'
 import { mcpRoutes } from './routes/mcp'
 import { passkeyRoutes } from './routes/passkey'
 import { questionsRoutes } from './routes/questions'
+import { reportReviewsRoutes } from './routes/report-reviews'
 import { rosterRoutes } from './routes/roster'
 import { scoresRoutes } from './routes/scores'
 import { settingsRoutes } from './routes/settings'
@@ -106,6 +108,7 @@ await fastify.register(async function publicLoginScope(app) {
 })
 
 await fastify.register(classesRoutes, { prefix: '/api/classes' })
+await fastify.register(criteriaRoutes, { prefix: '/api/criteria' })
 await fastify.register(settingsRoutes, { prefix: '/api/settings' })
 await fastify.register(tokensRoutes, { prefix: '/api/tokens' })
 await fastify.register(staffRoutes, { prefix: '/api/staff' })
@@ -113,6 +116,7 @@ await fastify.register(experimentsRoutes, { prefix: '/api/experiments' })
 await fastify.register(questionsRoutes, { prefix: '/api/questions' })
 await fastify.register(banksRoutes, { prefix: '/api/banks' })
 await fastify.register(rosterRoutes, { prefix: '/api' })
+await fastify.register(reportReviewsRoutes, { prefix: '/api/report-reviews' })
 await fastify.register(scoresRoutes, { prefix: '/api/scores' })
 await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
 await fastify.register(devboardsRoutes, { prefix: '/api/devboards' })

@@ -2,7 +2,6 @@ import { Alert, Spinner } from '@heroui/react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
-import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
 import { FilePreviewPanel } from '@/components/reportgrade/FilePreviewPanel'
@@ -31,7 +30,6 @@ export default function ReportGrade() {
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
 
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: 'report-grade',
@@ -127,24 +125,6 @@ export default function ReportGrade() {
     gradeStudents.find((student) => student.personId === selectedPersonId) ?? null
   const gradedCount = gradeStudents.filter((student) => student.score != null).length
 
-  const handleSave = async (value: number) => {
-    if (!id || !selectedStudent?.stuId) return
-    const stuId = selectedStudent.stuId
-    setSaving(true)
-    try {
-      const res = await apiFetch<{ score: Score }>('/api/scores', {
-        method: 'PUT',
-        body: JSON.stringify({ stuId, type: 2, indId: id, score: value }),
-      })
-      setScores((prev) => new Map(prev).set(stuId, res.score))
-      toast.success(`已保存 ${selectedStudent.name} 的报告分`)
-    } catch (err) {
-      toast.error(getErrorMessage(err, '保存失败'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   if (!id) return null
 
   return (
@@ -204,7 +184,7 @@ export default function ReportGrade() {
           </Panel>
           <Separator className="w-px shrink-0 bg-line transition-colors hover:bg-brand-500/60" />
           <Panel id="grade" defaultSize="25%" minSize="18%" maxSize="45%">
-            <GradePanel student={selectedStudent} saving={saving} onSave={handleSave} />
+            <GradePanel student={selectedStudent} experimentId={id} />
           </Panel>
         </Group>
       )}
