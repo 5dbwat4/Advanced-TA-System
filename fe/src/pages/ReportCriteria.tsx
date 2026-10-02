@@ -44,7 +44,7 @@ export default function ReportCriteria() {
   const share = async () => {
     const key = shareKey ?? (await save())
     if (!key) return
-    if (copyToClipboard(key)) toast.success('分享码已复制')
+    if (await copyToClipboard(key)) toast.success('分享码已复制')
     else toast.error('复制失败，请手动复制')
   }
 

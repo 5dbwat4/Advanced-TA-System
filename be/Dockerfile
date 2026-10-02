@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# 构建（在仓库根目录执行）：docker build -t tsaas-be ./be
+# 构建（在仓库根目录执行）：docker build -f be/Dockerfile -t tsaas-be .
 FROM node:22-slim
 
 # Prisma 运行时依赖 openssl
@@ -8,22 +8,25 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+# 启用 pnpm（corepack 随 Node 提供）
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+
 WORKDIR /app
 
-# 先装依赖（含 devDependencies：运行时需要 prisma CLI 与 tsx），充分利用 layer 缓存
-COPY package.json package-lock.json ./
-RUN npm ci
-
-ENV NODE_ENV=production \
-    PORT=3001 \
-    DATABASE_URL="file:/app/data/dev.db"
+# 复制 workspace 清单，仅安装 be 的依赖（含 devDependencies：运行时需要 prisma CLI 与 tsx）
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY be/package.json ./be/package.json
+COPY fe/package.json ./fe/package.json
+RUN pnpm install --filter be --frozen-lockfile
 
 # 生成 Prisma Client（SQLite，无需连接数据库）
-COPY prisma ./prisma
-RUN ./node_modules/.bin/prisma generate
+COPY be/prisma ./be/prisma
+RUN pnpm --filter be exec prisma generate
 
-COPY tsconfig.json ./
-COPY src ./src
+COPY be/tsconfig.json ./be/tsconfig.json
+COPY be/src ./be/src
+
+WORKDIR /app/be
 
 # 数据目录需可写（挂载卷时请保证归属 node 用户）
 RUN mkdir -p /app/data && chown -R node:node /app

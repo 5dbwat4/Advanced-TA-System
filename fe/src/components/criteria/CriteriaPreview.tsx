@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import Rows3 from '~icons/lucide/rows-3'
 import { cn } from '@/lib/utils'
 
@@ -37,7 +39,7 @@ export function CriteriaPreview({ items }: { items: CriterionItem[] }) {
   )
 }
 
-function SectionBadge({ children }: { children: string }) {
+function SectionBadge({ children }: { children: ReactNode }) {
   return (
     <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-normal text-brand-600 dark:text-brand-300">
       {children}

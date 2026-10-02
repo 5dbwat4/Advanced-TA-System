@@ -55,7 +55,7 @@ export function CriteriaEditor({
 
   const removeCard = (cardId: string) => {
     onChange(
-      items.flatMap((item) => {
+      items.flatMap((item): CriterionItem[] => {
         if (item.type === 'card') return item.id === cardId ? [] : [item]
         return [{ ...item, children: item.children.filter((child) => child.id !== cardId) }]
       }),
