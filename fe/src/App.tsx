@@ -5,6 +5,7 @@ import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
 import Boards from '@/pages/Boards'
 import BoardScan from '@/pages/BoardScan'
+import Changelog from '@/pages/Changelog'
 import Checkin from '@/pages/Checkin'
 import CheckinSession from '@/pages/CheckinSession'
 import Checkoff from '@/pages/Checkoff'
@@ -15,6 +16,8 @@ import ExperimentDetail from '@/pages/ExperimentDetail'
 import Experiments from '@/pages/Experiments'
 import FocusStudents from '@/pages/FocusStudents'
 import Login from '@/pages/Login'
+import Licenses from '@/pages/Licenses'
+import LicensesFull from '@/pages/LicensesFull'
 import NewCourse from '@/pages/NewCourse'
 import LlmConnect from '@/pages/LlmConnect'
 import More from '@/pages/More'
@@ -58,6 +61,9 @@ export default function App() {
           <Route path="courses/checkpoints" element={<Checkpoints />} />
           <Route path="courses/focus-students" element={<FocusStudents />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="settings/changelog" element={<Changelog />} />
+          <Route path="settings/licenses" element={<Licenses />} />
+          <Route path="settings/licenses/full" element={<LicensesFull />} />
         </Route>
       </Route>
       <Route path="/terms" element={<Terms />} />

@@ -6,6 +6,8 @@ import Icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vite'
 import progressBar from 'vite-plugin-load-with-progress-bar'
 
+import { buildInfo } from './plugins/build-info.ts'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -13,6 +15,7 @@ export default defineConfig({
     tailwindcss(),
     Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false }),
     progressBar(),
+    buildInfo(),
   ],
   resolve: {
     alias: {
