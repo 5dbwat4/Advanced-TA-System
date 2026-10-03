@@ -2,7 +2,6 @@ import type { IconComponent } from '@/lib/icon'
 
 import BookOpen from '~icons/lucide/book-open'
 import Bot from '~icons/lucide/bot'
-import CircuitBoard from '~icons/lucide/circuit-board'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import FileText from '~icons/lucide/file-text'
 import FlaskConical from '~icons/lucide/flask-conical'
@@ -25,7 +24,6 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/console', label: '总览', icon: LayoutDashboard, end: true, mobile: true, description: '工作台总览与快捷入口' },
   { to: '/console/checkoff', label: '验收', icon: ClipboardCheck, description: '抽题 · 评分 · 记录检查点' },
-  { to: '/console/boards', label: '开发板', icon: CircuitBoard, description: '借出 / 归还硬件开发板' },
   { to: '/console/experiments', label: '实验', icon: FlaskConical, mobile: true, description: '创建实验并绑定题目集' },
   { to: '/console/questions', label: '题库', icon: NotebookText, mobile: true, description: '题目与题目集管理' },
   { to: '/console/reports', label: '实验报告', icon: FileText, mobile: true, description: '报告批阅与查看' },

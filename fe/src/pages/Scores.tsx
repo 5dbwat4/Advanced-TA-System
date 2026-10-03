@@ -1,8 +1,8 @@
 import {
   Alert,
   Button,
+  Input,
   Modal,
-  NumberField,
   Spinner,
   Tooltip,
   useOverlayState,
@@ -143,44 +143,71 @@ function ScoreCell({
   onCommit: (next: number | null) => Promise<void>
 }) {
   const value = score?.score ?? null
+  const [draft, setDraft] = useState(value === null ? '' : String(value))
   const [saving, setSaving] = useState(false)
 
-  const commit = async (next: number | null) => {
-    if (next === value) return
+  useEffect(() => {
+    setDraft(value === null ? '' : String(value))
+  }, [value])
+
+  const current = value === null ? '' : String(value)
+
+  const commit = async () => {
+    const trimmed = draft.trim()
+    if (trimmed === current) return
+    if (trimmed === '') {
+      setSaving(true)
+      try {
+        await onCommit(null)
+      } catch {
+        setDraft(current)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    const parsed = Number(trimmed)
+    if (Number.isNaN(parsed) || parsed < 0 || parsed > SCORE_MAX) {
+      toast.error(`请输入 0~${SCORE_MAX} 的分数`)
+      setDraft(current)
+      return
+    }
     setSaving(true)
-    await onCommit(next).catch(() => undefined)
-    setSaving(false)
+    try {
+      await onCommit(parsed)
+    } catch {
+      setDraft(current)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' || event.key === 'Escape') {
+    if (event.key === 'Enter') {
       event.preventDefault()
+      event.currentTarget.blur()
+    } else if (event.key === 'Escape') {
+      setDraft(current)
       event.currentTarget.blur()
     }
   }
 
   const input = (
-    <NumberField
+    <Input
+      type="number"
+      min={0}
+      max={SCORE_MAX}
+      step="1"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={onKeyDown}
       aria-label="分数"
-      minValue={0}
-      maxValue={SCORE_MAX}
-      step={1}
-      value={value ?? undefined}
-      onChange={(next) => void commit(next ?? null)}
-      className="w-16"
-    >
-      <NumberField.Group
-        className={cn(
-          'rounded-lg border border-line bg-elevated px-2 py-1 text-sm transition-all focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/15',
-          saving && 'opacity-50',
-        )}
-      >
-        <NumberField.Input
-          className="tabular w-full bg-transparent text-center outline-none"
-          onKeyDown={onKeyDown}
-        />
-      </NumberField.Group>
-    </NumberField>
+      className={cn(
+        'tabular w-16 rounded-lg border border-line bg-elevated px-2 py-1 text-center text-sm outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15',
+        saving && 'opacity-50',
+      )}
+    />
   )
 
   if (!score || !score.graderName) return input

@@ -30,6 +30,7 @@ import Trash2 from '~icons/lucide/trash-2'
 import Upload from '~icons/lucide/upload'
 import UserRound from '~icons/lucide/user-round'
 import { BulkImportModal } from '@/components/boards/BulkImportModal'
+import { BackLink } from '@/components/ui/BackLink'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
@@ -324,6 +325,8 @@ export default function Boards() {
   return (
     <>
       <div className="mx-auto max-w-6xl">
+        <BackLink to="/console/courses/settings">返回课程设置</BackLink>
+
         <PageHeader
           title="开发板管理"
           subtitle={

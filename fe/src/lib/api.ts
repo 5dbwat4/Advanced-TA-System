@@ -655,6 +655,7 @@ export type CheckpointClaim = {
   classId: string
   stuId: string
   appliedRules: number
+  appliedRuleLabels: string[]
   createdAt: string
   updatedAt: string
   student: { name: string; studentNo: string }
@@ -662,6 +663,26 @@ export type CheckpointClaim = {
 
 export function fetchCheckpointClaims(classId: string): Promise<{ claims: CheckpointClaim[] }> {
   return apiFetch<{ claims: CheckpointClaim[] }>(`/api/classes/${classId}/checkpoints`)
+}
+
+export function addCheckpointStudent(
+  classId: string,
+  body: { stuId: string },
+): Promise<{ claim: CheckpointClaim }> {
+  return apiFetch<{ claim: CheckpointClaim }>(`/api/classes/${classId}/checkpoints`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteCheckpointStudents(
+  classId: string,
+  ids: string[],
+): Promise<{ ok: true; deletedCount: number }> {
+  return apiFetch<{ ok: true; deletedCount: number }>(`/api/classes/${classId}/checkpoints`, {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
 }
 
 export function fetchCheckoff(params: {

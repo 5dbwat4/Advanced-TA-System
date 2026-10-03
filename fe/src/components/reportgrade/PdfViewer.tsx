@@ -1,7 +1,7 @@
 import { Spinner } from '@heroui/react'
 import { GlobalWorkerOptions, TextLayer, getDocument } from 'pdfjs-dist'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import pdfWorkerSource from 'pdfjs-dist/build/pdf.worker.min.mjs?raw'
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
@@ -15,7 +15,9 @@ import ZoomOut from '~icons/lucide/zoom-out'
 import { IconAction } from '@/components/ui/IconAction'
 import { cn } from '@/lib/utils'
 
-GlobalWorkerOptions.workerSrc = workerUrl
+const pdfWorkerBlobUrl = URL.createObjectURL(
+  new Blob([pdfWorkerSource], { type: 'text/javascript' }),
+)
 
 const MIN_SCALE = 0.25
 const MAX_SCALE = 5
@@ -72,6 +74,10 @@ export function PdfViewer({ bytes, storageKey }: { bytes: Uint8Array; storageKey
       setPendingScroll({ page: 1, offset: 0 })
     }
 
+    // 入口 bundle 由 loader 以 blob URL 执行，workerSrc 里的动态 import 无法解析，
+    // 因此从内联源码创建 blob worker，经 workerPort 交给 pdfjs，避免运行时 URL 解析
+    const worker = new Worker(pdfWorkerBlobUrl, { type: 'module' })
+    GlobalWorkerOptions.workerPort = worker
     // pdfjs 会把 data 的底层 buffer 转移给 worker，这里复制一份避免污染调用方
     const task = getDocument({ data: bytes.slice() })
     task.promise.then(
@@ -96,7 +102,7 @@ export function PdfViewer({ bytes, storageKey }: { bytes: Uint8Array; storageKey
 
     return () => {
       cancelled = true
-      void task.destroy()
+      void task.destroy().finally(() => worker.terminate())
     }
   }, [bytes, storageKey])
 

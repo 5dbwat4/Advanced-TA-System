@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import { requireStaff } from '../lib/class-access'
+import { checkpointRuleBit, checkpointRuleLabels } from '../lib/checkpoints'
 import { prisma } from '../lib/prisma'
 import { publicUser } from '../lib/user'
 import type { ZjuamEnrollment } from '../lib/zjuam'
@@ -69,8 +70,19 @@ const focusDeleteSchema = z.object({
 
 const focusParamsSchema = z.object({ id: z.string().min(1), focusId: z.string().min(1) })
 
+const checkpointCreateSchema = z.object({
+  stuId: z.string().trim().min(1),
+})
+
+const checkpointDeleteSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1).max(1000),
+})
+
 /** 重点关注记录统一 include（学生姓名 / 学号） */
 const focusInclude = { student: { select: { name: true, studentNo: true } } } as const
+
+/** Checkpoint 记录统一 include（学生姓名 / 学号） */
+const checkpointInclude = { student: { select: { name: true, studentNo: true } } } as const
 
 export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 解析课程设置 JSON 字符串（损坏时按空对象处理） */
@@ -362,10 +374,18 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       data: { settings: JSON.stringify(settings) },
     })
 
+    // 课程级规则变更时，名单内所有人的已应用规则位同步更新
+    if ('checkpointRule' in rest) {
+      await prisma.checkpointClaimed.updateMany({
+        where: { classId: klass.id },
+        data: { appliedRules: checkpointRuleBit(settings.checkpointRule) },
+      })
+    }
+
     return reply.send({ settings: parseClassSettings(updated.settings) })
   })
 
-  /** Checkpoint 认领记录列表 */
+  /** Checkpoint 名单列表 */
   fastify.get('/:id/checkpoints', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
@@ -377,12 +397,96 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
     const claims = await prisma.checkpointClaimed.findMany({
       where: { classId: klass.id },
-      include: { student: { select: { name: true, studentNo: true } } },
+      include: checkpointInclude,
       orderBy: { createdAt: 'desc' },
     })
 
-    return reply.send({ claims })
+    return reply.send({
+      claims: claims.map((claim) => ({
+        ...claim,
+        appliedRuleLabels: checkpointRuleLabels(claim.appliedRules),
+      })),
+    })
   })
+
+  /** 添加 Checkpoint 学生 */
+  fastify.post(
+    '/:id/checkpoints',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request, reply)) return reply
+
+      const parsedParams = classParamsSchema.safeParse(request.params)
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+      if (!klass) return reply
+
+      const parsedBody = checkpointCreateSchema.safeParse(request.body ?? {})
+      if (!parsedBody.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const { stuId } = parsedBody.data
+
+      const student = await prisma.student.findFirst({ where: { stuId, classId: klass.id } })
+      if (!student) {
+        return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
+      }
+
+      const settings = parseClassSettings(klass.settings)
+      const appliedRules = checkpointRuleBit(settings.checkpointRule)
+
+      let claim
+      try {
+        claim = await prisma.checkpointClaimed.create({
+          data: { classId: klass.id, stuId, appliedRules },
+          include: checkpointInclude,
+        })
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          return reply
+            .code(409)
+            .send({ error: 'ALREADY_EXISTS', message: '该学生已在 Checkpoint 名单中' })
+        }
+        throw error
+      }
+
+      return reply.code(201).send({
+        claim: { ...claim, appliedRuleLabels: checkpointRuleLabels(claim.appliedRules) },
+      })
+    },
+  )
+
+  /** 批量移除 Checkpoint 学生 */
+  fastify.delete(
+    '/:id/checkpoints',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request, reply)) return reply
+
+      const parsedParams = classParamsSchema.safeParse(request.params)
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+      if (!klass) return reply
+
+      const parsedBody = checkpointDeleteSchema.safeParse(request.body ?? {})
+      if (!parsedBody.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const { count } = await prisma.checkpointClaimed.deleteMany({
+        where: { classId: klass.id, id: { in: parsedBody.data.ids } },
+      })
+
+      return reply.send({ ok: true, deletedCount: count })
+    },
+  )
 
   /** 重点关注学生名单 */
   fastify.get(

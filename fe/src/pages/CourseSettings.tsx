@@ -5,23 +5,24 @@ import { useTimeoutFn } from 'react-use'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { CommentTemplateSection } from '@/components/settings/CommentTemplateSection'
+import { DevBoardsSection } from '@/components/settings/DevBoardsSection'
 import { ExperimentScoringSection } from '@/components/settings/ExperimentScoringSection'
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
+import { CHECKPOINT_RULES } from '@/lib/checkpoints'
 import { useClassSettingsPatch } from '@/lib/use-class-settings'
 import { useScrollToHash } from '@/lib/hash'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
-const CHECKPOINT_RULES = [{ value: 'lab0-zero', label: 'Lab 0 置为0分' }]
-
 const SECTIONS: TocItem[] = [
   { id: 'checkpoint', label: 'Checkpoint Settings' },
   { id: 'scoring', label: '实验计分方式' },
   { id: 'focus', label: '重点关注学生' },
+  { id: 'boards', label: '开发板' },
   { id: 'comment', label: '评语模板' },
   { id: 'basic', label: '基本信息' },
   { id: 'roster', label: '学生名单' },
@@ -34,6 +35,7 @@ const PLACEHOLDER_SECTIONS = SECTIONS.filter(
     section.id !== 'checkpoint' &&
     section.id !== 'scoring' &&
     section.id !== 'focus' &&
+    section.id !== 'boards' &&
     section.id !== 'comment',
 )
 
@@ -74,13 +76,17 @@ export default function CourseSettings() {
             <FocusStudentsSection index={2} />
           </section>
 
+          <section id="boards" className={sectionClass('boards')}>
+            <DevBoardsSection index={3} />
+          </section>
+
           <section id="comment" className={sectionClass('comment')}>
-            <CommentTemplateSection index={3} />
+            <CommentTemplateSection index={4} />
           </section>
 
           {PLACEHOLDER_SECTIONS.map((section, index) => (
             <section key={section.id} id={section.id} className={sectionClass(section.id)}>
-              <Card index={index + 4}>
+              <Card index={index + 5}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>
