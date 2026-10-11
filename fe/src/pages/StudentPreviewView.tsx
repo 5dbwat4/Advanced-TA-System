@@ -4,14 +4,18 @@ import { useSearchParams } from 'react-router-dom'
 
 import CalendarClock from '~icons/lucide/calendar-clock'
 import CalendarPlus from '~icons/lucide/calendar-plus'
+import ClipboardList from '~icons/lucide/clipboard-list'
 import Cpu from '~icons/lucide/cpu'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import FlaskConical from '~icons/lucide/flask-conical'
+import { collectReportSelections, decodeReviewContent } from '@/components/criteria/scoring'
+import { deserializeItems } from '@/components/criteria/serialize'
 import { ApiError, fetchStudentPreview, type StudentPreviewData } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatDateTime } from '@/lib/format'
 import { ratioPercentages } from '@/lib/scoring'
 import { SCORE_TYPES } from '@/lib/scores'
+import { cn } from '@/lib/utils'
 
 export default function StudentPreviewView() {
   const [params] = useSearchParams()
@@ -74,6 +78,14 @@ export default function StudentPreviewView() {
 function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
   const { experiment, student } = data
   const percentages = ratioPercentages(data.ratio)
+
+  const reportItems = data.report ? deserializeItems(data.report.items) : []
+  const reportContent = data.report
+    ? decodeReviewContent(data.report.ruleContent)
+    : { cards: {}, extras: {} }
+  const selections = reportItems.length
+    ? collectReportSelections(reportItems, reportContent.cards, reportContent.extras)
+    : []
 
   return (
     <>
@@ -157,6 +169,73 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
             })}
           </tbody>
         </table>
+      </section>
+
+      <section className="mt-4 rounded-3xl border border-line bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
+          <ClipboardList width={14} height={14} className="shrink-0" />
+          报告扣分原因
+        </div>
+
+        {selections.length > 0 || data.remark ? (
+          <div className="mt-4 flex flex-col gap-2">
+            {selections.map((entry) =>
+              entry.kind === 'section' ? (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 border-b border-line pb-1"
+                >
+                  <span className="text-xs font-semibold text-fg-muted">
+                    {entry.title || '未命名小节'}
+                  </span>
+                  <span className="tabular text-xs text-fg-subtle">
+                    本节 {formatScore(entry.score)} 分
+                  </span>
+                </div>
+              ) : (
+                <div key={entry.id} className="rounded-2xl border border-line p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-fg">
+                        {entry.rule || entry.detail || '（未填写规则）'}
+                      </div>
+                      {entry.rule && entry.detail && (
+                        <div className="mt-0.5 whitespace-pre-wrap text-xs text-fg-subtle">
+                          {entry.detail}
+                        </div>
+                      )}
+                      {entry.appendix && (
+                        <div className="mt-1 whitespace-pre-wrap text-xs text-fg-muted">
+                          附注：{entry.appendix}
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        'tabular shrink-0 text-sm font-bold',
+                        entry.mode === 'add'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-danger',
+                      )}
+                    >
+                      {entry.mode === 'add' ? '+' : '−'}
+                      {formatScore(entry.score)}
+                    </span>
+                  </div>
+                </div>
+              ),
+            )}
+
+            {data.remark && (
+              <div className="rounded-2xl border border-line p-3">
+                <div className="text-[11px] text-fg-subtle">附言</div>
+                <div className="mt-0.5 whitespace-pre-wrap text-sm text-fg">{data.remark}</div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-fg-subtle">无批阅记录。</p>
+        )}
       </section>
     </>
   )

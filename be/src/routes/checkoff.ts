@@ -14,7 +14,7 @@ const submitSchema = z.object({
     .array(
       z.object({
         type: z.number().int().min(0).max(2),
-        score: z.number().min(0).max(100).nullable(),
+        score: z.number().min(-1000).max(1000).nullable(),
       }),
     )
     .max(3),

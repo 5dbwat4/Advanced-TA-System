@@ -1,6 +1,9 @@
 import {
   Alert,
   Button,
+  Dropdown,
+  Label,
+  Popover,
   Skeleton,
   Spinner,
   ToggleButton,
@@ -13,6 +16,7 @@ import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
 import Check from '~icons/lucide/check'
+import Ellipsis from '~icons/lucide/ellipsis'
 import ListChecks from '~icons/lucide/list-checks'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import TriangleAlert from '~icons/lucide/triangle-alert'
@@ -128,8 +132,9 @@ export default function XzzdPush() {
     })
   }
 
-  const startPush = async () => {
+  const runStream = async (endpoint: 'stream' | 'assemble') => {
     if (!id || pushing) return
+    const assembling = endpoint === 'assemble'
     const token = getToken()
     setSteps([])
     setTargets([])
@@ -141,7 +146,7 @@ export default function XzzdPush() {
     abortRef.current = controller
 
     try {
-      await fetchEventSource(`/api/experiments/${id}/xzzd-push/stream`, {
+      await fetchEventSource(`/api/experiments/${id}/xzzd-push/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +160,7 @@ export default function XzzdPush() {
             return
           }
           const payload = (await response.json().catch(() => null)) as { message?: string } | null
-          throw new Error(payload?.message ?? `推送请求失败（${response.status}）`)
+          throw new Error(payload?.message ?? `请求失败（${response.status}）`)
         },
         onmessage(message) {
           const payload = JSON.parse(message.data) as PushEventPayload
@@ -182,7 +187,7 @@ export default function XzzdPush() {
             return
           }
           if (message.event === 'error') {
-            throw new Error(payload.message ?? '推送失败')
+            throw new Error(payload.message ?? (assembling ? '生成列表失败' : '推送失败'))
           }
         },
         onerror(error) {
@@ -190,17 +195,20 @@ export default function XzzdPush() {
           throw error
         },
       })
-      toast.success(doneMessageRef.current ?? '推送完成')
+      toast.success(doneMessageRef.current ?? (assembling ? '已生成列表' : '推送完成'))
       void loadPreview()
     } catch (err) {
       if (!controller.signal.aborted) {
-        setPushError(getErrorMessage(err, '推送失败'))
+        setPushError(getErrorMessage(err, assembling ? '生成列表失败' : '推送失败'))
       }
     } finally {
       setPushing(false)
       abortRef.current = null
     }
   }
+
+  const startPush = () => runStream('stream')
+  const startAssemble = () => runStream('assemble')
 
 
   const studentsById = useMemo(
@@ -319,15 +327,40 @@ export default function XzzdPush() {
       )}
 
       {experiment && !pushing && steps.length === 0 && (
-        <Button
-          className="mt-4 w-full"
-          size="lg"
-          isDisabled={loading || !data}
-          onPress={() => void startPush()}
-        >
-          <Upload width={16} height={16} className="shrink-0" />
-          开始推送
-        </Button>
+        <div className="mt-4 flex gap-2">
+          <Button
+            className="flex-1"
+            size="lg"
+            isDisabled={loading || !data}
+            onPress={startPush}
+          >
+            <Upload width={16} height={16} className="shrink-0" />
+            开始推送
+          </Button>
+          <Dropdown>
+            <Button
+              isIconOnly
+              size="lg"
+              variant="secondary"
+              aria-label="更多操作"
+              isDisabled={loading || !data}
+            >
+              <Ellipsis width={18} height={18} className="shrink-0" />
+            </Button>
+            <Dropdown.Popover>
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === 'assemble') startAssemble()
+                }}
+              >
+                <Dropdown.Item id="assemble" textValue="只生成成绩和教师评语列表">
+                  <ListChecks width={15} height={15} className="shrink-0 text-fg-muted" />
+                  <Label>只生成成绩和教师评语列表</Label>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        </div>
       )}
 
       {(steps.length > 0 || pushError) && (
@@ -434,9 +467,19 @@ function AssembledTable({
                 </td>
                 <td className={`${CELL_CLASS} max-w-xs`}>
                   {item.comment ? (
-                    <span className="block truncate" title={item.comment}>
-                      {item.comment}
-                    </span>
+                    <Popover>
+                      <Popover.Trigger className="block w-full truncate text-left">
+                        {item.comment}
+                      </Popover.Trigger>
+                      <Popover.Content placement="top" className="max-w-sm">
+                        <Popover.Dialog>
+                          <Popover.Heading>评语</Popover.Heading>
+                          <p className="mt-2 whitespace-pre-wrap break-all text-sm text-fg-muted">
+                            {item.comment}
+                          </p>
+                        </Popover.Dialog>
+                      </Popover.Content>
+                    </Popover>
                   ) : (
                     <span className="text-fg-subtle">未配置模板</span>
                   )}

@@ -20,6 +20,7 @@ import { experimentsRoutes } from './routes/experiments'
 import { mcpRoutes } from './routes/mcp'
 import { passkeyRoutes } from './routes/passkey'
 import { questionsRoutes } from './routes/questions'
+import { remarksRoutes } from './routes/remarks'
 import { reportReviewsRoutes } from './routes/report-reviews'
 import { rosterRoutes } from './routes/roster'
 import { scoresRoutes } from './routes/scores'
@@ -117,6 +118,7 @@ await fastify.register(questionsRoutes, { prefix: '/api/questions' })
 await fastify.register(banksRoutes, { prefix: '/api/banks' })
 await fastify.register(rosterRoutes, { prefix: '/api' })
 await fastify.register(reportReviewsRoutes, { prefix: '/api/report-reviews' })
+await fastify.register(remarksRoutes, { prefix: '/api/remarks' })
 await fastify.register(scoresRoutes, { prefix: '/api/scores' })
 await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
 await fastify.register(devboardsRoutes, { prefix: '/api/devboards' })

@@ -40,10 +40,42 @@ export type CriterionCardState = {
 /** 批阅时临时添加的卡片，key 为 section id 或 'root' */
 export type CriterionExtras = Record<string, CriterionCard[]>
 
-export type ReportReviewContent = {
-  version: 1
-  cards: Record<string, CriterionCardState>
-  extras: CriterionExtras
+/** 持久化的卡片定义（分值为数字；null 表示未设） */
+export type StoredCriterionCard = {
+  id: string
+  type: 'card'
+  mode: CriterionMode
+  rule: string
+  detail: string
+  score: number
+  scoreMax: number | null
+  defaultSelected: boolean
+}
+
+export type StoredCriterionSection = {
+  id: string
+  type: 'section'
+  title: string
+  init: number | null
+  cap: number | null
+  children: StoredCriterionCard[]
+}
+
+export type StoredCriterionItem = StoredCriterionCard | StoredCriterionSection
+
+/** ReportReview.ruleContent 的精简存储格式：键存在即表示已勾选 */
+export type StoredCardEntry = {
+  /** 卡片得分（数字），始终有值 */
+  score: number
+  /** 附注（为空时不写入该字段） */
+  appendix?: string
+}
+
+export type StoredReviewContent = {
+  /** 仅包含被勾选的卡片 */
+  cards: Record<string, StoredCardEntry>
+  /** 批阅时临时添加的卡片（数字分值） */
+  extras: Record<string, StoredCriterionCard[]>
 }
 
 export function createCard(): CriterionCard {

@@ -14,6 +14,8 @@ type ConfirmDialogProps = {
   onConfirm: () => void
   icon?: IconComponent
   tone?: 'danger' | 'brand'
+  /** 额外操作按钮（显示在「取消」左侧） */
+  extraActions?: ReactNode
 }
 
 export function ConfirmDialog({
@@ -25,6 +27,7 @@ export function ConfirmDialog({
   onConfirm,
   icon: Icon = Trash2,
   tone = 'danger',
+  extraActions,
 }: ConfirmDialogProps) {
   return (
     <Modal state={state}>
@@ -48,6 +51,7 @@ export function ConfirmDialog({
               <p className="text-sm text-fg-muted">{description}</p>
             </Modal.Body>
             <Modal.Footer>
+              {extraActions}
               <Button slot="close" variant="secondary">
                 取消
               </Button>

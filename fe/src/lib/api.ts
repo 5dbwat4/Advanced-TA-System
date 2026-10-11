@@ -1,3 +1,5 @@
+import { deserializeItems, serializeItems } from '@/components/criteria/serialize'
+import type { CriterionItem } from '@/components/criteria/types'
 import { getZjuamCredential } from '@/lib/zjuam'
 
 const TOKEN_KEY = 'tasaas.token'
@@ -517,6 +519,14 @@ export type StudentPreviewData = {
     graderName: string | null
     updatedAt: string
   }>
+  /** 报告批阅记录：ruleContent 为精简批阅格式，items 为评分标准条目 */
+  report: {
+    ruleId: string
+    ruleContent: unknown
+    items: unknown
+  } | null
+  /** 助教填写的附言 */
+  remark: string | null
 }
 
 export function fetchStudentPreview(token: string): Promise<StudentPreviewData> {
@@ -778,6 +788,18 @@ export async function fetchClassTables(classId?: string): Promise<ClassTables> {
   return { students: studentRes.students, experiments: experimentRes.experiments, scores: scoreRes.scores }
 }
 
+export function saveScore(body: {
+  stuId: string
+  type: number
+  indId: string
+  score: number
+}): Promise<{ score: Score }> {
+  return apiFetch<{ score: Score }>('/api/scores', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
 export function listStudents(classId: string): Promise<{ students: Student[] }> {
   return apiFetch<{ students: Student[] }>(`/api/students?classId=${encodeURIComponent(classId)}`)
 }
@@ -874,15 +896,88 @@ export function importDevBoards(
   })
 }
 
-export function saveCriteria(payload: unknown): Promise<{ key: string; createdAt: string }> {
+export type CriteriaPayloadInput = { version: 1; items: CriterionItem[] }
+
+export function saveCriteria(
+  payload: CriteriaPayloadInput,
+): Promise<{ key: string; createdAt: string }> {
   return apiFetch<{ key: string; createdAt: string }>('/api/criteria', {
     method: 'POST',
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify({ payload: { version: 1, items: serializeItems(payload.items) } }),
   })
 }
 
-export function fetchCriteria(key: string): Promise<{ payload: unknown; createdAt: string }> {
-  return apiFetch<{ payload: unknown; createdAt: string }>(`/api/criteria/${key}`)
+export async function fetchCriteria(key: string): Promise<{
+  payload: { items: CriterionItem[] } | null
+  createdAt: string
+  usageCount: number
+}> {
+  const res = await apiFetch<{ payload: unknown; createdAt: string; usageCount: number }>(
+    `/api/criteria/${key}`,
+  )
+  const raw = res.payload as { items?: unknown } | null
+  return {
+    payload: raw ? { items: deserializeItems(raw.items) } : null,
+    createdAt: res.createdAt,
+    usageCount: res.usageCount,
+  }
+}
+
+export type CriteriaSummary = {
+  key: string
+  createdAt: string
+  updatedAt: string
+  cardCount: number
+  /** 引用该评分标准的批阅记录数 */
+  usageCount: number
+}
+
+/** 当前用户创建的全部评分标准 */
+export function fetchCriteriaList(): Promise<{ criteria: CriteriaSummary[] }> {
+  return apiFetch<{ criteria: CriteriaSummary[] }>('/api/criteria')
+}
+
+/** 原地更新评分标准（保留同一分享码，引用它的批阅自动沿用） */
+export function updateCriteria(
+  key: string,
+  payload: CriteriaPayloadInput,
+): Promise<{ key: string; updatedAt: string }> {
+  return apiFetch<{ key: string; updatedAt: string }>(`/api/criteria/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({ payload: { version: 1, items: serializeItems(payload.items) } }),
+  })
+}
+
+/** 删除评分标准（仅未被任何批阅引用时可用） */
+export function deleteCriteria(key: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/api/criteria/${key}`, { method: 'DELETE' })
+}
+
+/** 影响预览：引用某评分标准的批阅（含身份与批阅内容） */
+export type CriteriaImpactReview = {
+  stuId: string
+  name: string
+  studentNo: string
+  experimentId: string
+  experimentMark: string
+  experimentTitle: string
+  /** 解析后的批阅内容 */
+  content: unknown
+}
+
+/** 拉取影响预览数据（不落库）：旧 items + 全部引用该标准的批阅 */
+export async function fetchCriteriaImpact(
+  key: string,
+  payload: CriteriaPayloadInput,
+): Promise<{ oldItems: CriterionItem[]; reviews: CriteriaImpactReview[] }> {
+  const res = await apiFetch<{ oldItems: unknown; reviews: CriteriaImpactReview[] }>(
+    `/api/criteria/${key}/impact`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ payload: { version: 1, items: serializeItems(payload.items) } }),
+    },
+  )
+  return { oldItems: deserializeItems(res.oldItems), reviews: res.reviews }
 }
 
 export type ReportReview = {
@@ -912,6 +1007,33 @@ export function saveReportReview(body: {
   ruleContent: unknown
 }): Promise<{ review: ReportReview }> {
   return apiFetch<{ review: ReportReview }>('/api/report-reviews', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export type Remark = {
+  stuId: string
+  experimentId: string
+  text: string
+  updatedById: string | null
+  updatedByName: string | null
+  updatedAt: string
+}
+
+export async function fetchRemark(stuId: string, experimentId: string): Promise<Remark | null> {
+  const res = await apiFetch<{ remark: Remark | null }>(
+    `/api/remarks?stuId=${encodeURIComponent(stuId)}&experimentId=${encodeURIComponent(experimentId)}`,
+  )
+  return res.remark
+}
+
+export function saveRemark(body: {
+  stuId: string
+  experimentId: string
+  text: string
+}): Promise<{ remark: Remark }> {
+  return apiFetch<{ remark: Remark }>('/api/remarks', {
     method: 'PUT',
     body: JSON.stringify(body),
   })

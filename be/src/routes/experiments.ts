@@ -11,6 +11,7 @@ import {
   isSameAsUpstream,
   parseClassSettings,
   resolveScoreRatio,
+  type XzzdPushTarget,
 } from '../lib/xzzd-push'
 import {
   fetchCourseStudents,
@@ -20,6 +21,8 @@ import {
   fetchStudentSubmissionAttachments,
   listHomeworkActivities,
   pushSubmissionScore,
+  type ZjuamCourseStudent,
+  type ZjuamHomeworkScore,
   type ZjuamHomeworkSubmission,
   ZjuamError,
 } from '../lib/zjuam'
@@ -58,6 +61,35 @@ const xzzdPushPreviewSchema = zjuamCredentialsSchema.extend({
   /** 推送对象：验收作业 / 报告作业 */
   kind: z.enum(['checkout', 'report']).default('checkout'),
 })
+
+/** 推送 / 组装共用的前置校验结果 */
+type XzzdPushContext = {
+  activityId: string
+  courseId: string
+  classId: string
+  kind: 'checkout' | 'report'
+  account: string
+  password: string
+}
+
+/** 写 SSE 帧 */
+type SseSend = (event: string, data: unknown) => void
+
+/** 执行一个带进度上报的步骤 */
+type RunStep = <T>(
+  stepId: string,
+  label: string,
+  run: () => Promise<T>,
+  detailOf?: (result: T) => string | undefined,
+) => Promise<T>
+
+/** 上游数据 + 组装后的推送目标 */
+type PreparedPush = {
+  submissions: ZjuamHomeworkSubmission[]
+  homeworkScores: ZjuamHomeworkScore[]
+  students: ZjuamCourseStudent[]
+  targets: XzzdPushTarget[]
+}
 
 const experimentInclude = {
   klass: { select: { id: true, name: true, xzzdClassId: true } },
@@ -100,14 +132,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     reply: FastifyReply,
     experimentId: string,
     body: unknown,
-  ): Promise<{
-    activityId: string
-    courseId: string
-    classId: string
-    kind: 'checkout' | 'report'
-    account: string
-    password: string
-  } | null> {
+  ): Promise<XzzdPushContext | null> {
     if (!requireStaff(request, reply)) return null
 
     const experiment = await prisma.experiment.findUnique({
@@ -162,6 +187,119 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       account: credentials.account,
       password: credentials.password,
     }
+  }
+
+  /**
+   * 拉取上游提交 / 成绩 / 学生名单，写入本地缓存，读取本地分数与模板后组装推送目标。
+   * 推送与「仅生成列表」共用。连接中断时返回 null。
+   */
+  async function preparePushTargets(params: {
+    experimentId: string
+    context: XzzdPushContext
+    runStep: RunStep
+    isDisconnected: () => boolean
+  }): Promise<PreparedPush | null> {
+    const { experimentId: id, context, runStep, isDisconnected } = params
+    const { activityId, courseId, classId, kind, account, password } = context
+
+    const submissions = await runStep(
+      'fetch-submissions',
+      '获取提交记录',
+      () => fetchHomeworkSubmissions(account, password, activityId),
+      (list) => `共 ${list.length} 条`,
+    )
+    if (isDisconnected()) return null
+
+    const homeworkScores = await runStep(
+      'fetch-scores',
+      '获取上游成绩',
+      () => fetchHomeworkScores(account, password, activityId),
+      (list) => `共 ${list.length} 条`,
+    )
+    if (isDisconnected()) return null
+
+    const students = await runStep(
+      'fetch-students',
+      '获取学生名单',
+      () => fetchCourseStudents(account, password, courseId),
+      (list) => `共 ${list.length} 人`,
+    )
+    if (isDisconnected()) return null
+
+    await runStep('persist', '写入本地数据库', () =>
+      prisma.xzzdHomework.upsert({
+        where: { id },
+        create: { id, value: JSON.stringify({ students, submissions }) },
+        update: { value: JSON.stringify({ students, submissions }) },
+      }),
+    )
+    if (isDisconnected()) return null
+
+    // 组装所需本地数据：实验分值比例 / 评语模板（课程设置）+ 学生分数 + 备注
+    const local = await runStep('collect-local', '读取实验配置与学生成绩', async () => {
+      const [klass, localStudents, scoreRows, remarkRows] = await Promise.all([
+        prisma.class.findUnique({ where: { id: classId }, select: { settings: true } }),
+        prisma.student.findMany({
+          where: { classId },
+          select: { stuId: true, name: true, studentNo: true },
+        }),
+        prisma.score.findMany({
+          where: { labId: id, type: { in: [0, 1, 2] } },
+          select: {
+            stuId: true,
+            type: true,
+            score: true,
+            updatedAt: true,
+            grader: { select: { name: true } },
+          },
+        }),
+        prisma.remark.findMany({
+          where: { experimentId: id },
+          select: { stuId: true, text: true },
+        }),
+      ])
+
+      return {
+        settings: parseClassSettings(klass?.settings ?? null),
+        students: localStudents,
+        scores: scoreRows.map((row) => ({
+          stuId: row.stuId,
+          type: row.type,
+          score: row.score,
+          graderName: row.grader?.name ?? null,
+          updatedAt: row.updatedAt,
+        })),
+        remarks: new Map(remarkRows.map((row) => [row.stuId, row.text])),
+      }
+    })
+    if (isDisconnected()) return null
+
+    const targets = await runStep(
+      'assemble',
+      '组装学生成绩',
+      async () => {
+        const templateRaw =
+          kind === 'report'
+            ? local.settings.reportCommentTemplate
+            : local.settings.checkoutCommentTemplate
+        return assemblePushTargets({
+          kind,
+          template: typeof templateRaw === 'string' ? templateRaw : '',
+          ratio: resolveScoreRatio(local.settings, id),
+          studentViewUrl: (stuId) => buildStudentViewUrl(fastify, stuId, id),
+          students: local.students,
+          upstreamStudents: students,
+          scores: local.scores,
+          remarks: local.remarks,
+        })
+      },
+      (list) => {
+        const ready = list.filter((item) => !item.skippedReason).length
+        return `可推送 ${ready} 人，跳过 ${list.length - ready} 人`
+      },
+    )
+
+    return { submissions, homeworkScores, students, targets }
   }
 
   /** 实验列表 */
@@ -364,7 +502,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       const context = await resolveXzzdPushContext(request, reply, id, request.body)
       if (!context) return reply
 
-      const { activityId, courseId, classId, kind, account, password } = context
+      const { activityId, kind, account, password } = context
 
       // 前置校验通过后接管底层连接，后续手动写 SSE 帧
       reply.hijack()
@@ -408,96 +546,14 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       try {
-        const submissions = await runStep(
-          'fetch-submissions',
-          '获取提交记录',
-          () => fetchHomeworkSubmissions(account, password, activityId),
-          (list) => `共 ${list.length} 条`,
-        )
-        if (disconnected) return
-
-        const homeworkScores = await runStep(
-          'fetch-scores',
-          '获取上游成绩',
-          () => fetchHomeworkScores(account, password, activityId),
-          (list) => `共 ${list.length} 条`,
-        )
-        if (disconnected) return
-
-        const students = await runStep(
-          'fetch-students',
-          '获取学生名单',
-          () => fetchCourseStudents(account, password, courseId),
-          (list) => `共 ${list.length} 人`,
-        )
-        if (disconnected) return
-
-        await runStep('persist', '写入本地数据库', () =>
-          prisma.xzzdHomework.upsert({
-            where: { id },
-            create: { id, value: JSON.stringify({ students, submissions }) },
-            update: { value: JSON.stringify({ students, submissions }) },
-          }),
-        )
-        if (disconnected) return
-
-        // 组装所需本地数据：实验分值比例 / 评语模板（课程设置）+ 学生分数
-        const local = await runStep('collect-local', '读取实验配置与学生成绩', async () => {
-          const [klass, localStudents, scoreRows] = await Promise.all([
-            prisma.class.findUnique({ where: { id: classId }, select: { settings: true } }),
-            prisma.student.findMany({
-              where: { classId },
-              select: { stuId: true, name: true, studentNo: true },
-            }),
-            prisma.score.findMany({
-              where: { labId: id, type: { in: [0, 1, 2] } },
-              select: {
-                stuId: true,
-                type: true,
-                score: true,
-                updatedAt: true,
-                grader: { select: { name: true } },
-              },
-            }),
-          ])
-
-          return {
-            settings: parseClassSettings(klass?.settings ?? null),
-            students: localStudents,
-            scores: scoreRows.map((row) => ({
-              stuId: row.stuId,
-              type: row.type,
-              score: row.score,
-              graderName: row.grader?.name ?? null,
-              updatedAt: row.updatedAt,
-            })),
-          }
+        const prepared = await preparePushTargets({
+          experimentId: id,
+          context,
+          runStep,
+          isDisconnected: () => disconnected,
         })
-        if (disconnected) return
-
-        const targets = await runStep(
-          'assemble',
-          '组装学生成绩',
-          async () => {
-            const templateRaw =
-              kind === 'report'
-                ? local.settings.reportCommentTemplate
-                : local.settings.checkoutCommentTemplate
-            return assemblePushTargets({
-              kind,
-              template: typeof templateRaw === 'string' ? templateRaw : '',
-              ratio: resolveScoreRatio(local.settings, id),
-              studentViewUrl: (stuId) => buildStudentViewUrl(fastify, stuId, id),
-              students: local.students,
-              upstreamStudents: students,
-              scores: local.scores,
-            })
-          },
-          (list) => {
-            const ready = list.filter((item) => !item.skippedReason).length
-            return `可推送 ${ready} 人，跳过 ${list.length - ready} 人`
-          },
-        )
+        if (!prepared) return
+        const { submissions, homeworkScores, students, targets } = prepared
 
         send('assembled', { targets })
 
@@ -635,6 +691,89 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
           send('error', { code: error.code, message: error.message })
         } else {
           send('error', { code: 'INTERNAL', message: '推送失败，请稍后重试' })
+        }
+      } finally {
+        if (!disconnected) reply.raw.end()
+      }
+    },
+  )
+
+  /**
+   * 仅生成成绩与教师评语列表（SSE）：拉取上游数据并组装后返回结果，
+   * 不推送上游、不写回同步时间。事件：step、assembled、done、error。
+   */
+  fastify.post(
+    '/:id/xzzd-push/assemble',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const context = await resolveXzzdPushContext(request, reply, id, request.body)
+      if (!context) return reply
+
+      reply.hijack()
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+
+      let disconnected = false
+      request.raw.on('close', () => {
+        disconnected = true
+      })
+
+      const send: SseSend = (event, data) => {
+        if (disconnected) return
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+
+      const runStep: RunStep = async (stepId, label, run, detailOf) => {
+        send('step', { id: stepId, label, status: 'running' })
+        try {
+          const result = await run()
+          send('step', { id: stepId, label, status: 'done', detail: detailOf?.(result) })
+          return result
+        } catch (error) {
+          send('step', {
+            id: stepId,
+            label,
+            status: 'error',
+            detail: error instanceof Error ? error.message : '未知错误',
+          })
+          throw error
+        }
+      }
+
+      try {
+        const prepared = await preparePushTargets({
+          experimentId: id,
+          context,
+          runStep,
+          isDisconnected: () => disconnected,
+        })
+        if (!prepared) return
+        const { submissions, homeworkScores, students, targets } = prepared
+
+        send('assembled', { targets })
+
+        const ready = targets.filter((item) => !item.skippedReason).length
+        send('done', {
+          stage: 'assembled',
+          message: `已生成成绩与教师评语列表：共 ${targets.length} 人，可推送 ${ready} 人（未推送）`,
+          activityId: context.activityId,
+          submissions: submissions.length,
+          homeworkScores: homeworkScores.length,
+          students: students.length,
+          assembled: targets.length,
+          ready,
+          skipped: targets.length - ready,
+        })
+      } catch (error) {
+        if (error instanceof ZjuamError) {
+          send('error', { code: error.code, message: error.message })
+        } else {
+          send('error', { code: 'INTERNAL', message: '生成列表失败，请稍后重试' })
         }
       } finally {
         if (!disconnected) reply.raw.end()

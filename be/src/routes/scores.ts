@@ -10,7 +10,7 @@ const putScoreSchema = z.object({
   stuId: z.string().trim().min(1),
   type: z.number().int().min(0).max(3),
   indId: z.string().trim().min(1),
-  score: z.number().min(0).max(100),
+  score: z.number().min(-1000).max(1000),
 })
 
 const deleteScoreSchema = z.object({

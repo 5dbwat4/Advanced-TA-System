@@ -1,9 +1,13 @@
+import { deserializeExtras, serializeExtras } from './serialize'
 import type {
   CriterionCard,
   CriterionCardState,
   CriterionExtras,
   CriterionItem,
+  CriterionMode,
   CriterionSection,
+  StoredCardEntry,
+  StoredReviewContent,
 } from './types'
 
 export function defaultCardState(card: CriterionCard): CriterionCardState {
@@ -83,4 +87,131 @@ export function totalScore(
     total += cardValue(card, states[card.id])
   }
   return total
+}
+
+/** 批阅结果条目：小节头 或 被选中的卡片 */
+export type ReportSelectionEntry =
+  | {
+      kind: 'section'
+      id: string
+      title: string
+      /** 小节得分（含初始分、上限与加减分） */
+      score: number
+    }
+  | {
+      kind: 'card'
+      id: string
+      mode: CriterionMode
+      /** 简短规则（卡片标题位） */
+      rule: string
+      /** 详细标准 */
+      detail: string
+      /** 分值（正数） */
+      score: number
+      /** 附注 */
+      appendix: string
+    }
+
+/**
+ * 汇总批阅中所有被助教选中的卡片，按原有顺序展开为「小节头 + 选中卡片」列表。
+ * 小节仅在其内有选中卡片时出现；顶层卡片与临时卡片一并计入。
+ */
+export function collectReportSelections(
+  items: CriterionItem[],
+  states: Record<string, CriterionCardState>,
+  extras: CriterionExtras,
+): ReportSelectionEntry[] {
+  const entries: ReportSelectionEntry[] = []
+
+  const emitCard = (card: CriterionCard) => {
+    const state = states[card.id]
+    if (!state?.selected) return
+    entries.push({
+      kind: 'card',
+      id: card.id,
+      mode: card.mode,
+      rule: card.rule.trim(),
+      detail: card.detail.trim(),
+      score: cardScore(card, state),
+      appendix: state.appendix.trim(),
+    })
+  }
+
+  for (const item of items) {
+    if (item.type === 'card') {
+      emitCard(item)
+      continue
+    }
+    const cards = [...item.children, ...(extras[item.id] ?? [])]
+    if (!cards.some((card) => states[card.id]?.selected)) continue
+    entries.push({
+      kind: 'section',
+      id: item.id,
+      title: item.title.trim(),
+      score: sectionScore(item, states, extras),
+    })
+    for (const card of cards) emitCard(card)
+  }
+  for (const card of extras.root ?? []) emitCard(card)
+
+  return entries
+}
+
+/** 收集评分标准与临时卡片中的所有卡片定义 */
+function collectCardDefs(
+  items: CriterionItem[],
+  extras: CriterionExtras,
+): Map<string, CriterionCard> {
+  const defs = new Map<string, CriterionCard>()
+  for (const item of items) {
+    if (item.type === 'card') defs.set(item.id, item)
+    else for (const card of item.children) defs.set(card.id, card)
+  }
+  for (const cards of Object.values(extras)) for (const card of cards) defs.set(card.id, card)
+  return defs
+}
+
+/**
+ * 内存态 → 精简存储格式：
+ * 仅保留已勾选的卡片（键存在即选中），score 为数字、始终写入，appendix 为空则省略。
+ * 找不到定义（孤儿状态）的卡片会被丢弃。
+ */
+export function encodeReviewContent(
+  states: Record<string, CriterionCardState>,
+  extras: CriterionExtras,
+  items: CriterionItem[],
+): StoredReviewContent {
+  const defs = collectCardDefs(items, extras)
+  const cards: Record<string, StoredCardEntry> = {}
+
+  for (const [id, state] of Object.entries(states)) {
+    if (!state.selected) continue
+    const card = defs.get(id)
+    if (!card) continue
+    const entry: StoredCardEntry = { score: cardScore(card, state) }
+    if (state.appendix.trim() !== '') entry.appendix = state.appendix
+    cards[id] = entry
+  }
+
+  return { cards, extras: serializeExtras(extras) }
+}
+
+/** 精简存储格式 → 内存态（键存在即视为已勾选） */
+export function decodeReviewContent(content: unknown): {
+  cards: Record<string, CriterionCardState>
+  extras: CriterionExtras
+} {
+  const parsed = (content ?? {}) as Partial<StoredReviewContent>
+  const cards: Record<string, CriterionCardState> = {}
+
+  for (const [id, entry] of Object.entries(parsed.cards ?? {})) {
+    if (!entry || typeof entry !== 'object') continue
+    cards[id] = {
+      selected: true,
+      score: entry.score == null ? '' : String(entry.score),
+      appendix: typeof entry.appendix === 'string' ? entry.appendix : '',
+    }
+  }
+
+  return { cards, extras: deserializeExtras(parsed.extras) }
 }

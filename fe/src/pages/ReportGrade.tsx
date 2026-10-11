@@ -1,5 +1,5 @@
 import { Alert, Spinner } from '@heroui/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 
@@ -113,6 +113,8 @@ export default function ReportGrade() {
 
   useEffect(() => {
     setSelectedPersonId((current) => {
+      const fromHash = readHashStudent(gradeStudents)
+      if (fromHash) return fromHash.personId
       if (current != null && gradeStudents.some((student) => student.personId === current)) {
         return current
       }
@@ -121,9 +123,38 @@ export default function ReportGrade() {
     })
   }, [gradeStudents])
 
+  useEffect(() => {
+    const onHashChange = () => {
+      const student = readHashStudent(gradeStudents)
+      if (student) setSelectedPersonId(student.personId)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [gradeStudents])
+
+  const selectStudent = useCallback(
+    (personId: number) => {
+      setSelectedPersonId(personId)
+      const student = gradeStudents.find((item) => item.personId === personId)
+      if (student) {
+        const key = student.studentNo || String(student.personId)
+        window.history.replaceState(null, '', `#${encodeURIComponent(key)}`)
+      }
+    },
+    [gradeStudents],
+  )
+
   const selectedStudent =
     gradeStudents.find((student) => student.personId === selectedPersonId) ?? null
   const gradedCount = gradeStudents.filter((student) => student.score != null).length
+
+  const handleScoreSaved = useCallback((score: Score) => {
+    setScores((prev) => {
+      const next = new Map(prev)
+      next.set(score.stuId, score)
+      return next
+    })
+  }, [])
 
   if (!id) return null
 
@@ -175,7 +206,7 @@ export default function ReportGrade() {
             <StudentListPanel
               students={gradeStudents}
               selectedPersonId={selectedPersonId}
-              onSelect={setSelectedPersonId}
+              onSelect={selectStudent}
             />
           </Panel>
           <Separator className="w-px shrink-0 bg-line transition-colors hover:bg-brand-500/60" />
@@ -184,7 +215,11 @@ export default function ReportGrade() {
           </Panel>
           <Separator className="w-px shrink-0 bg-line transition-colors hover:bg-brand-500/60" />
           <Panel id="grade" defaultSize="25%" minSize="18%" maxSize="45%">
-            <GradePanel student={selectedStudent} experimentId={id} />
+            <GradePanel
+              student={selectedStudent}
+              experimentId={id}
+              onScoreSaved={handleScoreSaved}
+            />
           </Panel>
         </Group>
       )}
@@ -195,4 +230,25 @@ export default function ReportGrade() {
 function submissionTime(submission: ZjuamHomeworkSubmission): number {
   const time = submission.created_at ? Date.parse(submission.created_at) : Number.NaN
   return Number.isFinite(time) ? time : submission.id
+}
+
+/** 读取 URL hash（如 #20210001）并按学号 / personId / stuId / 姓名匹配学生 */
+function readHashStudent(students: GradeStudent[]): GradeStudent | null {
+  const raw = window.location.hash.replace(/^#/, '')
+  if (!raw) return null
+  let value = raw
+  try {
+    value = decodeURIComponent(raw)
+  } catch {
+    value = raw
+  }
+  return (
+    students.find(
+      (student) =>
+        student.studentNo === value ||
+        String(student.personId) === value ||
+        student.stuId === value ||
+        student.name === value,
+    ) ?? null
+  )
 }

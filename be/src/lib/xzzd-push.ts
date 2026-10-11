@@ -131,7 +131,9 @@ export const COMMENT_PLACEHOLDERS = {
   taAssigner: '{@TA_ASSIGNER}',
   scoreFunction: '{@SCORE_FUNCTION}',
   scoreAnswer: '{@SCORE_ANSWER}',
+  scoreReport: '{@SCORE_REPORT}',
   timeModified: '{@TIME_MODIFIED}',
+  remark: '{@REMARK}',
 } as const
 
 export type CommentTemplateVars = {
@@ -139,7 +141,9 @@ export type CommentTemplateVars = {
   taAssigner: string
   scoreFunction: string
   scoreAnswer: string
+  scoreReport: string
   timeModified: string
+  remark: string
 }
 
 /** 直接用字符串替换填充评语模板 */
@@ -149,7 +153,9 @@ export function renderCommentTemplate(template: string, vars: CommentTemplateVar
     .replaceAll(COMMENT_PLACEHOLDERS.taAssigner, vars.taAssigner)
     .replaceAll(COMMENT_PLACEHOLDERS.scoreFunction, vars.scoreFunction)
     .replaceAll(COMMENT_PLACEHOLDERS.scoreAnswer, vars.scoreAnswer)
+    .replaceAll(COMMENT_PLACEHOLDERS.scoreReport, vars.scoreReport)
     .replaceAll(COMMENT_PLACEHOLDERS.timeModified, vars.timeModified)
+    .replaceAll(COMMENT_PLACEHOLDERS.remark, vars.remark)
 }
 
 function pad2(value: number): string {
@@ -180,6 +186,8 @@ export type AssemblePushTargetsInput = {
   /** 学在浙大学生名单（用于学号 → person id 映射） */
   upstreamStudents: ZjuamCourseStudent[]
   scores: XzzdPushScoreRow[]
+  /** 该实验下每个学生的备注（{@REMARK}），key 为 stuId */
+  remarks: Map<string, string>
 }
 
 /** 按模板组装每个学生的最终分与评语（不发送任何请求） */
@@ -226,7 +234,9 @@ export function assemblePushTargets(input: AssemblePushTargetsInput): XzzdPushTa
       taAssigner: graderName ?? '—',
       scoreFunction: formatScore(functionScore),
       scoreAnswer: formatScore(answerScore),
+      scoreReport: formatScore(reportScore),
       timeModified: formatDateTime(modifiedAt),
+      remark: input.remarks.get(student.stuId)?.trim() || '（空）',
     })
 
     let skippedReason: string | null = null

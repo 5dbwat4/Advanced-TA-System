@@ -44,12 +44,20 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(404).send({ error: 'NOT_FOUND', message: '链接无效或内容不存在' })
     }
 
-    const [klass, scoreRows] = await Promise.all([
+    const [klass, scoreRows, reportReview, remarkRow] = await Promise.all([
       prisma.class.findUnique({ where: { id: experiment.classId }, select: { settings: true } }),
       prisma.score.findMany({
         where: { stuId, indId: experiment.id, type: { in: [0, 1, 2] } },
         include: { grader: { select: { name: true } } },
         orderBy: { type: 'asc' },
+      }),
+      prisma.reportReview.findUnique({
+        where: { stuId_experimentId: { stuId, experimentId: experiment.id } },
+        select: { ruleId: true, ruleContent: true },
+      }),
+      prisma.remark.findUnique({
+        where: { stuId_experimentId: { stuId, experimentId: experiment.id } },
+        select: { text: true },
       }),
     ])
 
@@ -60,6 +68,21 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       [0, 1, 2].map((type) => scoreByType.get(type)?.score ?? null),
       ratio,
     )
+
+    // 报告扣分原因：批阅记录 + 对应的评分标准（含规则文本）
+    let report: { ruleId: string; ruleContent: unknown; items: unknown } | null = null
+    if (reportReview) {
+      const criteria = await prisma.criteria.findUnique({
+        where: { key: reportReview.ruleId },
+        select: { payload: true },
+      })
+      const payload = parseJson(criteria?.payload ?? null) as { items?: unknown } | null
+      report = {
+        ruleId: reportReview.ruleId,
+        ruleContent: parseJson(reportReview.ruleContent),
+        items: Array.isArray(payload?.items) ? payload.items : [],
+      }
+    }
 
     return {
       experiment: {
@@ -81,6 +104,17 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
         graderName: row.grader?.name ?? null,
         updatedAt: row.updatedAt,
       })),
+      remark: remarkRow?.text ?? null,
+      report,
     }
   })
+}
+
+function parseJson(value: string | null): unknown {
+  if (value == null) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
 }

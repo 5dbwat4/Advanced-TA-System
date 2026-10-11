@@ -11,6 +11,7 @@ import CheckinSession from '@/pages/CheckinSession'
 import Checkoff from '@/pages/Checkoff'
 import Checkpoints from '@/pages/Checkpoints'
 import CourseSettings from '@/pages/CourseSettings'
+import CriteriaManage from '@/pages/CriteriaManage'
 import Dashboard from '@/pages/Dashboard'
 import ExperimentDetail from '@/pages/ExperimentDetail'
 import Experiments from '@/pages/Experiments'
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/setup" element={<Setup />} />
         <Route path="/console/reports/:id" element={<ReportGrade />} />
         <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
+        <Route path="/console/criteria/:key/edit" element={<ReportCriteria />} />
         <Route path="/console" element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="checkoff" element={<Checkoff />} />
@@ -53,6 +55,7 @@ export default function App() {
           <Route path="experiments/:id/xzzd-push" element={<XzzdPush />} />
           <Route path="questions" element={<Questions />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="criteria" element={<CriteriaManage />} />
           <Route path="llm-connect" element={<LlmConnect />} />
           <Route path="more" element={<More />} />
           <Route path="scores" element={<Scores />} />

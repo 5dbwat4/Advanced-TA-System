@@ -16,9 +16,11 @@ import ArrowUpDown from '~icons/lucide/arrow-up-down'
 import FlaskConical from '~icons/lucide/flask-conical'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import School from '~icons/lucide/school'
+import TriangleAlert from '~icons/lucide/triangle-alert'
 import UserRoundPlus from '~icons/lucide/user-round-plus'
 import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
@@ -45,7 +47,7 @@ import {
   subscribeScores,
   type ScoreChangeEvent,
 } from '@/lib/realtime'
-import { SCORE_MAX, SCORE_TYPES, scoreKey } from '@/lib/scores'
+import { SCORE_LIMIT, SCORE_MAX, SCORE_TYPES, scoreKey } from '@/lib/scores'
 import { resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -138,9 +140,11 @@ function sortStudents(
 function ScoreCell({
   score,
   onCommit,
+  onOutOfRange,
 }: {
   score: Score | null
   onCommit: (next: number | null) => Promise<void>
+  onOutOfRange: (next: number) => void
 }) {
   const value = score?.score ?? null
   const [draft, setDraft] = useState(value === null ? '' : String(value))
@@ -167,9 +171,14 @@ function ScoreCell({
       return
     }
     const parsed = Number(trimmed)
-    if (Number.isNaN(parsed) || parsed < 0 || parsed > SCORE_MAX) {
-      toast.error(`请输入 0~${SCORE_MAX} 的分数`)
+    if (Number.isNaN(parsed) || parsed < -SCORE_LIMIT || parsed > SCORE_LIMIT) {
+      toast.error(`请输入 ${-SCORE_LIMIT}~${SCORE_LIMIT} 的分数`)
       setDraft(current)
+      return
+    }
+    if (parsed < 0 || parsed > SCORE_MAX) {
+      setDraft(current)
+      onOutOfRange(parsed)
       return
     }
     setSaving(true)
@@ -195,8 +204,8 @@ function ScoreCell({
   const input = (
     <Input
       type="number"
-      min={0}
-      max={SCORE_MAX}
+      min={-SCORE_LIMIT}
+      max={SCORE_LIMIT}
       step="1"
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
@@ -242,6 +251,13 @@ export default function Scores() {
   const [rosterBusy, setRosterBusy] = useState(false)
   const [pendingDiff, setPendingDiff] = useState<RosterDiff | null>(null)
   const [sort, setSort] = useState<SortState | null>(null)
+  const [pendingRange, setPendingRange] = useState<{
+    student: Student
+    type: number
+    indId: string
+    score: number
+  } | null>(null)
+  const [rangeBusy, setRangeBusy] = useState(false)
 
   const toggleSort = useCallback((key: string) => {
     setSort((prev) => {
@@ -254,6 +270,12 @@ export default function Scores() {
   const rosterState = useOverlayState({
     onOpenChange: (open) => {
       if (!open) setPendingDiff(null)
+    },
+  })
+
+  const rangeState = useOverlayState({
+    onOpenChange: (open) => {
+      if (!open) setPendingRange(null)
     },
   })
 
@@ -376,6 +398,19 @@ export default function Scores() {
     },
     [],
   )
+
+  const confirmOutOfRange = async () => {
+    if (!pendingRange) return
+    setRangeBusy(true)
+    try {
+      await commitScore(pendingRange.student, pendingRange.type, pendingRange.indId, pendingRange.score)
+      rangeState.close()
+    } catch {
+      rangeState.close()
+    } finally {
+      setRangeBusy(false)
+    }
+  }
 
   const visibleStudents = useMemo(
     () => (currentClass ? students.filter((student) => student.classId === currentClass.id) : []),
@@ -586,6 +621,17 @@ export default function Scores() {
         </Modal.Backdrop>
       </Modal>
 
+      <ConfirmDialog
+        state={rangeState}
+        icon={TriangleAlert}
+        tone="brand"
+        title="分数超出范围"
+        description="你确定要将分数值设置为在0~100以外的数目吗？"
+        confirmLabel="确定"
+        isPending={rangeBusy}
+        onConfirm={() => void confirmOutOfRange()}
+      />
+
       {loading ? (
         <SkeletonList rows={5} className="h-12 rounded-xl" />
       ) : !currentClass ? (
@@ -686,6 +732,15 @@ export default function Scores() {
                                 <ScoreCell
                                   score={scores.get(key) ?? null}
                                   onCommit={(next) => commitScore(student, type.value, exp.id, next)}
+                                  onOutOfRange={(next) => {
+                                    setPendingRange({
+                                      student,
+                                      type: type.value,
+                                      indId: exp.id,
+                                      score: next,
+                                    })
+                                    rangeState.open()
+                                  }}
                                 />
                               </td>
                             )
