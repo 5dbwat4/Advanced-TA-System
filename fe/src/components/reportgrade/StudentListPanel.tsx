@@ -10,10 +10,12 @@ export function StudentListPanel({
   students,
   selectedPersonId,
   onSelect,
+  editorsByStuId,
 }: {
   students: GradeStudent[]
   selectedPersonId: number | null
   onSelect: (personId: number) => void
+  editorsByStuId: Map<string, string[]>
 }) {
   const [query, setQuery] = useState('')
 
@@ -52,6 +54,7 @@ export function StudentListPanel({
         ) : (
           visible.map((student) => {
             const active = student.personId === selectedPersonId
+            const editors = student.stuId ? (editorsByStuId.get(student.stuId) ?? []) : []
             return (
               <button
                 key={student.personId}
@@ -67,6 +70,11 @@ export function StudentListPanel({
                   <span className="tabular block text-[11px] text-fg-subtle">
                     {student.studentNo || `person ${student.personId}`}
                   </span>
+                  {editors.length > 0 && (
+                    <span className="mt-0.5 block truncate text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      {editors.join('、')} 正在批改
+                    </span>
+                  )}
                 </span>
                 {student.score != null ? (
                   <span className="tabular inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">

@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { myClassIds, requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
-import { emitScoreChange } from '../lib/realtime'
+import { emitReportScore, emitScoreChange } from '../lib/realtime'
 import { toScoreDto } from '../lib/score'
 
 const putScoreSchema = z.object({
@@ -111,6 +111,9 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
       classId: student.classId,
       score: toScoreDto(saved),
     })
+    if (type === 2) {
+      emitReportScore(indId, stuId, toScoreDto(saved), sub, saved.grader?.name ?? '')
+    }
 
     return reply.send({ score: toScoreDto(saved) })
   })
@@ -118,6 +121,7 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
   /** 删除分数（助教 / 教师） */
   fastify.delete('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!requireStaff(request, reply)) return reply
+    const { sub } = request.user as { sub: string }
 
     const parsed = deleteScoreSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -148,6 +152,9 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
     })
 
     emitScoreChange(student.classId, { action: 'delete', classId: student.classId, stuId, type, indId })
+    if (type === 2) {
+      emitReportScore(indId, stuId, null, sub, '')
+    }
 
     return reply.send({ ok: true })
   })

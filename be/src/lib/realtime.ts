@@ -188,6 +188,42 @@ function checkoffRoom(token: string): string {
   return `checkoff:${token}`
 }
 
+/* --------------------------- 报告批改房间 --------------------------- */
+
+/** 报告批改房间名（按实验） */
+function reportRoom(experimentId: string): string {
+  return `report:${experimentId}`
+}
+
+/** 某连接在实验内「正在批改」的在场信息 */
+type ReportPresence = { userId: string; name: string; stuId: string | null }
+
+/** experimentId → (socketId → presence) */
+const reportPresences = new Map<string, Map<string, ReportPresence>>()
+
+/** 实验房间内的在场列表 */
+function reportPeers(experimentId: string): ReportPresence[] {
+  return [...(reportPresences.get(experimentId)?.values() ?? [])]
+}
+
+/** 向实验房间广播在场列表 */
+function broadcastReportPresence(experimentId: string): void {
+  io?.to(reportRoom(experimentId)).emit('report:presence', { peers: reportPeers(experimentId) })
+}
+
+/** socket 离开报告房间：移除在场并广播（幂等） */
+function removeReportPresence(socket: Socket): void {
+  const experimentId = socket.data.reportExperimentId as string | undefined
+  socket.data.reportExperimentId = undefined
+  socket.data.reportStuId = undefined
+  if (!experimentId) return
+  const room = reportPresences.get(experimentId)
+  if (!room) return
+  room.delete(socket.id)
+  if (room.size === 0) reportPresences.delete(experimentId)
+  broadcastReportPresence(experimentId)
+}
+
 /** 向会话房间广播当前状态与 master 透传的展示偏好 */
 function emitSlaveState(session: CheckoffSession): void {
   io?.to(checkoffRoom(session.token)).emit('slave:state', {
@@ -200,24 +236,17 @@ function emitSlaveState(session: CheckoffSession): void {
 export function createRealtime(fastify: FastifyInstance): Server {
   const server = new Server(fastify.server, { cors: { origin: true } })
 
-  /** 将 socket 加入其所属班级房间并回传班级列表（失败时记录日志并回退为空列表） */
-  async function syncRooms(socket: Socket): Promise<void> {
-    try {
-      const userId = socket.data.user?.sub as string | undefined
-      if (!userId) {
-        socket.emit('scores:ready', { classIds: [] })
-        return
-      }
-
-      const classIds = await loadClassIds(userId)
-      for (const classId of classIds) {
-        await socket.join(roomName(classId))
-      }
-      socket.emit('scores:ready', { classIds })
-    } catch (error) {
-      fastify.log.error(error)
-      socket.emit('scores:ready', { classIds: [] })
+  /** 订阅某个班级的成绩广播（校验班级归属；切换时先退出其它班级房间） */
+  async function subscribeClass(socket: Socket, classId: string): Promise<string[]> {
+    const userId = socket.data.user?.sub as string | undefined
+    if (!userId) return []
+    const classIds = await loadClassIds(userId)
+    if (!classIds.includes(classId)) return []
+    for (const room of [...socket.rooms]) {
+      if (room.startsWith('class:')) await socket.leave(room)
     }
+    await socket.join(roomName(classId))
+    return [classId]
   }
 
   server.use((socket, next) => {
@@ -233,9 +262,66 @@ export function createRealtime(fastify: FastifyInstance): Server {
   })
 
   server.on('connection', (socket) => {
-    void syncRooms(socket)
-    socket.on('scores:subscribe', () => {
-      void syncRooms(socket)
+    socket.on(
+      'scores:subscribe',
+      async ({ classId } = {} as { classId?: string }, ack?: (res: unknown) => void) => {
+        if (typeof classId !== 'string') return ack?.({ classIds: [] })
+        try {
+          ack?.({ classIds: await subscribeClass(socket, classId) })
+        } catch (error) {
+          fastify.log.error(error)
+          ack?.({ classIds: [] })
+        }
+      },
+    )
+
+    /* -------- 报告批改房间（按实验，仅打开批改页的助教加入） -------- */
+    socket.on(
+      'report:join',
+      async ({ experimentId } = {} as { experimentId?: string }, ack?: (res: unknown) => void) => {
+        const user = socket.data.user as { sub?: string } | undefined
+        if (!user?.sub || typeof experimentId !== 'string') return ack?.({ error: 'UNAUTHORIZED' })
+        const experiment = await prisma.experiment.findUnique({
+          where: { id: experimentId },
+          select: { classId: true },
+        })
+        if (!experiment) return ack?.({ error: 'EXPERIMENT_NOT_FOUND' })
+        const ctx = await loadBroadcastContext(user.sub)
+        if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(experiment.classId)) {
+          return ack?.({ error: 'FORBIDDEN' })
+        }
+        if (socket.data.reportExperimentId && socket.data.reportExperimentId !== experimentId) {
+          removeReportPresence(socket)
+        }
+        socket.data.reportExperimentId = experimentId
+        socket.data.reportStuId = null
+        const room = reportPresences.get(experimentId) ?? new Map<string, ReportPresence>()
+        reportPresences.set(experimentId, room)
+        room.set(socket.id, { userId: user.sub, name: ctx.name, stuId: null })
+        await socket.join(reportRoom(experimentId))
+        ack?.({ peers: reportPeers(experimentId) })
+        broadcastReportPresence(experimentId)
+      },
+    )
+
+    socket.on(
+      'report:focus',
+      ({ experimentId, stuId } = {} as { experimentId?: string; stuId?: string | null }) => {
+        if (socket.data.reportExperimentId !== experimentId) return
+        const entry = reportPresences.get(experimentId)?.get(socket.id)
+        if (!entry) return
+        const next = typeof stuId === 'string' && stuId.length > 0 ? stuId : null
+        if (entry.stuId === next) return
+        entry.stuId = next
+        socket.data.reportStuId = next
+        broadcastReportPresence(experimentId)
+      },
+    )
+
+    socket.on('report:leave', ({ experimentId } = {} as { experimentId?: string }) => {
+      if (socket.data.reportExperimentId !== experimentId) return
+      void socket.leave(reportRoom(experimentId))
+      removeReportPresence(socket)
     })
 
     /* -------- 验收房间（仅打开验收页的用户加入） -------- */
@@ -415,6 +501,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
 
     socket.on('disconnect', () => {
       leaveSession(socket)
+      removeReportPresence(socket)
     })
   })
 
@@ -426,4 +513,29 @@ export function createRealtime(fastify: FastifyInstance): Server {
 /** 向指定班级广播成绩变更 */
 export function emitScoreChange(classId: string, payload: ScoreChangeEvent): void {
   io?.to(roomName(classId)).emit('score:change', payload)
+}
+
+/** 报告成绩保存/删除事件（按实验广播：左侧列表刷新 + 同人「同步」提示） */
+export type ReportScoreEvent = {
+  stuId: string
+  /** null 表示删除 */
+  score: ScoreDto | null
+  byUserId: string
+  byName: string
+}
+
+/** 向实验房间广播报告成绩事件（「同步」内容由前端按需 GET 拉取） */
+export function emitReportScore(
+  experimentId: string,
+  stuId: string,
+  score: ScoreDto | null,
+  byUserId: string,
+  byName: string,
+): void {
+  io?.to(reportRoom(experimentId)).emit('report:score', {
+    stuId,
+    score,
+    byUserId,
+    byName,
+  } satisfies ReportScoreEvent)
 }

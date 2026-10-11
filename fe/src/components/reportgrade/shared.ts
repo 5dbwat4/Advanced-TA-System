@@ -20,6 +20,17 @@ export function formatScore(value: number): string {
   return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10)
 }
 
+/** 「同步」：把他人保存的批阅内容覆盖到当前编辑器 */
+export type ReportSync = {
+  /** 递增令牌，变化即触发一次覆盖 */
+  nonce: number
+  /** 该内容所属学生（stuId），与当前学生不符时忽略 */
+  stuId: string
+  ruleId: string | null
+  ruleContent: unknown
+  remark: string
+}
+
 export type FileKind = 'pdf' | 'image' | 'other'
 
 /** 推断 MIME（mime 查不到时给通用二进制） */

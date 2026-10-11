@@ -38,6 +38,7 @@ export function disconnectScoreSocket(): void {
   socket = null
 }
 
-export function subscribeScores(socket: Socket): void {
-  socket.emit('scores:subscribe')
+/** 订阅当前选中班级的成绩广播（不再默认按用户所有班级进房） */
+export function subscribeScores(socket: Socket, classId: string): void {
+  socket.emit('scores:subscribe', { classId })
 }

@@ -12,14 +12,22 @@ import { getErrorMessage } from '@/lib/error'
 export function RemarkField({
   stuId,
   experimentId,
+  sync,
 }: {
   stuId: string | null
   experimentId: string
+  /** 「同步」时用他人保存的附言覆盖当前内容（nonce 变化触发一次） */
+  sync?: { nonce: number; text: string }
 }) {
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const savedRef = useRef('')
+
+  useEffect(() => {
+    if (!sync) return
+    setText(sync.text)
+  }, [sync])
 
   useEffect(() => {
     if (!stuId) {

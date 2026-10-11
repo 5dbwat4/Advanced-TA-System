@@ -136,12 +136,6 @@ function GradingCard({
       tabIndex={0}
       aria-pressed={selected}
       onClick={() => onToggle(card.id)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onToggle(card.id)
-        }
-      }}
       className={cn(
         'cursor-pointer rounded-xl border border-line bg-elevated p-3 transition-all',
         selected ? 'border-brand-500/40 bg-brand-500/5' : 'opacity-45 hover:opacity-70',

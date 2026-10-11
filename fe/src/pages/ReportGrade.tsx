@@ -1,16 +1,21 @@
-import { Alert, Spinner } from '@heroui/react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Alert, Spinner, toast as herouiToast } from '@heroui/react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
+import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
+import ArrowRightLeft from '~icons/lucide/arrow-right-left'
+import Users from '~icons/lucide/users'
 import { FilePreviewPanel } from '@/components/reportgrade/FilePreviewPanel'
 import { GradePanel } from '@/components/reportgrade/GradePanel'
 import { StudentListPanel } from '@/components/reportgrade/StudentListPanel'
-import type { GradeStudent } from '@/components/reportgrade/shared'
+import type { GradeStudent, ReportSync } from '@/components/reportgrade/shared'
 import {
   apiFetch,
   fetchClassTables,
+  fetchRemark,
+  fetchReportReview,
   fetchXzzdPushPreview,
   type ClassTables,
   type Experiment,
@@ -18,7 +23,9 @@ import {
   type ZjuamHomeworkSubmission,
   type ZjuamHomeworkSyncData,
 } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
+import { useReportRoom, type ReportPeer, type ReportScoreEvent } from '@/lib/report-socket'
 
 export default function ReportGrade() {
   const { id } = useParams<{ id: string }>()
@@ -30,6 +37,10 @@ export default function ReportGrade() {
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [peers, setPeers] = useState<ReportPeer[]>([])
+  const [remoteSaves, setRemoteSaves] = useState<Map<string, ReportScoreEvent>>(new Map())
+  const [sync, setSync] = useState<ReportSync | null>(null)
 
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: 'report-grade',
@@ -156,6 +167,132 @@ export default function ReportGrade() {
     })
   }, [])
 
+  const { user } = useAuth()
+  const myUserId = user?.id ?? null
+  const selectedStuId = selectedStudent?.stuId ?? null
+
+  /** 他人保存/删除成绩：刷新左侧分数列表；他人保存则记录为可同步内容 */
+  const handleRemoteScore = useCallback(
+    (event: ReportScoreEvent) => {
+      setScores((prev) => {
+        const next = new Map(prev)
+        if (event.score) next.set(event.stuId, event.score)
+        else next.delete(event.stuId)
+        return next
+      })
+      if (!event.score || event.byUserId === myUserId) return
+      setRemoteSaves((prev) => new Map(prev).set(event.stuId, event))
+    },
+    [myUserId],
+  )
+
+  useReportRoom({
+    experimentId: id,
+    stuId: selectedStuId,
+    onPresence: setPeers,
+    onScore: handleRemoteScore,
+  })
+
+  /** stuId → 正在批改该学生的他人姓名（去重，排除自己） */
+  const editorsByStuId = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const peer of peers) {
+      if (!peer.stuId || peer.userId === myUserId) continue
+      const names = map.get(peer.stuId) ?? []
+      if (!names.includes(peer.name)) names.push(peer.name)
+      map.set(peer.stuId, names)
+    }
+    return map
+  }, [peers, myUserId])
+
+  const coEditors = selectedStuId ? (editorsByStuId.get(selectedStuId) ?? []) : []
+  const saveNotice = selectedStuId ? (remoteSaves.get(selectedStuId) ?? null) : null
+
+  /** 同步对方成绩：从数据库 GET 最新批阅与附言，覆盖到编辑器 */
+  const handleSync = useCallback(async () => {
+    if (!id || !saveNotice) return
+    const { stuId } = saveNotice
+    try {
+      const [review, remark] = await Promise.all([
+        fetchReportReview(stuId, id),
+        fetchRemark(stuId, id),
+      ])
+      setSync({
+        nonce: Date.now(),
+        stuId,
+        ruleId: review?.ruleId ?? null,
+        ruleContent: review?.ruleContent ?? null,
+        remark: remark?.text ?? '',
+      })
+      setRemoteSaves((prev) => {
+        const next = new Map(prev)
+        next.delete(stuId)
+        return next
+      })
+      toast.success('已同步对方成绩')
+    } catch (err) {
+      toast.error(getErrorMessage(err, '同步失败'))
+    }
+  }, [id, saveNotice])
+
+  /** 仅当待处理事件仍是最新那条时才清除（避免异步 onClose 误删新事件） */
+  const dismissRemoteSave = useCallback((stuId: string, event: ReportScoreEvent) => {
+    setRemoteSaves((prev) => {
+      if (prev.get(stuId) !== event) return prev
+      const next = new Map(prev)
+      next.delete(stuId)
+      return next
+    })
+  }, [])
+
+  // 顶部通知：他人也在批改同一份报告（对方离开即消失）
+  const coEditorsLabel = coEditors.join('、')
+  const coToastRef = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = coToastRef.current
+    if (!coEditorsLabel) {
+      if (previous) {
+        coToastRef.current = null
+        herouiToast.close(previous)
+      }
+      return
+    }
+    const message = `${coEditorsLabel}也在批改这份报告`
+    if (previous) herouiToast.update(previous, message, { timeout: 0 })
+    else
+      coToastRef.current = herouiToast(message, {
+        variant: 'warning',
+        timeout: 0,
+        indicator: <Users width={18} height={18} />,
+      })
+  }, [coEditorsLabel])
+  useEffect(
+    () => () => {
+      if (coToastRef.current) herouiToast.close(coToastRef.current)
+    },
+    [],
+  )
+
+  // 顶部通知：他人保存了成绩，可同步
+  const saveToastRef = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = saveToastRef.current
+    if (previous) {
+      saveToastRef.current = null
+      herouiToast.close(previous)
+    }
+    if (!saveNotice) return
+    const event = saveNotice
+    saveToastRef.current = herouiToast(`${event.byName || '对方'}保存了这份报告的成绩`, {
+      description: '你可以同步成绩，同步将覆盖你当前做出的批改',
+      variant: 'accent',
+      timeout: 0,
+      indicator: <ArrowRightLeft width={18} height={18} />,
+      actionProps: { children: '同步', onPress: () => void handleSync() },
+      onClose: () => dismissRemoteSave(event.stuId, event),
+    })
+  }, [saveNotice, handleSync, dismissRemoteSave])
+
   if (!id) return null
 
   return (
@@ -207,6 +344,7 @@ export default function ReportGrade() {
               students={gradeStudents}
               selectedPersonId={selectedPersonId}
               onSelect={selectStudent}
+              editorsByStuId={editorsByStuId}
             />
           </Panel>
           <Separator className="w-px shrink-0 bg-line transition-colors hover:bg-brand-500/60" />
@@ -219,6 +357,7 @@ export default function ReportGrade() {
               student={selectedStudent}
               experimentId={id}
               onScoreSaved={handleScoreSaved}
+              sync={sync}
             />
           </Panel>
         </Group>

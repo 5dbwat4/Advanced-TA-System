@@ -5,12 +5,18 @@
 ARG NODE_IMAGE=docker.m.daocloud.io/library/node:22-slim
 FROM ${NODE_IMAGE}
 
-# Prisma 运行时依赖 openssl
-RUN apt-get update \
+# Prisma 运行时依赖 openssl；apt 显式走国内镜像（清华 TUNA）
+RUN set -eux; \
+  for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
+    if [ -f "$f" ]; then sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g; s|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' "$f"; fi; \
+  done; \
+  apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# 启用 pnpm（corepack 随 Node 提供）
+# 启用 pnpm（corepack 随 Node 提供）；npm/pnpm 显式走国内镜像（npmmirror）
+ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com \
+    COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
 RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 
 WORKDIR /app

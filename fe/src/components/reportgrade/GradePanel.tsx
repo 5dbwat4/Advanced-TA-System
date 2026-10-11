@@ -9,7 +9,7 @@ import {
   useOverlayState,
 } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -38,7 +38,7 @@ import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { formatScore, type GradeStudent } from './shared'
+import { formatScore, type GradeStudent, type ReportSync } from './shared'
 
 const EMPTY_CARD_STATE: CriterionCardState = { selected: false, score: '', appendix: '' }
 
@@ -46,10 +46,12 @@ export function GradePanel({
   student,
   experimentId,
   onScoreSaved,
+  sync,
 }: {
   student: GradeStudent | null
   experimentId: string
   onScoreSaved?: (score: Score) => void
+  sync?: ReportSync | null
 }) {
   const navigate = useNavigate()
   const criteriaState = useOverlayState()
@@ -86,6 +88,11 @@ export function GradePanel({
   const displayScore = hasCriteria ? total : (savedScore?.score ?? null)
   const showSavedMeta = savedScore != null && (!hasCriteria || savedScore.score === total)
   const canSaveReport = hasCriteria && stuId != null && ruleKey != null
+  const remarkSync = useMemo(
+    () =>
+      sync && sync.stuId === stuId ? { nonce: sync.nonce, text: sync.remark } : undefined,
+    [sync, stuId],
+  )
 
   useEffect(() => {
     if (!stuId) return
@@ -121,6 +128,37 @@ export function GradePanel({
       cancelled = true
     }
   }, [stuId, experimentId])
+
+  useEffect(() => {
+    if (!sync || !stuId || sync.stuId !== stuId) return
+    const rid = sync.ruleId
+    if (!rid) return
+    let cancelled = false
+    const apply = (defs: CriterionItem[]) => {
+      const content = decodeReviewContent(sync.ruleContent)
+      setItems(defs)
+      itemsRef.current = defs
+      setRuleKey(rid)
+      ruleKeyRef.current = rid
+      setStates(content.cards)
+      setExtras(content.extras)
+      setDirty(true)
+    }
+    if (ruleKeyRef.current === rid && itemsRef.current) {
+      apply(itemsRef.current)
+      return
+    }
+    fetchCriteria(rid)
+      .then((res) => {
+        if (cancelled) return
+        const payload = res.payload as { items?: CriterionItem[] } | null
+        if (payload?.items) apply(payload.items)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [sync, stuId])
 
   useEffect(() => {
     if (!dirty || !items || !ruleKey || !stuId) return
@@ -269,6 +307,18 @@ export function GradePanel({
     void saveReportScore().finally(() => rangeState.close())
   }
 
+  // Ctrl/Cmd+S 保存当前报告分
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return
+      if (event.key.toLowerCase() !== 's') return
+      event.preventDefault()
+      requestSaveReport()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [requestSaveReport])
+
   if (!student) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -299,6 +349,7 @@ export function GradePanel({
             isPending={savingReport}
             isDisabled={!canSaveReport}
             onPress={requestSaveReport}
+            aria-keyshortcuts="Control+S Meta+S"
             icon={Save}
           >
             保存
@@ -327,10 +378,16 @@ export function GradePanel({
             <Dropdown.Popover>
               <Dropdown.Menu
                 onAction={(key) => {
-                  if (key === 'copy-share-code') void copyShareCode()
+                  if (key === 'create-criteria')
+                    navigate(`/console/reports/${experimentId}/criteria/new`)
+                  else if (key === 'copy-share-code') void copyShareCode()
                   else if (key === 'manage-criteria') navigate('/console/criteria')
                 }}
               >
+                <Dropdown.Item id="create-criteria" textValue="创建评分标准">
+                  <Plus width={15} height={15} className="shrink-0 text-fg-muted" />
+                  <Label>创建评分标准</Label>
+                </Dropdown.Item>
                 <Dropdown.Item id="copy-share-code" textValue="复制当前评分标准分享码">
                   <Copy width={15} height={15} className="shrink-0 text-fg-muted" />
                   <Label>复制当前评分标准分享码</Label>
@@ -365,7 +422,7 @@ export function GradePanel({
           )
         )}
 
-        <RemarkField stuId={stuId} experimentId={experimentId} />
+        <RemarkField stuId={stuId} experimentId={experimentId} sync={remarkSync} />
       </div>
 
       <Modal state={criteriaState}>

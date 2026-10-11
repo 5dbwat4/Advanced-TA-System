@@ -335,7 +335,7 @@ export default function Scores() {
     const socket = connectScoreSocket()
 
     const handleConnect = () => {
-      subscribeScores(socket)
+      if (classId) subscribeScores(socket, classId)
       void reload()
     }
 
@@ -352,19 +352,15 @@ export default function Scores() {
       })
     }
 
-    const handleReady = () => undefined
-
     socket.on('connect', handleConnect)
     socket.on('score:change', handleScoreChange)
-    socket.on('scores:ready', handleReady)
 
     return () => {
       socket.off('connect', handleConnect)
       socket.off('score:change', handleScoreChange)
-      socket.off('scores:ready', handleReady)
       disconnectScoreSocket()
     }
-  }, [reload])
+  }, [reload, classId])
 
   const commitScore = useCallback(
     async (student: Student, type: number, indId: string, next: number | null) => {
