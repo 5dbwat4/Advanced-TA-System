@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # 构建（在仓库根目录执行）：docker build -f be/Dockerfile -t tsaas-be .
-FROM node:22-slim
+# 基础镜像显式走 DaoCloud 镜像源（可用 --build-arg NODE_IMAGE=node:22-slim 覆盖为 Docker Hub）
+ARG NODE_IMAGE=docker.m.daocloud.io/library/node:22-slim
+FROM ${NODE_IMAGE}
 
 # Prisma 运行时依赖 openssl
 RUN apt-get update \
