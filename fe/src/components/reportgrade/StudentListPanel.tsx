@@ -1,21 +1,25 @@
+import { Tooltip } from '@heroui/react'
 import { useMemo, useState } from 'react'
 
 import Check from '~icons/lucide/check'
+import Info from '~icons/lucide/info'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { cn } from '@/lib/utils'
 
-import { formatScore, type GradeStudent } from './shared'
+import { formatScore, type GradeStudent, type StudentFlag } from './shared'
 
 export function StudentListPanel({
   students,
   selectedPersonId,
   onSelect,
   editorsByStuId,
+  flagsByStuId,
 }: {
   students: GradeStudent[]
   selectedPersonId: number | null
   onSelect: (personId: number) => void
   editorsByStuId: Map<string, string[]>
+  flagsByStuId: Map<string, StudentFlag>
 }) {
   const [query, setQuery] = useState('')
 
@@ -55,6 +59,13 @@ export function StudentListPanel({
           visible.map((student) => {
             const active = student.personId === selectedPersonId
             const editors = student.stuId ? (editorsByStuId.get(student.stuId) ?? []) : []
+            const flag = student.stuId ? flagsByStuId.get(student.stuId) : undefined
+            const flagLines: string[] = []
+            if (flag?.focusReason != null) {
+              const reason = flag.focusReason.trim()
+              flagLines.push(reason ? `重点关注对象：${reason}` : '重点关注对象')
+            }
+            if (flag?.checkpoint) flagLines.push('领取了 Checkpoint')
             return (
               <button
                 key={student.personId}
@@ -66,7 +77,27 @@ export function StudentListPanel({
                 )}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{student.name}</span>
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="min-w-0 truncate text-sm font-semibold">{student.name}</span>
+                    {flagLines.length > 0 && (
+                      <Tooltip delay={0}>
+                        <Tooltip.Trigger className="inline-flex shrink-0">
+                          <Info
+                            width={13}
+                            height={13}
+                            className="text-fg-subtle transition-colors hover:text-brand-600 dark:hover:text-brand-300"
+                          />
+                        </Tooltip.Trigger>
+                        <Tooltip.Content showArrow placement="right" className="max-w-xs">
+                          <span className="flex flex-col">
+                            {flagLines.map((line) => (
+                              <span key={line}>{line}</span>
+                            ))}
+                          </span>
+                        </Tooltip.Content>
+                      </Tooltip>
+                    )}
+                  </span>
                   <span className="tabular block text-[11px] text-fg-subtle">
                     {student.studentNo || `person ${student.personId}`}
                   </span>

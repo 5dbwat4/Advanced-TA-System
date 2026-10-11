@@ -1,4 +1,4 @@
-import { createStore, del, entries, get, set } from 'idb-keyval'
+import { clear, createStore, del, entries, get, set } from 'idb-keyval'
 
 import { fetchBytesWithProgress, type FetchProgress } from './shared'
 
@@ -85,6 +85,21 @@ async function pruneCache(targetBytes = TARGET_BYTES): Promise<void> {
     await del(key, store)
     total -= record.size
   }
+}
+
+/** 当前已缓存的文件总量（字节） */
+export async function getCacheBytes(): Promise<number> {
+  try {
+    const all = await entries<number, CachedAttachment>(store)
+    return all.reduce((sum, [, record]) => sum + record.size, 0)
+  } catch {
+    return 0
+  }
+}
+
+/** 清空全部本地缓存（报告附件） */
+export async function clearCache(): Promise<void> {
+  await clear(store)
 }
 
 /** 优先读本地缓存，未命中则流式下载并写入缓存 */

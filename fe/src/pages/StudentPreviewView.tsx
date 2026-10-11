@@ -174,7 +174,7 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
       <section className="mt-4 rounded-3xl border border-line bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
           <ClipboardList width={14} height={14} className="shrink-0" />
-          报告扣分原因
+          报告得分详情
         </div>
 
         {selections.length > 0 || data.remark ? (

@@ -12,6 +12,7 @@ import Pencil from '~icons/lucide/pencil'
 import Plus from '~icons/lucide/plus'
 import Smartphone from '~icons/lucide/smartphone'
 import Trash2 from '~icons/lucide/trash-2'
+import { CacheSection } from '@/components/settings/CacheSection'
 import { CreditsSection } from '@/components/settings/CreditsSection'
 import { PreferenceSection } from '@/components/settings/PreferenceSection'
 import { SystemSection } from '@/components/settings/SystemSection'
@@ -32,6 +33,7 @@ const SECTIONS: TocItem[] = [
   { id: 'zjuam', label: '统一身份认证' },
   { id: 'preferences', label: '偏好设置' },
   { id: 'system', label: '系统设置' },
+  { id: 'cache', label: '缓存' },
   { id: 'credits', label: 'Credits' },
 ]
 
@@ -345,8 +347,12 @@ export default function Settings() {
           <SystemSection index={3} />
         </section>
 
+        <section id="cache" className={sectionClass('cache')}>
+          <CacheSection index={4} />
+        </section>
+
         <section id="credits" className={sectionClass('credits')}>
-          <CreditsSection index={4} />
+          <CreditsSection index={5} />
         </section>
         </div>
 

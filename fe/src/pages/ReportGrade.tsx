@@ -10,13 +10,15 @@ import Users from '~icons/lucide/users'
 import { FilePreviewPanel } from '@/components/reportgrade/FilePreviewPanel'
 import { GradePanel } from '@/components/reportgrade/GradePanel'
 import { StudentListPanel } from '@/components/reportgrade/StudentListPanel'
-import type { GradeStudent, ReportSync } from '@/components/reportgrade/shared'
+import type { GradeStudent, ReportSync, StudentFlag } from '@/components/reportgrade/shared'
 import {
   apiFetch,
+  fetchCheckpointClaims,
   fetchClassTables,
   fetchRemark,
   fetchReportReview,
   fetchXzzdPushPreview,
+  listFocusStudents,
   type ClassTables,
   type Experiment,
   type Score,
@@ -34,6 +36,8 @@ export default function ReportGrade() {
   const [syncData, setSyncData] = useState<ZjuamHomeworkSyncData | null>(null)
   const [tables, setTables] = useState<ClassTables | null>(null)
   const [scores, setScores] = useState<Map<string, Score>>(new Map())
+  const [focusByStuId, setFocusByStuId] = useState<Map<string, string>>(new Map())
+  const [checkpointStuIds, setCheckpointStuIds] = useState<Set<string>>(new Set())
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,10 +65,18 @@ export default function ReportGrade() {
           fetchXzzdPushPreview(id, 'report'),
         ])
         const classTables = await fetchClassTables(experimentRes.experiment.classId)
+        const [focusRes, checkpointRes] = await Promise.all([
+          listFocusStudents(experimentRes.experiment.classId).catch(() => null),
+          fetchCheckpointClaims(experimentRes.experiment.classId).catch(() => null),
+        ])
         if (cancelled) return
         setExperiment(experimentRes.experiment)
         setSyncData(preview)
         setTables(classTables)
+        setFocusByStuId(
+          new Map((focusRes?.focusStudents ?? []).map((item) => [item.stuId, item.reason])),
+        )
+        setCheckpointStuIds(new Set((checkpointRes?.claims ?? []).map((item) => item.stuId)))
         setScores(
           new Map(
             classTables.scores
@@ -208,6 +220,18 @@ export default function ReportGrade() {
   const coEditors = selectedStuId ? (editorsByStuId.get(selectedStuId) ?? []) : []
   const saveNotice = selectedStuId ? (remoteSaves.get(selectedStuId) ?? null) : null
 
+  /** stuId → 名单标记（重点关注 / 已领取 Checkpoint） */
+  const flagsByStuId = useMemo(() => {
+    const map = new Map<string, StudentFlag>()
+    for (const [stuId, reason] of focusByStuId) {
+      map.set(stuId, { focusReason: reason, checkpoint: checkpointStuIds.has(stuId) })
+    }
+    for (const stuId of checkpointStuIds) {
+      if (!map.has(stuId)) map.set(stuId, { focusReason: null, checkpoint: true })
+    }
+    return map
+  }, [focusByStuId, checkpointStuIds])
+
   /** 同步对方成绩：从数据库 GET 最新批阅与附言，覆盖到编辑器 */
   const handleSync = useCallback(async () => {
     if (!id || !saveNotice) return
@@ -345,6 +369,7 @@ export default function ReportGrade() {
               selectedPersonId={selectedPersonId}
               onSelect={selectStudent}
               editorsByStuId={editorsByStuId}
+              flagsByStuId={flagsByStuId}
             />
           </Panel>
           <Separator className="w-px shrink-0 bg-line transition-colors hover:bg-brand-500/60" />

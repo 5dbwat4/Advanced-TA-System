@@ -38,6 +38,7 @@ import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { loadLocalDefaultRule, saveLocalDefaultRule, type LocalDefaultRule } from './default-rule'
 import { formatScore, type GradeStudent, type ReportSync } from './shared'
 
 const EMPTY_CARD_STATE: CriterionCardState = { selected: false, score: '', appendix: '' }
@@ -79,6 +80,24 @@ export function GradePanel({
 
   const itemsRef = useRef<CriterionItem[] | null>(null)
   const ruleKeyRef = useRef<string | null>(null)
+  /** 本地默认评分标准：未批改（无分数）的报告统一套用它（IndexedDB 持久化） */
+  const [localDefault, setLocalDefault] = useState<LocalDefaultRule | null>(null)
+  /** 当前学生是否已有报告分（未批改才套用本地默认） */
+  const gradedRef = useRef(false)
+
+  useEffect(() => {
+    gradedRef.current = student?.score != null
+  }, [student])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadLocalDefaultRule().then((rule) => {
+      if (!cancelled && rule) setLocalDefault(rule)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const stuId = student?.stuId ?? null
   const total = items ? totalScore(items, states, extras) : 0
@@ -98,15 +117,28 @@ export function GradePanel({
     if (!stuId) return
     let cancelled = false
     setDirty(false)
+    // 未批改（无分数）的报告：优先套用本地默认评分标准
+    const fallback = !gradedRef.current ? localDefault : null
+    if (fallback) {
+      setItems(fallback.items)
+      itemsRef.current = fallback.items
+      setRuleKey(fallback.key)
+      ruleKeyRef.current = fallback.key
+      setStates(defaultStates(fallback.items))
+      setExtras({})
+      return
+    }
     fetchReportReview(stuId, experimentId)
       .then(async (review) => {
         if (cancelled) return
         if (!review) {
-          const current = itemsRef.current
-          if (current) {
-            setStates(defaultStates(current))
-            setExtras({})
-          }
+          // 无批阅记录：清空当前评分标准，避免「已批改」页面的标准外溢到其它学生
+          setItems(null)
+          itemsRef.current = null
+          setRuleKey(null)
+          ruleKeyRef.current = null
+          setStates({})
+          setExtras({})
           return
         }
         const content = decodeReviewContent(review.ruleContent)
@@ -127,7 +159,7 @@ export function GradePanel({
     return () => {
       cancelled = true
     }
-  }, [stuId, experimentId])
+  }, [stuId, experimentId, localDefault])
 
   useEffect(() => {
     if (!sync || !stuId || sync.stuId !== stuId) return
@@ -209,6 +241,16 @@ export function GradePanel({
     setDirty(false)
     criteriaState.close()
     toast.success('已应用评分标准')
+  }
+
+  /** 将已加载的评分标准设为本地默认：所有未批改报告统一使用它（持久化到 IndexedDB） */
+  const applyDefaultRule = () => {
+    if (!loadedCriteria || !loadedKey) return
+    const rule = { key: loadedKey, items: loadedCriteria }
+    setLocalDefault(rule)
+    void saveLocalDefaultRule(rule)
+    criteriaState.close()
+    toast.success('已为所有未批改报告设置此评分标准（本地）')
   }
 
   const copyShareCode = async () => {
@@ -455,20 +497,19 @@ export function GradePanel({
                   >
                     <FileDown width={15} height={15} className="shrink-0" />
                   </IconAction>
-                  <IconAction
-                    label="创建"
-                    size="md"
-                    variant="secondary"
-                    onPress={() => navigate(`/console/reports/${experimentId}/criteria/new`)}
-                  >
-                    <Plus width={15} height={15} className="shrink-0" />
-                  </IconAction>
                 </div>
                 {loadedCriteria && (
                   <>
                     <CriteriaPreview items={loadedCriteria} />
                     <Button className="w-full" onPress={confirmCriteria}>
                       确认
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onPress={applyDefaultRule}
+                    >
+                      为所有未批改报告设置此评分标准（本地）
                     </Button>
                   </>
                 )}

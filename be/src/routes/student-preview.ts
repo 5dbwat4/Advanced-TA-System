@@ -69,7 +69,7 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       ratio,
     )
 
-    // 报告扣分原因：批阅记录 + 对应的评分标准（含规则文本）
+    // 报告得分详情：批阅记录 + 对应的评分标准（含规则文本）
     let report: { ruleId: string; ruleContent: unknown; items: unknown } | null = null
     if (reportReview) {
       const criteria = await prisma.criteria.findUnique({
@@ -79,8 +79,8 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       const payload = parseJson(criteria?.payload ?? null) as { items?: unknown } | null
       report = {
         ruleId: reportReview.ruleId,
-        ruleContent: parseJson(reportReview.ruleContent),
-        items: Array.isArray(payload?.items) ? payload.items : [],
+        ruleContent: stripCardDetail(parseJson(reportReview.ruleContent)),
+        items: Array.isArray(payload?.items) ? stripCardDetail(payload.items) : [],
       }
     }
 
@@ -117,4 +117,19 @@ function parseJson(value: string | null): unknown {
   } catch {
     return null
   }
+}
+
+/**
+ * 递归剔除卡片（含小节 children、ruleContent.extras 等）中的 detail 字段。
+ * detail 为「详细评分标准」，仅助教 / 教师可见；学生公开查看页不得下发。
+ */
+function stripCardDetail(raw: unknown): unknown {
+  if (Array.isArray(raw)) return raw.map(stripCardDetail)
+  if (raw == null || typeof raw !== 'object') return raw
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (key === 'detail') continue
+    out[key] = stripCardDetail(value)
+  }
+  return out
 }

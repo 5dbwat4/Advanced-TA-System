@@ -31,6 +31,14 @@ export type ReportSync = {
   remark: string
 }
 
+/** 名单上的提示标记（重点关注 / 已领取 Checkpoint） */
+export type StudentFlag = {
+  /** 重点关注原因；null 表示非重点关注 */
+  focusReason: string | null
+  /** 是否领取了 Checkpoint */
+  checkpoint: boolean
+}
+
 export type FileKind = 'pdf' | 'image' | 'other'
 
 /** 推断 MIME（mime 查不到时给通用二进制） */

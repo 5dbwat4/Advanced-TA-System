@@ -114,7 +114,7 @@ export type ReportSelectionEntry =
 
 /**
  * 汇总批阅中所有被助教选中的卡片，按原有顺序展开为「小节头 + 选中卡片」列表。
- * 小节仅在其内有选中卡片时出现；顶层卡片与临时卡片一并计入。
+ * 小节始终出现（即使其内没有任何选中卡片）；顶层卡片与临时卡片一并计入。
  */
 export function collectReportSelections(
   items: CriterionItem[],
@@ -143,7 +143,6 @@ export function collectReportSelections(
       continue
     }
     const cards = [...item.children, ...(extras[item.id] ?? [])]
-    if (!cards.some((card) => states[card.id]?.selected)) continue
     entries.push({
       kind: 'section',
       id: item.id,

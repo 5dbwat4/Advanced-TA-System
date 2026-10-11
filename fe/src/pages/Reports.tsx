@@ -1,12 +1,11 @@
 import { Alert, Button, ListBox, Select, Spinner } from '@heroui/react'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Construction from '~icons/lucide/construction'
 import FileText from '~icons/lucide/file-text'
-import Paperclip from '~icons/lucide/paperclip'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import School from '~icons/lucide/school'
 import { Card, EmptyState } from '@/components/ui/Card'
@@ -17,19 +16,15 @@ import {
   fetchClassTables,
   fetchExperimentsWithCurrent,
   fetchXzzdPushPreview,
-  fetchXzzdSubmissionAttachments,
   type ClassTables,
   type Experiment,
   type ZjuamCourseStudent,
   type ZjuamHomeworkSubmission,
   type ZjuamHomeworkSyncData,
-  type ZjuamSubmissionAttachment,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { useCurrentClass } from '@/lib/store'
-
-const PREVIEW_BYTES = 128
 
 export default function Reports() {
   const currentClass = useCurrentClass()
@@ -308,7 +303,6 @@ export default function Reports() {
                 <SubmissionTable
                   rows={submittedRows}
                   students={studentsById}
-                  experimentId={selectedId}
                 />
               )}
             </div>
@@ -342,14 +336,10 @@ function ReportStat({
 function SubmissionTable({
   rows,
   students,
-  experimentId,
 }: {
   rows: ZjuamHomeworkSubmission[]
   students: Map<number, ZjuamCourseStudent>
-  experimentId: string
 }) {
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-
   return (
     <div className="overflow-auto rounded-2xl border border-line">
       <table className="w-full border-collapse text-sm">
@@ -359,188 +349,28 @@ function SubmissionTable({
             <th className={`${HEAD_CLASS} text-left`}>姓名</th>
             <th className={`${HEAD_CLASS} text-left`}>提交时间</th>
             <th className={`${HEAD_CLASS} text-right`}>附件大小</th>
-            <th className={`${HEAD_CLASS} text-left`}>提交 ID</th>
-            <th className={`${HEAD_CLASS} border-r-0 text-center`}>附件</th>
+            <th className={`${HEAD_CLASS} border-r-0 text-left`}>提交 ID</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((item) => {
             const personId = item.created_by?.id ?? null
             const student = personId == null ? undefined : students.get(personId)
-            const expanded = expandedId === item.id
             return (
-              <Fragment key={item.id}>
-                <tr className="transition-colors hover:bg-sunken/40">
-                  <td className={`${CELL_CLASS} tabular`}>{student?.studentNo ?? '—'}</td>
-                  <td className={CELL_CLASS}>{student?.name ?? personId ?? '—'}</td>
-                  <td className={`${CELL_CLASS} tabular`}>{formatDateTime(item.created_at)}</td>
-                  <td className={`${CELL_CLASS} tabular text-right`}>
-                    {formatBytes(item.attachments_size)}
-                  </td>
-                  <td className={`${CELL_CLASS} tabular text-fg-subtle`}>{item.id}</td>
-                  <td className={`${CELL_CLASS} border-r-0 text-center`}>
-                    <IconAction
-                      label={expanded ? '收起附件' : '查看附件'}
-                      variant={expanded ? 'secondary' : 'ghost'}
-                      isDisabled={personId == null}
-                      onPress={() => setExpandedId(expanded ? null : item.id)}
-                    >
-                      <Paperclip width={15} height={15} className="shrink-0" />
-                    </IconAction>
-                  </td>
-                </tr>
-                {expanded && personId != null && (
-                  <tr>
-                    <td colSpan={6} className="border-b border-line bg-sunken/40 px-4 py-3">
-                      <AttachmentPanel experimentId={experimentId} personId={personId} />
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
+              <tr key={item.id} className="transition-colors hover:bg-sunken/40">
+                <td className={`${CELL_CLASS} tabular`}>{student?.studentNo ?? '—'}</td>
+                <td className={CELL_CLASS}>{student?.name ?? personId ?? '—'}</td>
+                <td className={`${CELL_CLASS} tabular`}>{formatDateTime(item.created_at)}</td>
+                <td className={`${CELL_CLASS} tabular text-right`}>
+                  {formatBytes(item.attachments_size)}
+                </td>
+                <td className={`${CELL_CLASS} tabular border-r-0 text-fg-subtle`}>{item.id}</td>
+              </tr>
             )
           })}
         </tbody>
       </table>
     </div>
-  )
-}
-
-function AttachmentPanel({
-  experimentId,
-  personId,
-}: {
-  experimentId: string
-  personId: number
-}) {
-  const [attachments, setAttachments] = useState<ZjuamSubmissionAttachment[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    fetchXzzdSubmissionAttachments(experimentId, personId)
-      .then((res) => {
-        if (!cancelled) setAttachments(res.attachments)
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setAttachments(null)
-          setError(getErrorMessage(err, '获取附件列表失败'))
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [experimentId, personId])
-
-  if (loading) {
-    return <SkeletonList rows={1} className="h-8 rounded-xl" />
-  }
-  if (error) {
-    return (
-      <Alert status="danger">
-        <Alert.Indicator />
-        <Alert.Content>
-          <Alert.Description>{error}</Alert.Description>
-        </Alert.Content>
-      </Alert>
-    )
-  }
-  if (!attachments || attachments.length === 0) {
-    return <p className="text-xs text-fg-subtle">该学生没有提交附件。</p>
-  }
-  return (
-    <div className="flex flex-col gap-3">
-      {attachments.map((attachment) => (
-        <AttachmentPreview key={attachment.id} attachment={attachment} />
-      ))}
-    </div>
-  )
-}
-
-function AttachmentPreview({ attachment }: { attachment: ZjuamSubmissionAttachment }) {
-  const [bytes, setBytes] = useState<Uint8Array | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const url = attachment.url
-    if (!url) {
-      setLoading(false)
-      setError('未获取到下载链接')
-      return
-    }
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    fetchAttachmentHead(url)
-      .then((data) => {
-        if (!cancelled) setBytes(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err, '获取文件内容失败'))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [attachment.url])
-
-  return (
-    <div className="rounded-xl border border-line bg-elevated p-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Paperclip width={13} height={13} className="shrink-0 text-fg-subtle" />
-        <span className="font-semibold text-fg">{attachment.name}</span>
-        <span className="tabular text-fg-subtle">{formatBytes(attachment.size)}</span>
-        <span className="tabular text-fg-subtle">#{attachment.id}</span>
-      </div>
-      <div className="mt-2">
-        {loading ? (
-          <div className="flex items-center gap-2 text-xs text-fg-subtle">
-            <Spinner size="sm" />
-            读取前 {PREVIEW_BYTES} 字节…
-          </div>
-        ) : error ? (
-          <p className="text-xs text-danger">{error}</p>
-        ) : bytes ? (
-          <HexDump bytes={bytes} />
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-/** 经 Range 请求读取文件开头字节（tcmedia 支持 CORS 与 Range） */
-async function fetchAttachmentHead(url: string): Promise<Uint8Array> {
-  const response = await fetch(url, { headers: { Range: `bytes=0-${PREVIEW_BYTES - 1}` } })
-  if (!response.ok) throw new Error(`下载失败（${response.status}）`)
-  const buffer = await response.arrayBuffer()
-  return new Uint8Array(buffer).slice(0, PREVIEW_BYTES)
-}
-
-const HEX_DUMP_CHUNK = 16
-
-function HexDump({ bytes }: { bytes: Uint8Array }) {
-  const lines: string[] = []
-  for (let offset = 0; offset < bytes.length; offset += HEX_DUMP_CHUNK) {
-    const slice = bytes.subarray(offset, offset + HEX_DUMP_CHUNK)
-    const hex = Array.from(slice, (byte) => byte.toString(16).padStart(2, '0')).join(' ')
-    const ascii = Array.from(slice, (byte) =>
-      byte >= 0x20 && byte < 0x7f ? String.fromCharCode(byte) : '.',
-    ).join('')
-    lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex.padEnd(47)}  ${ascii}`)
-  }
-  return (
-    <pre className="overflow-auto rounded-lg bg-sunken p-3 font-mono text-[11px] leading-5 text-fg-muted">
-      {lines.join('\n')}
-    </pre>
   )
 }
 
