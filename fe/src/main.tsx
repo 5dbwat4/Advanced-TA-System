@@ -5,6 +5,7 @@ import { Toast } from '@heroui/react'
 import { ThemeProvider } from 'next-themes'
 
 import App from '@/App'
+import { ServiceWorkerUpdate } from '@/components/ui/ServiceWorkerUpdate'
 import { Toaster } from '@/components/ui/Toaster'
 import { AuthProvider } from '@/lib/auth'
 import '@/index.css'
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
           <div className="grid-overlay" aria-hidden />
           <App />
           <Toaster />
+          <ServiceWorkerUpdate />
           <Toast.Provider placement="top" />
         </AuthProvider>
       </BrowserRouter>
