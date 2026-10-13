@@ -1,7 +1,6 @@
 import { useState } from 'react'
 
 import ChevronDown from '~icons/lucide/chevron-down'
-import { BackLink } from '@/components/ui/BackLink'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { cn } from '@/lib/utils'
@@ -16,8 +15,7 @@ export default function Changelog() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <BackLink to="/console/settings">返回设置</BackLink>
+    <>
       <PageHeader title="Changelog" />
       <Card index={0} className="flex flex-col gap-2">
         {__BUILD_CHANGELOG__.length === 0 ? (
@@ -67,6 +65,6 @@ export default function Changelog() {
           })
         )}
       </Card>
-    </div>
+    </>
   )
 }

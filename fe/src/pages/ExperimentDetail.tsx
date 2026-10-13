@@ -35,6 +35,7 @@ import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { SearchInput } from '@/components/ui/SearchInput'
 import {
   apiFetch,
   fetchCheckoff,
@@ -54,6 +55,9 @@ import { formatDateTime, formatLocaleDateTime } from '@/lib/format'
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useDebouncedSave } from '@/lib/use-class-settings'
+import { cn } from '@/lib/utils'
+
+const MORE_BANKS_KEY = '__more__'
 
 function TimeStat({ label, value }: { label: string; value: string | null }) {
   return (
@@ -95,6 +99,8 @@ export default function ExperimentDetail() {
   const bindState = useOverlayState()
   const syncDownState = useOverlayState()
   const preferencesState = useOverlayState()
+  const banksState = useOverlayState()
+  const [bankQuery, setBankQuery] = useState('')
 
   const loadHomeworks = useCallback(async () => {
     if (!id) return
@@ -220,6 +226,20 @@ export default function ExperimentDetail() {
     ? (banks.find((item) => item.id === bank.id)?.questions.length ?? null)
     : null
 
+  // 下拉框只展示最近添加/更新的题目集 Top10（附带当前已绑定项），了解更多走弹窗
+  const recentBanks = [...banks]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 10)
+  if (bank && !recentBanks.some((item) => item.id === bank.id)) {
+    const bound = banks.find((item) => item.id === bank.id)
+    if (bound) recentBanks.push(bound)
+  }
+
+  const bankQueryLower = bankQuery.trim().toLowerCase()
+  const filteredBanks = bankQueryLower
+    ? banks.filter((item) => item.name.toLowerCase().includes(bankQueryLower))
+    : banks
+
   const xzzdBoundCount = [experiment.xzzdBindIdCheckout, experiment.xzzdBindIdReport].filter(
     Boolean,
   ).length
@@ -337,7 +357,14 @@ export default function ExperimentDetail() {
             isDisabled={binding}
             value={bank?.id ?? null}
             placeholder="未绑定题目集"
-            onChange={(key) => void bind(key == null ? '' : String(key))}
+            onChange={(key) => {
+              if (key === MORE_BANKS_KEY) {
+                setBankQuery('')
+                banksState.open()
+                return
+              }
+              void bind(key == null ? '' : String(key))
+            }}
             onClear={() => void bind('')}
           >
             <Select.Trigger>
@@ -347,12 +374,15 @@ export default function ExperimentDetail() {
             </Select.Trigger>
             <Select.Popover>
               <ListBox>
-                {banks.map((item) => (
+                {recentBanks.map((item) => (
                   <ListBox.Item key={item.id} id={item.id} textValue={item.name}>
                     {item.name}
                     <ListBox.ItemIndicator />
                   </ListBox.Item>
                 ))}
+                <ListBox.Item key={MORE_BANKS_KEY} id={MORE_BANKS_KEY} textValue="查看更多……">
+                  <span className="text-brand-600 dark:text-brand-300">查看更多……</span>
+                </ListBox.Item>
               </ListBox>
             </Select.Popover>
           </Select>
@@ -744,6 +774,68 @@ export default function ExperimentDetail() {
                   关闭
                 </Button>
               </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal state={banksState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-lg">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <NotebookText width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>选择题目集</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-3">
+                <SearchInput
+                  value={bankQuery}
+                  onChange={setBankQuery}
+                  ariaLabel="搜索题目集"
+                  placeholder="搜索"
+                />
+                <div className="max-h-[50vh] overflow-auto">
+                  {filteredBanks.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-fg-subtle">没有匹配的题目集</p>
+                  ) : (
+                    filteredBanks.map((item) => {
+                      const active = bank?.id === item.id
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            void bind(item.id)
+                            banksState.close()
+                          }}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors',
+                            active ? 'bg-brand-500/10' : 'hover:bg-sunken',
+                          )}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{item.name}</span>
+                            <span className="tabular block text-[11px] text-fg-subtle">
+                              {item.questions.length} 题 · 更新于{' '}
+                              {formatLocaleDateTime(item.updatedAt)}
+                            </span>
+                          </span>
+                          {active && (
+                            <Check
+                              width={15}
+                              height={15}
+                              className="shrink-0 text-brand-600 dark:text-brand-300"
+                            />
+                          )}
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </Modal.Body>
             </Modal.Dialog>
           </Modal.Container>
         </Modal.Backdrop>

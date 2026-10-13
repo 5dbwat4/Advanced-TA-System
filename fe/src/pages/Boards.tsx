@@ -11,7 +11,6 @@ import {
   Skeleton,
   ToggleButton,
   ToggleButtonGroup,
-  useFilter,
   useOverlayState,
   type Key,
 } from '@heroui/react'
@@ -48,6 +47,7 @@ import {
   type Student,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
+import { matchStudent } from '@/lib/pinyin'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
@@ -73,7 +73,12 @@ function StudentPicker({
   value: Key[]
   onChange: (keys: Key[]) => void
 }) {
-  const { contains } = useFilter({ sensitivity: 'base' })
+  const [query, setQuery] = useState('')
+
+  const visible = useMemo(
+    () => students.filter((student) => matchStudent(query, student)),
+    [students, query],
+  )
 
   return (
     <Autocomplete
@@ -90,16 +95,16 @@ function StudentPicker({
         <Autocomplete.Indicator />
       </Autocomplete.Trigger>
       <Autocomplete.Popover>
-        <Autocomplete.Filter filter={contains}>
+        <Autocomplete.Filter inputValue={query} onInputChange={setQuery}>
           <SearchField autoFocus aria-label="搜索学生" name="search" variant="secondary">
             <SearchField.Group>
               <SearchField.SearchIcon />
-              <SearchField.Input placeholder="搜索姓名 / 学号" />
+              <SearchField.Input placeholder="搜索" />
               <SearchField.ClearButton />
             </SearchField.Group>
           </SearchField>
           <ListBox renderEmptyState={() => <HeroEmptyState>没有匹配的学生</HeroEmptyState>}>
-            {students.map((student) => (
+            {visible.map((student) => (
               <ListBox.Item
                 key={student.stuId}
                 id={student.stuId}

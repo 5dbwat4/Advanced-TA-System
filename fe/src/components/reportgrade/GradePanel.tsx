@@ -16,12 +16,10 @@ import { toast } from 'sonner'
 import ClipboardList from '~icons/lucide/clipboard-list'
 import Copy from '~icons/lucide/copy'
 import Ellipsis from '~icons/lucide/ellipsis'
-import FileDown from '~icons/lucide/file-down'
 import Plus from '~icons/lucide/plus'
 import Save from '~icons/lucide/save'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import { CriteriaGrading } from '@/components/criteria/CriteriaGrading'
-import { CriteriaPreview } from '@/components/criteria/CriteriaPreview'
 import { defaultStates, decodeReviewContent, encodeReviewContent, totalScore } from '@/components/criteria/scoring'
 import type {
   CriterionCard,
@@ -31,14 +29,14 @@ import type {
 } from '@/components/criteria/types'
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { IconAction } from '@/components/ui/IconAction'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { fetchCriteria, fetchReportReview, saveReportReview, saveScore, type Score } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { loadLocalDefaultRule, saveLocalDefaultRule, type LocalDefaultRule } from './default-rule'
+import { CriteriaModal } from './CriteriaModal'
+import { loadLocalDefaultRule, type LocalDefaultRule } from './default-rule'
 import { formatScore, type GradeStudent, type ReportSync } from './shared'
 
 const EMPTY_CARD_STATE: CriterionCardState = { selected: false, score: '', appendix: '' }
@@ -48,21 +46,19 @@ export function GradePanel({
   experimentId,
   onScoreSaved,
   sync,
+  criteriaOpenToken,
 }: {
   student: GradeStudent | null
   experimentId: string
   onScoreSaved?: (score: Score) => void
   sync?: ReportSync | null
+  /** 递增即打开「评分标准」弹窗（供页头菜单触发） */
+  criteriaOpenToken?: number
 }) {
   const navigate = useNavigate()
   const criteriaState = useOverlayState()
   const addState = useOverlayState()
   const rangeState = useOverlayState()
-
-  const [shareCode, setShareCode] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [loadedCriteria, setLoadedCriteria] = useState<CriterionItem[] | null>(null)
-  const [loadedKey, setLoadedKey] = useState<string | null>(null)
 
   const [items, setItems] = useState<CriterionItem[] | null>(null)
   const [ruleKey, setRuleKey] = useState<string | null>(null)
@@ -82,6 +78,8 @@ export function GradePanel({
   const ruleKeyRef = useRef<string | null>(null)
   /** 本地默认评分标准：未批改（无分数）的报告统一套用它（IndexedDB 持久化） */
   const [localDefault, setLocalDefault] = useState<LocalDefaultRule | null>(null)
+  /** 弹窗打开来源：student=批改面板按钮，experiment=页头菜单 */
+  const [criteriaMode, setCriteriaMode] = useState<'student' | 'experiment'>('student')
   /** 当前学生是否已有报告分（未批改才套用本地默认） */
   const gradedRef = useRef(false)
 
@@ -91,13 +89,22 @@ export function GradePanel({
 
   useEffect(() => {
     let cancelled = false
-    void loadLocalDefaultRule().then((rule) => {
-      if (!cancelled && rule) setLocalDefault(rule)
+    void loadLocalDefaultRule(experimentId).then((rule) => {
+      if (!cancelled) setLocalDefault(rule)
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [experimentId])
+
+  /** 页头菜单通过递增 criteriaOpenToken 打开「评分标准」弹窗 */
+  const lastCriteriaToken = useRef(criteriaOpenToken)
+  useEffect(() => {
+    if (criteriaOpenToken === lastCriteriaToken.current) return
+    lastCriteriaToken.current = criteriaOpenToken
+    setCriteriaMode('experiment')
+    criteriaState.open()
+  }, [criteriaOpenToken, criteriaState])
 
   const stuId = student?.stuId ?? null
   const total = items ? totalScore(items, states, extras) : 0
@@ -203,54 +210,15 @@ export function GradePanel({
     return () => window.clearTimeout(timer)
   }, [dirty, items, ruleKey, stuId, experimentId, states, extras])
 
-  const loadCriteria = async () => {
-    const code = shareCode.trim().toLowerCase()
-    if (!/^[0-9a-f]{48}$/.test(code)) {
-      toast.error('分享码格式不正确')
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await fetchCriteria(code)
-      const payload = res.payload as { items?: CriterionItem[] } | null
-      if (!payload || !Array.isArray(payload.items)) {
-        setLoadedCriteria(null)
-        setLoadedKey(null)
-        toast.error('评分标准内容无效')
-        return
-      }
-      setLoadedCriteria(payload.items)
-      setLoadedKey(code)
-    } catch (err) {
-      setLoadedCriteria(null)
-      setLoadedKey(null)
-      toast.error(getErrorMessage(err, '加载失败'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const confirmCriteria = () => {
-    if (!loadedCriteria || !loadedKey) return
-    setItems(loadedCriteria)
-    itemsRef.current = loadedCriteria
-    setRuleKey(loadedKey)
-    ruleKeyRef.current = loadedKey
-    setStates(defaultStates(loadedCriteria))
+  /** 将弹窗中加载的评分标准套用到当前学生 */
+  const applyCriteria = (loadedItems: CriterionItem[], key: string) => {
+    setItems(loadedItems)
+    itemsRef.current = loadedItems
+    setRuleKey(key)
+    ruleKeyRef.current = key
+    setStates(defaultStates(loadedItems))
     setExtras({})
     setDirty(false)
-    criteriaState.close()
-    toast.success('已应用评分标准')
-  }
-
-  /** 将已加载的评分标准设为本地默认：所有未批改报告统一使用它（持久化到 IndexedDB） */
-  const applyDefaultRule = () => {
-    if (!loadedCriteria || !loadedKey) return
-    const rule = { key: loadedKey, items: loadedCriteria }
-    setLocalDefault(rule)
-    void saveLocalDefaultRule(rule)
-    criteriaState.close()
-    toast.success('已为所有未批改报告设置此评分标准（本地）')
   }
 
   const copyShareCode = async () => {
@@ -361,10 +329,21 @@ export function GradePanel({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [requestSaveReport])
 
+  const criteriaModal = (
+    <CriteriaModal
+      state={criteriaState}
+      experimentId={experimentId}
+      showStudentAction={criteriaMode === 'student'}
+      onApply={applyCriteria}
+      onDefaultApplied={setLocalDefault}
+    />
+  )
+
   if (!student) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <p className="text-xs text-fg-subtle">请选择学生开始批改</p>
+        {criteriaModal}
       </div>
     )
   }
@@ -409,7 +388,14 @@ export function GradePanel({
       <div className="flex flex-col gap-3 p-4">
         <span className="text-xs font-semibold text-fg-muted">评分标准</span>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" className="flex-1" onPress={criteriaState.open}>
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onPress={() => {
+              setCriteriaMode('student')
+              criteriaState.open()
+            }}
+          >
             <ClipboardList width={15} height={15} className="shrink-0" />
             设置评分标准
           </Button>
@@ -467,57 +453,7 @@ export function GradePanel({
         <RemarkField stuId={stuId} experimentId={experimentId} sync={remarkSync} />
       </div>
 
-      <Modal state={criteriaState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-3xl">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <ClipboardList width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>评分标准</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="flex min-h-[38vh] flex-col gap-4">
-                <div className="flex items-center gap-2">
-                  <Input
-                    className="flex-1"
-                    placeholder="输入评分标准分享码"
-                    value={shareCode}
-                    onChange={(event) => setShareCode(event.target.value)}
-                    aria-label="评分标准分享码"
-                  />
-                  <IconAction
-                    label="加载"
-                    size="md"
-                    variant="secondary"
-                    isPending={loading}
-                    isDisabled={shareCode.trim() === ''}
-                    onPress={() => void loadCriteria()}
-                  >
-                    <FileDown width={15} height={15} className="shrink-0" />
-                  </IconAction>
-                </div>
-                {loadedCriteria && (
-                  <>
-                    <CriteriaPreview items={loadedCriteria} />
-                    <Button className="w-full" onPress={confirmCriteria}>
-                      确认
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onPress={applyDefaultRule}
-                    >
-                      为所有未批改报告设置此评分标准（本地）
-                    </Button>
-                  </>
-                )}
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      {criteriaModal}
 
       <Modal state={addState}>
         <Modal.Backdrop>

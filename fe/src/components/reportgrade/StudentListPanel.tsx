@@ -1,9 +1,12 @@
-import { Tooltip } from '@heroui/react'
-import { useMemo, useState } from 'react'
+import { Button, ToggleButton, Tooltip } from '@heroui/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import Check from '~icons/lucide/check'
 import Info from '~icons/lucide/info'
+import Search from '~icons/lucide/search'
+import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { SearchInput } from '@/components/ui/SearchInput'
+import { matchStudent } from '@/lib/pinyin'
 import { cn } from '@/lib/utils'
 
 import { formatScore, type GradeStudent, type StudentFlag } from './shared'
@@ -22,28 +25,87 @@ export function StudentListPanel({
   flagsByStuId: Map<string, StudentFlag>
 }) {
   const [query, setQuery] = useState('')
+  const [onlyUngraded, setOnlyUngraded] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  const visible = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    if (!keyword) return students
-    return students.filter(
-      (student) =>
-        student.name.toLowerCase().includes(keyword) ||
-        student.studentNo.toLowerCase().includes(keyword),
-    )
-  }, [students, query])
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus()
+  }, [searchOpen])
+
+  const visible = useMemo(
+    () =>
+      students.filter(
+        (student) => (!onlyUngraded || student.score == null) && matchStudent(query, student),
+      ),
+    [students, query, onlyUngraded],
+  )
 
   const gradedCount = students.filter((student) => student.score != null).length
 
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-line p-3">
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          ariaLabel="搜索学生"
-          placeholder="搜索姓名 / 学号"
-        />
+        <div className="flex items-center gap-2">
+          <div className="relative h-9 min-w-0 flex-1">
+            <div
+              className={cn(
+                'absolute inset-0 transition-all duration-200 ease-out',
+                searchOpen
+                  ? 'pointer-events-none invisible scale-95 opacity-0'
+                  : 'visible scale-100 opacity-100',
+              )}
+            >
+              <ToggleButton
+                size="sm"
+                isSelected={onlyUngraded}
+                onChange={setOnlyUngraded}
+                className="h-9 w-full"
+              >
+                只看未批改
+              </ToggleButton>
+            </div>
+            <div
+              className={cn(
+                'absolute inset-0 transition-all duration-200 ease-out',
+                searchOpen
+                  ? 'visible scale-100 opacity-100'
+                  : 'pointer-events-none invisible scale-95 opacity-0',
+              )}
+            >
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                ariaLabel="搜索学生"
+                placeholder="搜索"
+                inputRef={searchRef}
+              />
+            </div>
+          </div>
+          <Button
+            isIconOnly
+            size="sm"
+            variant="secondary"
+            className="h-9 w-9"
+            aria-label={searchOpen ? '关闭搜索' : '搜索'}
+            onPress={() => {
+              if (searchOpen) setQuery('')
+              setSearchOpen(!searchOpen)
+            }}
+          >
+            <Search width={16} height={16} className="shrink-0" />
+          </Button>
+          <Button
+            isIconOnly
+            size="sm"
+            variant="secondary"
+            className="h-9 w-9"
+            aria-label="筛选"
+            isDisabled
+          >
+            <SlidersHorizontal width={16} height={16} className="shrink-0" />
+          </Button>
+        </div>
         <div className="mt-2 flex items-center justify-between text-[11px] text-fg-subtle">
           <span>已提交 {students.length} 人</span>
           <span className="tabular">

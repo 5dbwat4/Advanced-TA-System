@@ -1,11 +1,14 @@
-import { Alert, Spinner, toast as herouiToast } from '@heroui/react'
+import { Alert, Button, Dropdown, Label, Spinner, toast as herouiToast } from '@heroui/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
 import ArrowRightLeft from '~icons/lucide/arrow-right-left'
+import ClipboardList from '~icons/lucide/clipboard-list'
+import Ellipsis from '~icons/lucide/ellipsis'
+import RefreshCw from '~icons/lucide/refresh-cw'
 import Users from '~icons/lucide/users'
 import { FilePreviewPanel } from '@/components/reportgrade/FilePreviewPanel'
 import { GradePanel } from '@/components/reportgrade/GradePanel'
@@ -31,6 +34,7 @@ import { useReportRoom, type ReportPeer, type ReportScoreEvent } from '@/lib/rep
 
 export default function ReportGrade() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
 
   const [experiment, setExperiment] = useState<Experiment | null>(null)
   const [syncData, setSyncData] = useState<ZjuamHomeworkSyncData | null>(null)
@@ -45,6 +49,8 @@ export default function ReportGrade() {
   const [peers, setPeers] = useState<ReportPeer[]>([])
   const [remoteSaves, setRemoteSaves] = useState<Map<string, ReportScoreEvent>>(new Map())
   const [sync, setSync] = useState<ReportSync | null>(null)
+  /** 递增以打开 GradePanel 的「评分标准」弹窗 */
+  const [criteriaToken, setCriteriaToken] = useState(0)
 
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: 'report-grade',
@@ -339,6 +345,32 @@ export default function ReportGrade() {
             {gradeStudents.length}
           </span>
         )}
+        <Dropdown>
+          <Button isIconOnly size="sm" variant="secondary" aria-label="更多操作">
+            <Ellipsis width={16} height={16} className="shrink-0" />
+          </Button>
+          <Dropdown.Popover>
+            <Dropdown.Menu
+              onAction={(key) => {
+                if (key === 'sync-upstream') navigate(`/console/experiments/${id}/xzzd-push`)
+                else if (key === 'experiment-criteria') setCriteriaToken((n) => n + 1)
+              }}
+            >
+              <Dropdown.Item id="sync-upstream" textValue="去向上游同步数据">
+                <RefreshCw width={15} height={15} className="shrink-0 text-fg-muted" />
+                <Label>去向上游同步数据</Label>
+              </Dropdown.Item>
+              <Dropdown.Item
+                id="experiment-criteria"
+                textValue="设置本实验评分标准"
+                isDisabled={loading || !!error}
+              >
+                <ClipboardList width={15} height={15} className="shrink-0 text-fg-muted" />
+                <Label>设置本实验评分标准</Label>
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </header>
 
       {loading ? (
@@ -383,6 +415,7 @@ export default function ReportGrade() {
               experimentId={id}
               onScoreSaved={handleScoreSaved}
               sync={sync}
+              criteriaOpenToken={criteriaToken}
             />
           </Panel>
         </Group>

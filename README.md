@@ -16,3 +16,6 @@ FAQs:
 
   A. Among the AI participated: deepseek-v4.1-flash is better as it is fast and has vision suppport. I'd like to claim that to compare the intellegence in this task is useless because it is too dumb that even qwen3.8-27b can handle it well.
 
+3. That's still AI product.
+
+  I fine-tuned the position and presentation of every button, the order of every card, and the height and width of every block. I hand my intent to the AI rather than letting it freely improvise. I used the project intensively for at least a week (and still using it now) to fix everything that didn’t feel smooth or comfortable enough. I can guarantee that I—as a human—feel the project comfortable to use, and I believe this outweighs every objection to using AI.

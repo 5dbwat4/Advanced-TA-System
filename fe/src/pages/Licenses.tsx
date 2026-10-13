@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 
 import ExternalLink from '~icons/lucide/external-link'
 import FileText from '~icons/lucide/file-text'
-import { BackLink } from '@/components/ui/BackLink'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { thirdPartyLicenses } from '@/lib/third-party'
@@ -12,16 +11,12 @@ export default function Licenses() {
   const navigate = useNavigate()
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <BackLink to="/console/settings">返回设置</BackLink>
+    <>
       <PageHeader
         title="Third Party Dependencies"
         subtitle={`共 ${thirdPartyLicenses.length} 个构建依赖`}
         actions={
-          <Button
-            variant="secondary"
-            onPress={() => navigate('/console/settings/licenses/full')}
-          >
+          <Button variant="secondary" onPress={() => navigate('/license/full')}>
             <FileText width={16} height={16} className="shrink-0" />
             查看许可证全文
           </Button>
@@ -66,6 +61,6 @@ export default function Licenses() {
           </div>
         ))}
       </Card>
-    </div>
+    </>
   )
 }

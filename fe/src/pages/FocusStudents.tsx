@@ -12,7 +12,6 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
-  useFilter,
   useOverlayState,
   type Key,
 } from '@heroui/react'
@@ -52,7 +51,7 @@ import { cn } from '@/lib/utils'
 
 type ViewTab = 'basic' | 'scores' | 'actions' | 'all'
 
-type StudentOption = { id: string; textValue: string }
+type StudentOption = { id: string; name: string; studentNo: string }
 
 type FocusStatus = {
   label: '正常' | '有挂科风险'
@@ -76,11 +75,10 @@ export default function FocusStudents() {
   const currentClass = useCurrentClass()
   const classId = currentClass?.id ?? null
 
-  const { contains } = useFilter({ sensitivity: 'base' })
-
   const [editing, setEditing] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
+  const [studentQuery, setStudentQuery] = useState('')
   const [tab, setTab] = useState<ViewTab>('all')
 
   const [focusStudents, setFocusStudents] = useState<FocusStudent[]>([])
@@ -152,9 +150,15 @@ export default function FocusStudents() {
       .filter((student) => !focusIds.has(student.stuId))
       .map((student) => ({
         id: student.stuId,
-        textValue: `${student.name} ${student.studentNo}`,
+        name: student.name,
+        studentNo: student.studentNo,
       }))
   }, [classStudents, focusStudents])
+
+  const visibleCandidates = useMemo(
+    () => candidates.filter((item) => matchStudent(studentQuery, item)),
+    [candidates, studentQuery],
+  )
 
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id))
   const someSelected = rows.some((row) => selected.has(row.id))
@@ -304,7 +308,7 @@ export default function FocusStudents() {
     <SearchInput
       value={query}
       onChange={setQuery}
-      placeholder="搜索姓名 / 学号 / 拼音"
+      placeholder="搜索"
       ariaLabel="搜索重点关注学生"
       className="min-w-[12rem] flex-1"
     />
@@ -660,11 +664,14 @@ export default function FocusStudents() {
                     <Autocomplete.Indicator />
                   </Autocomplete.Trigger>
                   <Autocomplete.Popover>
-                    <Autocomplete.Filter filter={contains}>
+                    <Autocomplete.Filter
+                      inputValue={studentQuery}
+                      onInputChange={setStudentQuery}
+                    >
                       <SearchField autoFocus aria-label="搜索学生" name="search" variant="secondary">
                         <SearchField.Group>
                           <SearchField.SearchIcon />
-                          <SearchField.Input placeholder="搜索姓名 / 学号" />
+                          <SearchField.Input placeholder="搜索" />
                           <SearchField.ClearButton />
                         </SearchField.Group>
                       </SearchField>
@@ -673,9 +680,13 @@ export default function FocusStudents() {
                           <HeroEmptyState>没有匹配的学生</HeroEmptyState>
                         )}
                       >
-                        {candidates.map((item) => (
-                          <ListBox.Item key={item.id} id={item.id} textValue={item.textValue}>
-                            {item.textValue}
+                        {visibleCandidates.map((item) => (
+                          <ListBox.Item
+                            key={item.id}
+                            id={item.id}
+                            textValue={`${item.name} ${item.studentNo}`}
+                          >
+                            {item.name} {item.studentNo}
                             <ListBox.ItemIndicator />
                           </ListBox.Item>
                         ))}

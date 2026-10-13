@@ -1,4 +1,5 @@
-import { SearchField } from '@heroui/react'
+import { SearchField, Spinner } from '@heroui/react'
+import type { Ref } from 'react'
 
 export function SearchInput({
   value,
@@ -7,6 +8,8 @@ export function SearchInput({
   ariaLabel,
   className,
   autoFocus,
+  inputRef,
+  isLoading,
 }: {
   value: string
   onChange: (value: string) => void
@@ -14,6 +17,8 @@ export function SearchInput({
   ariaLabel: string
   className?: string
   autoFocus?: boolean
+  inputRef?: Ref<HTMLInputElement>
+  isLoading?: boolean
 }) {
   return (
     <SearchField
@@ -25,7 +30,8 @@ export function SearchInput({
     >
       <SearchField.Group>
         <SearchField.SearchIcon />
-        <SearchField.Input placeholder={placeholder} />
+        <SearchField.Input ref={inputRef} placeholder={placeholder} />
+        {isLoading && <Spinner size="sm" className="me-1 shrink-0" />}
         <SearchField.ClearButton />
       </SearchField.Group>
     </SearchField>

@@ -1,7 +1,16 @@
-import { Button, Input, Modal, Pagination, Tabs, useOverlayState } from '@heroui/react'
+import {
+  Button,
+  Dropdown,
+  Input,
+  Label,
+  Modal,
+  Pagination,
+  Tabs,
+  useOverlayState,
+} from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDebounce } from 'react-use'
 import { toast } from 'sonner'
@@ -9,18 +18,17 @@ import { toast } from 'sonner'
 import AlertTriangle from '~icons/lucide/alert-triangle'
 import Bot from '~icons/lucide/bot'
 import Check from '~icons/lucide/check'
-import ChevronUp from '~icons/lucide/chevron-up'
 import Copy from '~icons/lucide/copy'
+import Ellipsis from '~icons/lucide/ellipsis'
 import Eye from '~icons/lucide/eye'
 import EyeOff from '~icons/lucide/eye-off'
+import FileDown from '~icons/lucide/file-down'
 import Library from '~icons/lucide/library'
 import NotebookText from '~icons/lucide/notebook-text'
 import Pen from '~icons/lucide/pen'
 import Plus from '~icons/lucide/plus'
 import Settings2 from '~icons/lucide/settings-2'
 import Trash2 from '~icons/lucide/trash-2'
-import X from '~icons/lucide/x'
-import { SetQuestionsEditor } from '@/components/questions/SetQuestionsEditor'
 import { EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconAction } from '@/components/ui/IconAction'
@@ -31,12 +39,12 @@ import { PendingButton } from '@/components/ui/PendingButton'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
-  createBank,
   createQuestion,
   deleteBank,
   deleteQuestion,
   duplicateBank,
   duplicateQuestion,
+  fetchBankQuestions,
   listBanks,
   listQuestions,
   renameBank,
@@ -45,6 +53,7 @@ import {
   type QuestionBank,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { bankFilename, bankQuestionsToMarkdown, downloadMarkdown } from '@/lib/download'
 import { getErrorMessage } from '@/lib/error'
 import { useAsyncData } from '@/lib/request'
 
@@ -439,10 +448,6 @@ function QuestionsPanel() {
 function SetsPanel() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingRename, setPendingRename] = useState<{ bank: QuestionBank; next: string } | null>(
@@ -467,22 +472,6 @@ function SetsPanel() {
   useEffect(() => {
     if (error) toast.error(error)
   }, [error])
-
-  const create = async (event: FormEvent) => {
-    event.preventDefault()
-    setSaving(true)
-    try {
-      await createBank(name.trim())
-      toast.success('已创建题目集')
-      setName('')
-      setCreating(false)
-      reload()
-    } catch (error) {
-      toast.error(getErrorMessage(error, '创建失败'))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const performRename = async (bank: QuestionBank, next: string) => {
     try {
@@ -545,20 +534,23 @@ function SetsPanel() {
     }
   }
 
+  const exportMarkdown = async (bank: QuestionBank) => {
+    try {
+      const { questions } = await fetchBankQuestions(bank.id)
+      downloadMarkdown(bankFilename(bank.name), bankQuestionsToMarkdown(bank.name, questions))
+      toast.success('已导出为 Markdown')
+    } catch (error) {
+      toast.error(getErrorMessage(error, '导出失败'))
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <span className="text-xs text-fg-subtle">共 {banks.length} 个题目集</span>
         <div className="flex items-center gap-2">
-          <Button
-            variant={creating ? 'ghost' : 'primary'}
-            onPress={() => setCreating((open) => !open)}
-          >
-            {creating ? (
-              <X width={16} height={16} className="shrink-0" />
-            ) : (
-              <Plus width={16} height={16} className="shrink-0" />
-            )}
+          <Button variant="primary" onPress={() => navigate('/console/questions/banks/new')}>
+            <Plus width={16} height={16} className="shrink-0" />
             新建题目集
           </Button>
           <IconAction
@@ -572,45 +564,6 @@ function SetsPanel() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {creating && (
-          <motion.form
-            key="create"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            onSubmit={create}
-            className="mb-6 flex flex-col gap-4 rounded-2xl border border-line bg-elevated p-6"
-          >
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-fg-muted">题目集名称</label>
-              <Input
-                fullWidth
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="如：系统II 流水线题集"
-                maxLength={64}
-                autoFocus
-                required
-              />
-            </div>
-            <div className="flex justify-end">
-              <PendingButton
-                type="submit"
-                isPending={saving}
-                isDisabled={!name.trim()}
-                icon={Check}
-                pendingLabel="创建中"
-                className="bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
-              >
-                创建题目集
-              </PendingButton>
-            </div>
-          </motion.form>
-        )}
-      </AnimatePresence>
-
       {loading ? (
         <SkeletonList rows={3} className="h-24 rounded-2xl" />
       ) : banks.length === 0 ? (
@@ -619,7 +572,6 @@ function SetsPanel() {
         <div className="space-y-3">
           {banks.map((bank, i) => {
             const isOwner = bank.owner.id === user?.id
-            const expanded = expandedId === bank.id
             return (
               <motion.div
                 key={bank.id}
@@ -661,15 +613,14 @@ function SetsPanel() {
                   </span>
 
                   <div className="ml-auto flex items-center gap-1">
-                    <IconAction
-                      label="重命名"
-                      onPress={() => {
-                        setRenamingId(bank.id)
-                        setRenameValue(bank.name)
-                      }}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => navigate(`/console/questions/banks/${bank.id}`)}
                     >
-                      <Pen width={14} height={14} className="shrink-0" />
-                    </IconAction>
+                      <Settings2 width={14} height={14} className="shrink-0" />
+                      管理题目
+                    </Button>
                     <IconAction
                       label="复制"
                       isPending={busyId === bank.id}
@@ -686,42 +637,40 @@ function SetsPanel() {
                     >
                       <Trash2 width={14} height={14} className="shrink-0" />
                     </IconAction>
+                    <Dropdown>
+                      <Button isIconOnly size="sm" variant="ghost" aria-label="更多操作">
+                        <Ellipsis width={16} height={16} className="shrink-0" />
+                      </Button>
+                      <Dropdown.Popover>
+                        <Dropdown.Menu
+                          onAction={(key) => {
+                            if (key === 'rename') {
+                              setRenamingId(bank.id)
+                              setRenameValue(bank.name)
+                            } else if (key === 'export-md') {
+                              void exportMarkdown(bank)
+                            }
+                          }}
+                        >
+                          <Dropdown.Item id="rename" textValue="重命名">
+                            <Pen width={15} height={15} className="shrink-0 text-fg-muted" />
+                            <Label>重命名</Label>
+                          </Dropdown.Item>
+                          <Dropdown.Item id="export-md" textValue="导出为 Markdown">
+                            <FileDown width={15} height={15} className="shrink-0 text-fg-muted" />
+                            <Label>导出为 Markdown</Label>
+                          </Dropdown.Item>
+                        </Dropdown.Menu>
+                      </Dropdown.Popover>
+                    </Dropdown>
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onPress={() => setExpandedId(expanded ? null : bank.id)}
-                  >
-                    {expanded ? (
-                      <ChevronUp width={14} height={14} className="shrink-0" />
-                    ) : (
-                      <Settings2 width={14} height={14} className="shrink-0" />
-                    )}
-                    {expanded ? '收起' : '管理题目'}
-                  </Button>
-                  {!isOwner && (
-                    <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                      非管理者编辑会影响所有使用该题目集的实验
-                    </span>
-                  )}
-                </div>
-
-                <AnimatePresence initial={false}>
-                  {expanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                      className="overflow-hidden"
-                    >
-                      <SetQuestionsEditor bank={bank} onSaved={reload} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {!isOwner && (
+                  <p className="mt-3 text-[11px] text-amber-600 dark:text-amber-400">
+                    非管理者编辑会影响所有使用该题目集的实验
+                  </p>
+                )}
               </motion.div>
             )
           })}

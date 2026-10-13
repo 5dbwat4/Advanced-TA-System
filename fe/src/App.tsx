@@ -3,6 +3,9 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { RedirectIfAuthed } from '@/components/auth/RedirectIfAuthed'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
+import { PublicLayout } from '@/components/layout/PublicLayout'
+import BankDetail from '@/pages/BankDetail'
+import BankManage from '@/pages/BankManage'
 import Boards from '@/pages/Boards'
 import BoardScan from '@/pages/BoardScan'
 import Changelog from '@/pages/Changelog'
@@ -21,6 +24,7 @@ import Licenses from '@/pages/Licenses'
 import LicensesFull from '@/pages/LicensesFull'
 import NewCourse from '@/pages/NewCourse'
 import LlmConnect from '@/pages/LlmConnect'
+import NewBank from '@/pages/NewBank'
 import More from '@/pages/More'
 import Questions from '@/pages/Questions'
 import ReportCriteria from '@/pages/ReportCriteria'
@@ -54,6 +58,9 @@ export default function App() {
           <Route path="experiments/:id" element={<ExperimentDetail />} />
           <Route path="experiments/:id/xzzd-push" element={<XzzdPush />} />
           <Route path="questions" element={<Questions />} />
+          <Route path="questions/banks/new" element={<NewBank />} />
+          <Route path="questions/banks/:id/manage" element={<BankManage />} />
+          <Route path="questions/banks/:id" element={<BankDetail />} />
           <Route path="reports" element={<Reports />} />
           <Route path="criteria" element={<CriteriaManage />} />
           <Route path="llm-connect" element={<LlmConnect />} />
@@ -64,10 +71,12 @@ export default function App() {
           <Route path="courses/checkpoints" element={<Checkpoints />} />
           <Route path="courses/focus-students" element={<FocusStudents />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="settings/changelog" element={<Changelog />} />
-          <Route path="settings/licenses" element={<Licenses />} />
-          <Route path="settings/licenses/full" element={<LicensesFull />} />
         </Route>
+      </Route>
+      <Route element={<PublicLayout />}>
+        <Route path="/changelog" element={<Changelog />} />
+        <Route path="/license" element={<Licenses />} />
+        <Route path="/license/full" element={<LicensesFull />} />
       </Route>
       <Route path="/terms" element={<Terms />} />
       <Route path="/checkin" element={<Checkin />} />

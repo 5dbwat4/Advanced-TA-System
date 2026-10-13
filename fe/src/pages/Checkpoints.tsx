@@ -8,7 +8,6 @@ import {
   ListBox,
   Modal,
   SearchField,
-  useFilter,
   useOverlayState,
   type Key,
 } from '@heroui/react'
@@ -43,7 +42,7 @@ import { matchStudent } from '@/lib/pinyin'
 import { useAsyncData } from '@/lib/request'
 import { useCurrentClass } from '@/lib/store'
 
-type StudentOption = { id: string; textValue: string }
+type StudentOption = { id: string; name: string; studentNo: string }
 
 type DeleteTarget = { kind: 'single'; target: CheckpointClaim } | { kind: 'bulk' }
 
@@ -53,11 +52,10 @@ export default function Checkpoints() {
   const currentClass = useCurrentClass()
   const classId = currentClass?.id ?? null
 
-  const { contains } = useFilter({ sensitivity: 'base' })
-
   const [editing, setEditing] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
+  const [studentQuery, setStudentQuery] = useState('')
 
   const [claims, setClaims] = useState<CheckpointClaim[]>([])
   const [loading, setLoading] = useState(true)
@@ -116,9 +114,15 @@ export default function Checkpoints() {
       .filter((student) => !claimIds.has(student.stuId))
       .map((student) => ({
         id: student.stuId,
-        textValue: `${student.name} ${student.studentNo}`,
+        name: student.name,
+        studentNo: student.studentNo,
       }))
   }, [classStudents, claims])
+
+  const visibleCandidates = useMemo(
+    () => candidates.filter((item) => matchStudent(studentQuery, item)),
+    [candidates, studentQuery],
+  )
 
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id))
   const someSelected = rows.some((row) => selected.has(row.id))
@@ -226,7 +230,7 @@ export default function Checkpoints() {
     <SearchInput
       value={query}
       onChange={setQuery}
-      placeholder="搜索姓名 / 学号 / 拼音"
+      placeholder="搜索"
       ariaLabel="搜索 Checkpoint 学生"
       className="min-w-[12rem] flex-1"
     />
@@ -427,11 +431,14 @@ export default function Checkpoints() {
                     <Autocomplete.Indicator />
                   </Autocomplete.Trigger>
                   <Autocomplete.Popover>
-                    <Autocomplete.Filter filter={contains}>
+                    <Autocomplete.Filter
+                      inputValue={studentQuery}
+                      onInputChange={setStudentQuery}
+                    >
                       <SearchField autoFocus aria-label="搜索学生" name="search" variant="secondary">
                         <SearchField.Group>
                           <SearchField.SearchIcon />
-                          <SearchField.Input placeholder="搜索姓名 / 学号" />
+                          <SearchField.Input placeholder="搜索" />
                           <SearchField.ClearButton />
                         </SearchField.Group>
                       </SearchField>
@@ -440,9 +447,13 @@ export default function Checkpoints() {
                           <HeroEmptyState>没有匹配的学生</HeroEmptyState>
                         )}
                       >
-                        {candidates.map((item) => (
-                          <ListBox.Item key={item.id} id={item.id} textValue={item.textValue}>
-                            {item.textValue}
+                        {visibleCandidates.map((item) => (
+                          <ListBox.Item
+                            key={item.id}
+                            id={item.id}
+                            textValue={`${item.name} ${item.studentNo}`}
+                          >
+                            {item.name} {item.studentNo}
                             <ListBox.ItemIndicator />
                           </ListBox.Item>
                         ))}

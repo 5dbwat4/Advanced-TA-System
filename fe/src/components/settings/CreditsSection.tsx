@@ -90,7 +90,7 @@ export function CreditsSection({ index = 0 }: { index?: number }) {
           <Button
             size="sm"
             variant="secondary"
-            onPress={() => navigate('/console/settings/changelog')}
+            onPress={() => navigate('/changelog')}
           >
             <History width={14} height={14} className="shrink-0" />
             View changelog
@@ -120,7 +120,7 @@ export function CreditsSection({ index = 0 }: { index?: number }) {
       </div>
 
       <Link
-        to="/console/settings/licenses"
+        to="/license"
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-sunken px-4 py-3 text-left transition-colors hover:border-brand-500/40"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-fg">
