@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 
 import { prisma } from '../lib/prisma'
+import { REMARK_TYPE_REPORT } from '../lib/remark'
 import type { StudentViewPayload } from '../lib/student-view'
 import { parseClassSettings, resolveScoreRatio, weightedTotal } from '../lib/xzzd-push'
 
@@ -56,7 +57,13 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
         select: { ruleId: true, ruleContent: true },
       }),
       prisma.remark.findUnique({
-        where: { stuId_experimentId: { stuId, experimentId: experiment.id } },
+        where: {
+          stuId_experimentId_type: {
+            stuId,
+            experimentId: experiment.id,
+            type: REMARK_TYPE_REPORT,
+          },
+        },
         select: { text: true },
       }),
     ])

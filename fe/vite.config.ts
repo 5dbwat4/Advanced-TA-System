@@ -6,6 +6,7 @@ import Icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vite'
 
 import { buildInfo } from './plugins/build-info.ts'
+import { htmlMinify } from './plugins/html-minify.ts'
 import { loading } from './plugins/loading.ts'
 
 /** 取 node_modules 下的包目录名作为分包标识（含 scope，如 `@heroui-react`）。 */
@@ -24,6 +25,7 @@ export default defineConfig({
     Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false }),
     buildInfo(),
     loading(),
+    htmlMinify(),
   ],
   resolve: {
     alias: {

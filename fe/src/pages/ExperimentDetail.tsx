@@ -22,6 +22,7 @@ import ClipboardCheck from '~icons/lucide/clipboard-check'
 import ExternalLink from '~icons/lucide/external-link'
 import FlaskConical from '~icons/lucide/flask-conical'
 import GraduationCap from '~icons/lucide/graduation-cap'
+import MessageSquareText from '~icons/lucide/message-square-text'
 import NotebookText from '~icons/lucide/notebook-text'
 import Pencil from '~icons/lucide/pencil'
 import Percent from '~icons/lucide/percent'
@@ -594,10 +595,23 @@ export default function ExperimentDetail() {
         </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-        <Table width={16} height={16} className="shrink-0" />
-        学生得分
-        <span className="tabular text-xs font-normal text-fg-subtle">{students.length} 人</span>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-bold">
+          <Table width={16} height={16} className="shrink-0" />
+          学生得分
+          <span className="tabular text-xs font-normal text-fg-subtle">{students.length} 人</span>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          isDisabled={!id}
+          onPress={() => {
+            if (id) navigate(`/console/remarks/experiments/${id}`)
+          }}
+        >
+          <MessageSquareText width={15} height={15} className="shrink-0" />
+          查看评语
+        </Button>
       </div>
 
       {students.length === 0 ? (

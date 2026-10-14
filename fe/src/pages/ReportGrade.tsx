@@ -22,6 +22,7 @@ import {
   fetchReportReview,
   fetchXzzdPushPreview,
   listFocusStudents,
+  REMARK_TYPE_REPORT,
   type ClassTables,
   type Experiment,
   type Score,
@@ -245,7 +246,7 @@ export default function ReportGrade() {
     try {
       const [review, remark] = await Promise.all([
         fetchReportReview(stuId, id),
-        fetchRemark(stuId, id),
+        fetchRemark(stuId, id, REMARK_TYPE_REPORT),
       ])
       setSync({
         nonce: Date.now(),

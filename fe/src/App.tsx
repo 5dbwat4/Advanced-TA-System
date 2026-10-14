@@ -20,6 +20,7 @@ const CourseSettings = lazy(() => import('@/pages/CourseSettings'))
 const CriteriaManage = lazy(() => import('@/pages/CriteriaManage'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const ExperimentDetail = lazy(() => import('@/pages/ExperimentDetail'))
+const ExperimentRemarks = lazy(() => import('@/pages/ExperimentRemarks'))
 const Experiments = lazy(() => import('@/pages/Experiments'))
 const FocusStudents = lazy(() => import('@/pages/FocusStudents'))
 const Licenses = lazy(() => import('@/pages/Licenses'))
@@ -70,6 +71,7 @@ export default function App() {
             <Route path="experiments" element={<Experiments />} />
             <Route path="experiments/:id" element={<ExperimentDetail />} />
             <Route path="experiments/:id/xzzd-push" element={<XzzdPush />} />
+            <Route path="remarks/experiments/:id" element={<ExperimentRemarks />} />
             <Route path="questions" element={<Questions />} />
             <Route path="questions/banks/new" element={<NewBank />} />
             <Route path="questions/banks/:id/manage" element={<BankManage />} />

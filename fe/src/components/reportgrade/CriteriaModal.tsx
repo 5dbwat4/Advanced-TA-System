@@ -123,7 +123,7 @@ export function CriteriaModal({
                     className="w-full"
                     onPress={applyDefaultRule}
                   >
-                    为该实验使用该评分标准
+                    为该实验所有未批报告使用该评分标准
                   </Button>
                 </>
               )}

@@ -28,6 +28,26 @@ export function getCheckoffSocket(): Socket {
   return socket
 }
 
+/** 订阅验收 Socket 的底层连接状态（socket.io connected / disconnected），与是否已加入会话无关。 */
+export function useCheckoffConnection(): boolean {
+  const [online, setOnline] = useState(() => getCheckoffSocket().connected)
+
+  useEffect(() => {
+    const s = getCheckoffSocket()
+    const onConnect = () => setOnline(true)
+    const onDisconnect = () => setOnline(false)
+    s.on('connect', onConnect)
+    s.on('disconnect', onDisconnect)
+    setOnline(s.connected)
+    return () => {
+      s.off('connect', onConnect)
+      s.off('disconnect', onDisconnect)
+    }
+  }, [])
+
+  return online
+}
+
 /* ------------------------------ master ------------------------------ */
 
 export type MasterSession = {

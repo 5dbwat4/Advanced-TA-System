@@ -7,13 +7,14 @@ import { toast } from 'sonner'
 
 import ArrowRight from '~icons/lucide/arrow-right'
 import BookOpenCheck from '~icons/lucide/book-open-check'
-import Cpu from '~icons/lucide/cpu'
 import Ellipsis from '~icons/lucide/ellipsis'
 import Fingerprint from '~icons/lucide/fingerprint'
 import KeyRound from '~icons/lucide/key-round'
+import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import ShieldCheck from '~icons/lucide/shield-check'
 import University from '~icons/lucide/university'
 import Users from '~icons/lucide/users'
+import { Logo } from '@/components/ui/Logo'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { ApiError } from '@/lib/api'
@@ -164,9 +165,7 @@ export function LoginPanel() {
       >
         {/* mobile logo */}
         <div className="mb-8 flex items-center gap-3 lg:hidden">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/25">
-            <Cpu width={20} height={20} className="shrink-0" />
-          </div>
+          <Logo size={40} />
           <div>
             <div className="font-bold tracking-tight">欢迎回来</div>
             <div className="text-xs text-fg-subtle">登录计算机系统课程助教系统</div>
@@ -396,6 +395,16 @@ export function LoginPanel() {
         <p className="mt-6 text-center text-xs text-fg-subtle">
           学生登录暂未开放，敬请期待
         </p>
+
+        <Button
+          variant="secondary"
+          fullWidth
+          className="mt-4"
+          onPress={() => navigate('/checkin')}
+        >
+          <MonitorSmartphone width={15} height={15} className="shrink-0" />
+          验收从机
+        </Button>
       </motion.div>
     </div>
   )

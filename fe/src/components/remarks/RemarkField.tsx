@@ -12,10 +12,13 @@ import { getErrorMessage } from '@/lib/error'
 export function RemarkField({
   stuId,
   experimentId,
+  type,
   sync,
 }: {
   stuId: string | null
   experimentId: string
+  /** 附言类型：0=验收，1=实验报告 */
+  type: number
   /** 「同步」时用他人保存的附言覆盖当前内容（nonce 变化触发一次） */
   sync?: { nonce: number; text: string }
 }) {
@@ -37,7 +40,7 @@ export function RemarkField({
     }
     let cancelled = false
     setLoading(true)
-    fetchRemark(stuId, experimentId)
+    fetchRemark(stuId, experimentId, type)
       .then((remark) => {
         if (cancelled) return
         const value = remark?.text ?? ''
@@ -51,14 +54,14 @@ export function RemarkField({
     return () => {
       cancelled = true
     }
-  }, [stuId, experimentId])
+  }, [stuId, experimentId, type])
 
   const persist = useCallback(
     async (value: string) => {
       if (!stuId || value === savedRef.current) return
       setSaving(true)
       try {
-        await saveRemark({ stuId, experimentId, text: value })
+        await saveRemark({ stuId, experimentId, type, text: value })
         savedRef.current = value
       } catch (error) {
         toast.error(getErrorMessage(error, '附言保存失败'))
@@ -66,7 +69,7 @@ export function RemarkField({
         setSaving(false)
       }
     },
-    [stuId, experimentId],
+    [stuId, experimentId, type],
   )
 
   useEffect(() => {

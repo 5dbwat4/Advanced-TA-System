@@ -1,9 +1,20 @@
-import { Button, Input, ListBox, Modal, Select, useOverlayState } from '@heroui/react'
+import {
+  Button,
+  Input,
+  ListBox,
+  Modal,
+  Select,
+  ToggleButton,
+  ToggleButtonGroup,
+  useOverlayState,
+} from '@heroui/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
+import Layers from '~icons/lucide/layers'
+import ListChecks from '~icons/lucide/list-checks'
 import ListPlus from '~icons/lucide/list-plus'
 import Pencil from '~icons/lucide/pencil'
 import Plus from '~icons/lucide/plus'
@@ -59,6 +70,9 @@ export default function ScoreEntry() {
     score: number
   } | null>(null)
   const [rangeBusy, setRangeBusy] = useState(false)
+  const [bulkValue, setBulkValue] = useState('')
+  const [bulkScope, setBulkScope] = useState<'all' | 'empty'>('all')
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const newState = useOverlayState({
     onOpenChange: (open) => {
@@ -69,6 +83,15 @@ export default function ScoreEntry() {
   const rangeState = useOverlayState({
     onOpenChange: (open) => {
       if (!open) setPendingRange(null)
+    },
+  })
+
+  const bulkState = useOverlayState({
+    onOpenChange: (open) => {
+      if (!open) {
+        setBulkValue('')
+        setBulkScope('all')
+      }
     },
   })
 
@@ -246,6 +269,52 @@ export default function ScoreEntry() {
     },
     [selected, applyScore, commitScore, rangeState],
   )
+
+  /** 批量设置的目标分数（未输入或非法时为 null） */
+  const bulkScore = useMemo(() => {
+    const trimmed = bulkValue.trim()
+    if (trimmed === '') return null
+    const parsed = Number(trimmed)
+    return Number.isNaN(parsed) ? null : parsed
+  }, [bulkValue])
+
+  /** 批量作用的学生：全部，或仅当前项目未填项 */
+  const bulkTargets = useMemo(() => {
+    if (!selected) return []
+    if (bulkScope === 'all') return visibleStudents
+    return visibleStudents.filter(
+      (student) => !scores.has(scoreKey(student.stuId, SCORE_TYPE_EXTRA, selected)),
+    )
+  }, [selected, bulkScope, visibleStudents, scores])
+
+  const applyBulk = async () => {
+    if (!selected) return
+    if (bulkScore === null) {
+      toast.error('请输入分数')
+      return
+    }
+    if (bulkScore < -SCORE_LIMIT || bulkScore > SCORE_LIMIT) {
+      toast.error(`请输入 ${-SCORE_LIMIT}~${SCORE_LIMIT} 的分数`)
+      return
+    }
+    if (bulkTargets.length === 0) {
+      toast.info('没有需要设置的学生')
+      return
+    }
+    setBulkBusy(true)
+    let done = 0
+    for (const student of bulkTargets) {
+      try {
+        await commitScore(student, selected, bulkScore)
+        done += 1
+      } catch {
+        // commitScore 已提示
+      }
+    }
+    setBulkBusy(false)
+    bulkState.close()
+    toast.success(`已将 ${bulkScore} 分应用于 ${done} 名学生`)
+  }
 
   const createProject = () => {
     const name = newName.trim()
@@ -496,6 +565,13 @@ export default function ScoreEntry() {
                 })}
               </div>
             </div>
+
+            <div className="flex flex-col gap-2 border-t border-line pt-4">
+              <Button fullWidth variant="secondary" onPress={bulkState.open}>
+                <ListChecks width={15} height={15} className="shrink-0" />
+                全部设为…
+              </Button>
+            </div>
           </Card>
         </div>
       )}
@@ -535,6 +611,75 @@ export default function ScoreEntry() {
                 </Button>
                 <Button variant="primary" onPress={createProject}>
                   创建
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal state={bulkState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-sm">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <Layers width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>全部设为…</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-5">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-fg-subtle" htmlFor="bulk-value">
+                    分数
+                  </label>
+                  <Input
+                    id="bulk-value"
+                    autoFocus
+                    type="number"
+                    value={bulkValue}
+                    onChange={(event) => setBulkValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void applyBulk()
+                      }
+                    }}
+                    placeholder="输入要设置的分数"
+                    aria-label="批量分值"
+                    className="tabular w-full rounded-xl border border-line bg-elevated px-3 py-2 text-sm text-fg outline-none transition-all placeholder:text-fg-subtle focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-medium text-fg-subtle">应用范围</span>
+                  <ToggleButtonGroup
+                    fullWidth
+                    disallowEmptySelection
+                    selectionMode="single"
+                    selectedKeys={new Set([bulkScope])}
+                    onSelectionChange={(keys) => {
+                      const first = keys.values().next().value
+                      if (first === 'all' || first === 'empty') setBulkScope(first)
+                    }}
+                  >
+                    <ToggleButton id="all">应用到全部</ToggleButton>
+                    <ToggleButton id="empty">
+                      <ToggleButtonGroup.Separator />
+                      应用到未填项
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                  <p className="text-xs text-fg-subtle">
+                    将影响 {bulkTargets.length} 名学生
+                  </p>
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  取消
+                </Button>
+                <Button variant="primary" isDisabled={bulkBusy} onPress={() => void applyBulk()}>
+                  确定
                 </Button>
               </Modal.Footer>
             </Modal.Dialog>

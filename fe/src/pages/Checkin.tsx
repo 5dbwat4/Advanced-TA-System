@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import Cpu from '~icons/lucide/cpu'
 import LogIn from '~icons/lucide/log-in'
 import { CheckinScreen } from '@/components/checkin/CheckinScreen'
+import { ConnectionBadge } from '@/components/checkin/ConnectionBadge'
 
 export default function Checkin() {
   const [value, setValue] = useState('')
@@ -30,7 +31,8 @@ export default function Checkin() {
   }
 
   return (
-    <div className="diagonal-bg flex min-h-screen items-center justify-center px-5 py-10">
+    <div className="diagonal-bg relative flex min-h-screen items-center justify-center px-5 py-10">
+      <ConnectionBadge />
       <div className="w-full max-w-lg">
         <div className="mb-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
           <Cpu width={15} height={15} className="shrink-0" />

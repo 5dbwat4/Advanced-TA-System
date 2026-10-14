@@ -351,6 +351,8 @@ model Remark {
   /// 实验 id
   experimentId String
   experiment   Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  /// 附言类型：0=验收，1=实验报告
+  type         Int        @default(0)
   /// 备注文本
   text         String     @default("")
   /// 最后编辑人（账号删除时置空）
@@ -360,8 +362,8 @@ model Remark {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@id([stuId, experimentId])
-  @@index([experimentId])
+  @@id([stuId, experimentId, type])
+  @@index([experimentId, type])
   @@index([updatedById])
 }
 

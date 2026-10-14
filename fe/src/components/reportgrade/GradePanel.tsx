@@ -30,7 +30,14 @@ import type {
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { PendingButton } from '@/components/ui/PendingButton'
-import { fetchCriteria, fetchReportReview, saveReportReview, saveScore, type Score } from '@/lib/api'
+import {
+  fetchCriteria,
+  fetchReportReview,
+  REMARK_TYPE_REPORT,
+  saveReportReview,
+  saveScore,
+  type Score,
+} from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -450,7 +457,12 @@ export function GradePanel({
           )
         )}
 
-        <RemarkField stuId={stuId} experimentId={experimentId} sync={remarkSync} />
+        <RemarkField
+          stuId={stuId}
+          experimentId={experimentId}
+          type={REMARK_TYPE_REPORT}
+          sync={remarkSync}
+        />
       </div>
 
       {criteriaModal}

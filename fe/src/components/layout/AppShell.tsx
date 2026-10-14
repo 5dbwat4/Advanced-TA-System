@@ -5,13 +5,13 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ChevronDown from '~icons/lucide/chevron-down'
-import Cpu from '~icons/lucide/cpu'
 import Ellipsis from '~icons/lucide/ellipsis'
 import LogOut from '~icons/lucide/log-out'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
 import { IconAction } from '@/components/ui/IconAction'
+import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
 import { MOBILE_NAV_ITEMS, MORE_PATH, NAV_ITEMS, isMoreSection } from '@/lib/nav'
@@ -70,14 +70,12 @@ export function AppShell() {
             sidebarCollapsed ? 'justify-center px-0' : 'px-5',
           )}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/25">
-            <Cpu width={20} height={20} className="shrink-0" />
-          </div>
+          <Logo size={36} />
           {!sidebarCollapsed && (
             <div className="leading-tight">
-              <div className="text-sm font-bold tracking-tight">TA 助教台</div>
-              <div className="text-[10px] font-medium uppercase tracking-widest text-fg-subtle">
-                ZJU · 计算机系统课程
+              <div className="text-sm font-bold tracking-tight">ATASAAS</div>
+              <div className="text-[10px] font-medium tracking-widest text-fg-subtle">
+                Yet another TA System
               </div>
             </div>
           )}
@@ -185,10 +183,8 @@ export function AppShell() {
       >
         <header className="glass sticky top-0 z-30 flex h-16 items-center justify-between border-b border-line px-4 md:px-8">
           <div className="flex items-center gap-3 md:hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white">
-              <Cpu width={16} height={16} className="shrink-0" />
-            </div>
-            <span className="text-sm font-bold">TA 助教台</span>
+            <Logo size={32} />
+            <span className="text-sm font-bold">ATASAAS</span>
           </div>
           <div className="hidden md:inline-flex">
             <IconAction

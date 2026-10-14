@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
 
-import Cpu from '~icons/lucide/cpu'
+import { Logo } from '@/components/ui/Logo'
 
 /** Left branding panel of the login page (desktop only). */
 export function LoginBrandPanel() {
@@ -30,9 +30,7 @@ export function LoginBrandPanel() {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="relative flex items-center gap-3"
       >
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20 backdrop-blur">
-          <Cpu width={24} height={24} className="shrink-0" />
-        </div>
+        <Logo size={44} />
         <div>
           <div className="font-bold tracking-tight">计算机系统课程助教系统</div>
           <div className="text-xs uppercase tracking-[0.2em] text-white/50">Zhejiang University</div>

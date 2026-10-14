@@ -1031,25 +1031,43 @@ export function saveReportReview(body: {
   })
 }
 
+/** 附言类型：0=验收，1=实验报告 */
+export const REMARK_TYPE_CHECKOFF = 0
+export const REMARK_TYPE_REPORT = 1
+
 export type Remark = {
   stuId: string
   experimentId: string
+  type: number
   text: string
   updatedById: string | null
   updatedByName: string | null
   updatedAt: string
 }
 
-export async function fetchRemark(stuId: string, experimentId: string): Promise<Remark | null> {
+export async function fetchRemark(
+  stuId: string,
+  experimentId: string,
+  type: number,
+): Promise<Remark | null> {
   const res = await apiFetch<{ remark: Remark | null }>(
-    `/api/remarks?stuId=${encodeURIComponent(stuId)}&experimentId=${encodeURIComponent(experimentId)}`,
+    `/api/remarks?stuId=${encodeURIComponent(stuId)}&experimentId=${encodeURIComponent(experimentId)}&type=${type}`,
   )
   return res.remark
+}
+
+/** 某实验下所有学生的附言（含全部类型），供「查看评语」页批量展示 */
+export async function fetchExperimentRemarks(experimentId: string): Promise<Remark[]> {
+  const res = await apiFetch<{ remarks: Remark[] }>(
+    `/api/remarks/experiment/${encodeURIComponent(experimentId)}`,
+  )
+  return res.remarks
 }
 
 export function saveRemark(body: {
   stuId: string
   experimentId: string
+  type: number
   text: string
 }): Promise<{ remark: Remark }> {
   return apiFetch<{ remark: Remark }>('/api/remarks', {

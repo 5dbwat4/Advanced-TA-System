@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { compareExperimentMark } from '../lib/banks'
 import { myClassIds, requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
+import { REMARK_TYPE_CHECKOFF, REMARK_TYPE_REPORT } from '../lib/remark'
 import { studentViewUrl as buildStudentViewUrl } from '../lib/student-view'
 import {
   assemblePushTargets,
@@ -254,7 +255,10 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
           },
         }),
         prisma.remark.findMany({
-          where: { experimentId: id },
+          where: {
+            experimentId: id,
+            type: kind === 'report' ? REMARK_TYPE_REPORT : REMARK_TYPE_CHECKOFF,
+          },
           select: { stuId: true, text: true },
         }),
       ])

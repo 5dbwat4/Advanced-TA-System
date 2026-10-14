@@ -9,7 +9,12 @@ import MessageCircleQuestion from '~icons/lucide/message-circle-question'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { PendingButton } from '@/components/ui/PendingButton'
-import { submitCheckoff, type CheckoffStudent, type Score } from '@/lib/api'
+import {
+  REMARK_TYPE_CHECKOFF,
+  submitCheckoff,
+  type CheckoffStudent,
+  type Score,
+} from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { SCORE_MAX } from '@/lib/scores'
 import { weightedTotal } from '@/lib/scoring'
@@ -172,7 +177,11 @@ export function ScoreForm({
       </div>
 
       <div className="mt-4 rounded-2xl border border-line bg-elevated p-5">
-        <RemarkField stuId={student.stuId} experimentId={experimentId} />
+        <RemarkField
+          stuId={student.stuId}
+          experimentId={experimentId}
+          type={REMARK_TYPE_CHECKOFF}
+        />
       </div>
 
       <div className="mt-5 flex items-center justify-between gap-3">
