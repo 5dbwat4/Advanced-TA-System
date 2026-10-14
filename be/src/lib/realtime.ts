@@ -37,6 +37,46 @@ function watchRoom(classId: string): string {
   return `checkoff-watch:${classId}`
 }
 
+/** 验收在场信息（打开验收页的人：在线 + 当前正在验收的学生） */
+export type CheckoffPeer = {
+  userId: string
+  name: string
+  /** 当前正在验收的学生姓名；null 表示空闲 */
+  studentName: string | null
+  at: number
+}
+
+/** classId → (socketId → 在场信息) */
+const checkoffPresences = new Map<string, Map<string, CheckoffPeer>>()
+
+/** 在场列表（按用户去重，取最新一条） */
+function checkoffPeers(classId: string): CheckoffPeer[] {
+  const room = checkoffPresences.get(classId)
+  if (!room) return []
+  const byUser = new Map<string, CheckoffPeer>()
+  for (const entry of room.values()) {
+    const current = byUser.get(entry.userId)
+    if (!current || entry.at > current.at) byUser.set(entry.userId, entry)
+  }
+  return [...byUser.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+}
+
+/** 向验收房间广播在场列表 */
+function broadcastCheckoffPresence(classId: string): void {
+  io?.to(watchRoom(classId)).emit('checkoff:presence', { classId, peers: checkoffPeers(classId) })
+}
+
+/** socket 离开验收房间：移除在场并广播（幂等） */
+function removeCheckoffPresence(socket: Socket): void {
+  const classId = socket.data.checkoffWatchClassId as string | undefined
+  socket.data.checkoffWatchClassId = undefined
+  if (typeof classId !== 'string') return
+  const room = checkoffPresences.get(classId)
+  if (!room || !room.delete(socket.id)) return
+  if (room.size === 0) checkoffPresences.delete(classId)
+  broadcastCheckoffPresence(classId)
+}
+
 /** 从握手信息中提取 JWT（auth → Authorization → query） */
 function extractToken(socket: Socket): string | null {
   const { auth, headers, query } = socket.handshake
@@ -325,17 +365,32 @@ export function createRealtime(fastify: FastifyInstance): Server {
     })
 
     /* -------- 验收房间（仅打开验收页的用户加入） -------- */
-    socket.on('checkoff:watch', async ({ classId } = {} as { classId?: string }) => {
-      const user = socket.data.user as { sub?: string } | undefined
-      if (!user?.sub || typeof classId !== 'string') return
-      const ctx = await loadBroadcastContext(user.sub)
-      if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
-      await socket.join(watchRoom(classId))
-    })
+    socket.on(
+      'checkoff:watch',
+      async ({ classId } = {} as { classId?: string }, ack?: (res: unknown) => void) => {
+        const user = socket.data.user as { sub?: string } | undefined
+        if (!user?.sub || typeof classId !== 'string') return
+        const ctx = await loadBroadcastContext(user.sub)
+        if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
+        await socket.join(watchRoom(classId))
+        socket.data.checkoffWatchClassId = classId
+        const room = checkoffPresences.get(classId) ?? new Map<string, CheckoffPeer>()
+        checkoffPresences.set(classId, room)
+        room.set(socket.id, { userId: user.sub, name: ctx.name, studentName: null, at: Date.now() })
+        ack?.({ peers: checkoffPeers(classId) })
+        broadcastCheckoffPresence(classId)
+      },
+    )
 
     socket.on('checkoff:unwatch', ({ classId } = {} as { classId?: string }) => {
       if (typeof classId !== 'string') return
       void socket.leave(watchRoom(classId))
+      const room = checkoffPresences.get(classId)
+      if (room?.delete(socket.id)) {
+        if (room.size === 0) checkoffPresences.delete(classId)
+        broadcastCheckoffPresence(classId)
+      }
+      if (socket.data.checkoffWatchClassId === classId) socket.data.checkoffWatchClassId = undefined
     })
 
     socket.on(
@@ -354,8 +409,23 @@ export function createRealtime(fastify: FastifyInstance): Server {
           at: Date.now(),
         }
         socket.to(watchRoom(classId)).emit('checkoff:started', payload)
+        const entry = checkoffPresences.get(classId)?.get(socket.id)
+        if (entry) {
+          entry.studentName = name
+          entry.at = Date.now()
+          broadcastCheckoffPresence(classId)
+        }
       },
     )
+
+    socket.on('checkoff:clear', ({ classId } = {} as { classId?: string }) => {
+      if (typeof classId !== 'string') return
+      const entry = checkoffPresences.get(classId)?.get(socket.id)
+      if (!entry || entry.studentName === null) return
+      entry.studentName = null
+      entry.at = Date.now()
+      broadcastCheckoffPresence(classId)
+    })
 
     /* -------- master -------- */
     socket.on('master:create', async (_payload: unknown, ack?: (res: unknown) => void) => {
@@ -502,6 +572,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
     socket.on('disconnect', () => {
       leaveSession(socket)
       removeReportPresence(socket)
+      removeCheckoffPresence(socket)
     })
   })
 

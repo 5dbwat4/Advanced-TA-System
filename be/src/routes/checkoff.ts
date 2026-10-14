@@ -146,6 +146,52 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     return { questions }
   })
 
+  /** 最近验收提交的成绩（本班，按更新时间倒序，最多 10 条） */
+  fastify.get('/records', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const query = request.query as { classId?: unknown }
+    const classId = typeof query.classId === 'string' ? query.classId : ''
+
+    const classIds = await myClassIds(request)
+    if (!classId || !classIds.includes(classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+    }
+
+    const scores = await prisma.score.findMany({
+      where: { student: { classId }, type: { in: [0, 1, 2] } },
+      orderBy: { updatedAt: 'desc' },
+      take: 10,
+      include: {
+        student: { select: { name: true, studentNo: true } },
+        grader: { select: { name: true } },
+      },
+    })
+
+    const experiments = await prisma.experiment.findMany({
+      where: { classId },
+      select: { id: true, mark: true, title: true },
+    })
+    const expById = new Map(experiments.map((e) => [e.id, e]))
+
+    const records = scores.map((score) => {
+      const experiment = expById.get(score.indId)
+      return {
+        stuId: score.stuId,
+        studentName: score.student.name,
+        studentNo: score.student.studentNo,
+        type: score.type,
+        score: score.score,
+        experimentMark: experiment?.mark ?? '',
+        experimentTitle: experiment?.title ?? '',
+        graderName: score.grader?.name ?? null,
+        updatedAt: score.updatedAt,
+      }
+    })
+
+    return { records }
+  })
+
   /** 提交验收成绩（助教 / 教师） */
   fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!requireStaff(request, reply)) return reply

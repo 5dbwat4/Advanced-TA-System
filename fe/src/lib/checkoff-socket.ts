@@ -130,15 +130,25 @@ export type CheckoffStartedEvent = {
   at: number
 }
 
+/** 验收在场信息（打开验收页的人） */
+export type CheckoffPeer = {
+  userId: string
+  name: string
+  /** 当前正在验收的学生姓名；null 表示空闲 */
+  studentName: string | null
+  at: number
+}
+
 /**
- * 验收页房间：加入当前班级的验收房间，接收其他助教进入「展示 demo」时的广播。
- * 回调经 ref 调用，effect 仅依赖 classId。
+ * 验收页房间：加入当前班级的验收房间，接收其他助教进入「展示 demo」时的广播，
+ * 并维护本班在场列表（在线 + 各自正在验收的学生）。回调经 ref 调用，effect 仅依赖 classId。
  */
 export function useCheckoffWatch(
   classId: string | undefined,
   onStarted: (event: CheckoffStartedEvent) => void,
-) {
+): CheckoffPeer[] {
   const handlerRef = useRef(onStarted)
+  const [peers, setPeers] = useState<CheckoffPeer[]>([])
 
   useEffect(() => {
     handlerRef.current = onStarted
@@ -148,24 +158,44 @@ export function useCheckoffWatch(
     if (!classId) return
     const s = getCheckoffSocket()
 
-    const join = () => s.emit('checkoff:watch', { classId })
+    const join = () =>
+      s.emit(
+        'checkoff:watch',
+        { classId },
+        (res?: { peers?: CheckoffPeer[] }) => {
+          if (res?.peers) setPeers(res.peers)
+        },
+      )
     const onEvent = (payload: CheckoffStartedEvent) => handlerRef.current(payload)
+    const onPresence = (payload: { classId?: string; peers?: CheckoffPeer[] }) => {
+      if (payload?.classId === classId) setPeers(payload.peers ?? [])
+    }
 
     s.on('checkoff:started', onEvent)
+    s.on('checkoff:presence', onPresence)
     s.on('connect', join)
     if (s.connected) join()
 
     return () => {
       s.off('checkoff:started', onEvent)
+      s.off('checkoff:presence', onPresence)
       s.off('connect', join)
       s.emit('checkoff:unwatch', { classId })
+      setPeers([])
     }
   }, [classId])
+
+  return peers
 }
 
 /** 通知当前班级的验收房间：本助教开始验收某学生 */
 export function notifyCheckoffStarted(payload: { classId: string; studentName: string }): void {
   getCheckoffSocket().emit('checkoff:notify', payload)
+}
+
+/** 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场） */
+export function clearCheckoffPresence(classId: string): void {
+  getCheckoffSocket().emit('checkoff:clear', { classId })
 }
 
 /* ------------------------------- slave ------------------------------- */

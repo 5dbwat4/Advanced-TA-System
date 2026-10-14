@@ -33,6 +33,7 @@ const Questions = lazy(() => import('@/pages/Questions'))
 const ReportCriteria = lazy(() => import('@/pages/ReportCriteria'))
 const ReportGrade = lazy(() => import('@/pages/ReportGrade'))
 const Reports = lazy(() => import('@/pages/Reports'))
+const ScoreEntry = lazy(() => import('@/pages/ScoreEntry'))
 const Scores = lazy(() => import('@/pages/Scores'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const Setup = lazy(() => import('@/pages/Setup'))
@@ -78,6 +79,7 @@ export default function App() {
             <Route path="llm-connect" element={<LlmConnect />} />
             <Route path="more" element={<More />} />
             <Route path="scores" element={<Scores />} />
+            <Route path="scores/standalone" element={<ScoreEntry />} />
             <Route path="courses/new" element={<NewCourse />} />
             <Route path="courses/settings" element={<CourseSettings />} />
             <Route path="courses/checkpoints" element={<Checkpoints />} />

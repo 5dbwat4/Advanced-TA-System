@@ -727,6 +727,25 @@ export function submitCheckoff(body: {
   })
 }
 
+export type CheckoffRecord = {
+  stuId: string
+  studentName: string
+  studentNo: string
+  type: number
+  score: number
+  experimentMark: string
+  experimentTitle: string
+  graderName: string | null
+  updatedAt: string
+}
+
+/** 最近验收提交的成绩（本班，最多 10 条） */
+export function fetchCheckoffRecords(classId: string): Promise<{ records: CheckoffRecord[] }> {
+  return apiFetch<{ records: CheckoffRecord[] }>(
+    `/api/checkoff/records?classId=${encodeURIComponent(classId)}`,
+  )
+}
+
 export type McpScope =
   | 'questions:read'
   | 'questions:write'

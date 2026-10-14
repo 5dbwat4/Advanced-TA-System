@@ -19,7 +19,7 @@
   var TITLE_WAIT = '这个阶段，人们通常会绞尽脑汁写一些笑话写上去，避免用户因为FMP过高而退出……'
   var TITLE_DOWNLOAD =
     '你知道吗，仍然有很多游戏会使用闪断更新+补偿这一方式，即使热更新完全是可行的……我们选择了闪断更新且没有补偿的方案，并且还要加上绞尽脑汁写的变质笑话'
-  var TITLE_READY = '正在编译着色器……'
+  var TITLE_READY = 'Ready.'
 
   var workerSupported =
     typeof navigator !== 'undefined' &&

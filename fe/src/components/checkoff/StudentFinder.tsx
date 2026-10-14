@@ -30,6 +30,7 @@ export function StudentFinder({
   onSelect,
   onQuestionsLoaded,
   onLoadError,
+  onSearchFocus,
   onSearchBlur,
 }: {
   classId: string
@@ -39,6 +40,7 @@ export function StudentFinder({
   onSelect: (student: CheckoffStudent, scores: Score[]) => void
   onQuestionsLoaded?: (questions: CheckoffQuestion[]) => void
   onLoadError?: (message: string) => void
+  onSearchFocus?: () => void
   onSearchBlur?: () => void
 }) {
   const [query, setQuery] = useState('')
@@ -46,6 +48,14 @@ export function StudentFinder({
   const [scores, setScores] = useState<Score[]>([])
   const [loading, setLoading] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
+  // 回调经 ref 调用，避免父组件内联函数每次渲染都改变依赖导致接口无限重复请求
+  const onQuestionsLoadedRef = useRef(onQuestionsLoaded)
+  const onLoadErrorRef = useRef(onLoadError)
+
+  useEffect(() => {
+    onQuestionsLoadedRef.current = onQuestionsLoaded
+    onLoadErrorRef.current = onLoadError
+  }, [onQuestionsLoaded, onLoadError])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -61,7 +71,7 @@ export function StudentFinder({
         setStudents(res.students)
         setScores(res.scores)
         if (includeQuestions) {
-          onQuestionsLoaded?.(res.questions ?? [])
+          onQuestionsLoadedRef.current?.(res.questions ?? [])
         }
       })
       .catch((error) => {
@@ -69,7 +79,7 @@ export function StudentFinder({
         const message = getErrorMessage(error, '加载名单失败')
         toast.error(message)
         if (includeQuestions) {
-          onLoadError?.(getErrorMessage(error, '加载题目失败'))
+          onLoadErrorRef.current?.(getErrorMessage(error, '加载题目失败'))
         }
       })
       .finally(() => {
@@ -78,7 +88,7 @@ export function StudentFinder({
     return () => {
       cancelled = true
     }
-  }, [classId, experimentId, reloadKey, includeQuestions, onQuestionsLoaded, onLoadError])
+  }, [classId, experimentId, reloadKey, includeQuestions])
 
   const filtered = useMemo(
     () => students.filter((student) => matchStudent(query, student)),
@@ -105,6 +115,7 @@ export function StudentFinder({
           fullWidth
           value={query}
           onChange={onChange}
+          onFocus={onSearchFocus}
           onBlur={onSearchBlur}
           placeholder="输入姓名、学号、拼音或首字母搜索"
           aria-label="搜索学生"

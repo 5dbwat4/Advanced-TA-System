@@ -1,24 +1,19 @@
-import {
-  Alert,
-  Button,
-  Input,
-  Modal,
-  Spinner,
-  Tooltip,
-  useOverlayState,
-} from '@heroui/react'
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { Alert, Button, Modal, Spinner, useOverlayState } from '@heroui/react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ArrowDown from '~icons/lucide/arrow-down'
 import ArrowUp from '~icons/lucide/arrow-up'
 import ArrowUpDown from '~icons/lucide/arrow-up-down'
 import FlaskConical from '~icons/lucide/flask-conical'
+import ListPlus from '~icons/lucide/list-plus'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import School from '~icons/lucide/school'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import UserRoundPlus from '~icons/lucide/user-round-plus'
 import Users from '~icons/lucide/users'
+import { ScoreCell } from '@/components/scores/ScoreCell'
 import { EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconAction } from '@/components/ui/IconAction'
@@ -40,17 +35,15 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
-import { formatLocaleDateTime } from '@/lib/format'
 import {
   connectScoreSocket,
   disconnectScoreSocket,
   subscribeScores,
   type ScoreChangeEvent,
 } from '@/lib/realtime'
-import { SCORE_LIMIT, SCORE_MAX, SCORE_TYPES, scoreKey } from '@/lib/scores'
+import { extraProjectNames, SCORE_TYPES, SCORE_TYPE_EXTRA, scoreKey } from '@/lib/scores'
 import { resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useCurrentClass, useHasXzzdPermission } from '@/lib/store'
-import { cn } from '@/lib/utils'
 
 function toScoreMap(scores: Score[]): Map<string, Score> {
   return new Map(scores.map((item) => [scoreKey(item.stuId, item.type, item.indId), item]))
@@ -98,6 +91,14 @@ function SortButton({
 
 const STUDENT_SORT_KEY = 'student'
 
+/** 排序键的分隔符：用不可见控制字符，避免实验 id / 项目名里出现冒号导致解析错位 */
+const SORT_SEP = '\u0000'
+
+/** 分数列的排序键（实验列与独立计分项目列共用） */
+function scoreSortKey(indId: string, type: number): string {
+  return `${indId}${SORT_SEP}${type}`
+}
+
 /** 依据排序状态返回排好序的学生列表；无分数的行始终排在末尾 */
 function sortStudents(
   list: Student[],
@@ -106,16 +107,16 @@ function sortStudents(
 ): Student[] {
   if (!sort) return list
   const factor = sort.dir === 'asc' ? 1 : -1
-  const [expId, typePart] = sort.key === STUDENT_SORT_KEY ? [] : sort.key.split(':')
+  const [indId, typePart] = sort.key === STUDENT_SORT_KEY ? [] : sort.key.split(SORT_SEP)
   const type = typePart === undefined ? undefined : Number(typePart)
   const byName = (a: Student, b: Student) => a.name.localeCompare(b.name, 'zh-Hans-CN')
   const compare = (a: Student, b: Student): number => {
-    if (!expId || type === undefined) {
+    if (!indId || type === undefined) {
       const cmp = byName(a, b)
       return cmp !== 0 ? cmp * factor : a.studentNo.localeCompare(b.studentNo)
     }
-    const va = scores.get(scoreKey(a.stuId, type, expId))?.score ?? null
-    const vb = scores.get(scoreKey(b.stuId, type, expId))?.score ?? null
+    const va = scores.get(scoreKey(a.stuId, type, indId))?.score ?? null
+    const vb = scores.get(scoreKey(b.stuId, type, indId))?.score ?? null
     if (va === null || vb === null) {
       if (va === null && vb === null) return byName(a, b)
       return va === null ? 1 : -1
@@ -137,100 +138,6 @@ function sortStudents(
   return out
 }
 
-function ScoreCell({
-  score,
-  onCommit,
-  onOutOfRange,
-}: {
-  score: Score | null
-  onCommit: (next: number | null) => Promise<void>
-  onOutOfRange: (next: number) => void
-}) {
-  const value = score?.score ?? null
-  const [draft, setDraft] = useState(value === null ? '' : String(value))
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    setDraft(value === null ? '' : String(value))
-  }, [value])
-
-  const current = value === null ? '' : String(value)
-
-  const commit = async () => {
-    const trimmed = draft.trim()
-    if (trimmed === current) return
-    if (trimmed === '') {
-      setSaving(true)
-      try {
-        await onCommit(null)
-      } catch {
-        setDraft(current)
-      } finally {
-        setSaving(false)
-      }
-      return
-    }
-    const parsed = Number(trimmed)
-    if (Number.isNaN(parsed) || parsed < -SCORE_LIMIT || parsed > SCORE_LIMIT) {
-      toast.error(`请输入 ${-SCORE_LIMIT}~${SCORE_LIMIT} 的分数`)
-      setDraft(current)
-      return
-    }
-    if (parsed < 0 || parsed > SCORE_MAX) {
-      setDraft(current)
-      onOutOfRange(parsed)
-      return
-    }
-    setSaving(true)
-    try {
-      await onCommit(parsed)
-    } catch {
-      setDraft(current)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      event.currentTarget.blur()
-    } else if (event.key === 'Escape') {
-      setDraft(current)
-      event.currentTarget.blur()
-    }
-  }
-
-  const input = (
-    <Input
-      type="number"
-      min={-SCORE_LIMIT}
-      max={SCORE_LIMIT}
-      step="1"
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={onKeyDown}
-      aria-label="分数"
-      className={cn(
-        'tabular w-16 rounded-lg border border-line bg-elevated px-2 py-1 text-center text-sm outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15',
-        saving && 'opacity-50',
-      )}
-    />
-  )
-
-  if (!score || !score.graderName) return input
-
-  return (
-    <Tooltip closeDelay={0} delay={200}>
-      <Tooltip.Trigger className="inline-block">{input}</Tooltip.Trigger>
-      <Tooltip.Content placement="top" showArrow>
-        {`最后由 ${score.graderName} 于 ${formatLocaleDateTime(score.updatedAt)} 更新`}
-      </Tooltip.Content>
-    </Tooltip>
-  )
-}
-
 const TH_STICKY =
   'sticky left-0 z-30 border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold'
 const TH_CENTER = 'border-b border-r border-line bg-elevated px-4 py-2 text-center font-semibold'
@@ -241,6 +148,7 @@ export default function Scores() {
   const currentClass = useCurrentClass()
   const classId = currentClass?.id ?? null
   const { refresh } = useAuth()
+  const navigate = useNavigate()
   const hasXzzd = useHasXzzdPermission()
   const [students, setStudents] = useState<Student[]>([])
   const [experiments, setExperiments] = useState<Experiment[]>([])
@@ -428,6 +336,9 @@ export default function Scores() {
     ? experiments.filter((exp) => exp.classId === currentClass.id)
     : []
 
+  /** 独立计分项目（type=3）的项目名列表，由现有分数推导 */
+  const extraProjects = useMemo(() => extraProjectNames(scores.values()), [scores])
+
   /** 按该实验的评分占比现场计算总评；缺任一计入项时为 null */
   const experimentTotal = (student: Student, experiment: Experiment) =>
     weightedTotal(
@@ -499,6 +410,16 @@ export default function Scores() {
         title="分数和名单"
         actions={
           <>
+            {currentClass && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={() => navigate('/console/scores/standalone')}
+              >
+                <ListPlus width={15} height={15} className="shrink-0" />
+                独立计分项目
+              </Button>
+            )}
             {hasXzzd && currentClass && (
               <Button
                 size="sm"
@@ -655,7 +576,7 @@ export default function Scores() {
             </Alert>
           )}
 
-          {classExperiments.length === 0 ? (
+          {classExperiments.length === 0 && extraProjects.length === 0 ? (
             <EmptyState icon={FlaskConical} title="暂无实验" hint="请先在实验页创建实验" />
           ) : students.length === 0 ? (
             <EmptyState icon={Users} title="暂无学生" hint="请先导入学生名单" />
@@ -685,18 +606,23 @@ export default function Scores() {
                         {exp.mark} · {exp.title}
                       </th>
                     ))}
+                    {extraProjects.length > 0 && (
+                      <th colSpan={extraProjects.length} className={TH_CENTER}>
+                        独立计分项目
+                      </th>
+                    )}
                   </tr>
                   <tr>
                     {classExperiments.flatMap((exp) => [
                       ...SCORE_TYPES.map((type) => (
                         <th
                           key={`${exp.id}:${type.value}`}
-                          aria-sort={ariaSort(`${exp.id}:${type.value}`)}
+                          aria-sort={ariaSort(scoreSortKey(exp.id, type.value))}
                           className={TH_SUB}
                         >
                           <SortButton
                             label={type.label}
-                            columnKey={`${exp.id}:${type.value}`}
+                            columnKey={scoreSortKey(exp.id, type.value)}
                             sort={sort}
                             onToggle={toggleSort}
                           />
@@ -706,6 +632,20 @@ export default function Scores() {
                         总评
                       </th>,
                     ])}
+                    {extraProjects.map((name) => (
+                      <th
+                        key={`extra:${name}`}
+                        aria-sort={ariaSort(scoreSortKey(name, SCORE_TYPE_EXTRA))}
+                        className={TH_SUB}
+                      >
+                        <SortButton
+                          label={name}
+                          columnKey={scoreSortKey(name, SCORE_TYPE_EXTRA)}
+                          sort={sort}
+                          onToggle={toggleSort}
+                        />
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -752,6 +692,31 @@ export default function Scores() {
                             )}
                           </td>,
                         ]
+                      })}
+                      {extraProjects.map((name) => {
+                        const key = scoreKey(student.stuId, SCORE_TYPE_EXTRA, name)
+                        return (
+                          <td
+                            key={`extra:${name}`}
+                            className="min-w-[5.5rem] border-b border-r border-line px-2 py-1.5 text-center"
+                          >
+                            <ScoreCell
+                              score={scores.get(key) ?? null}
+                              onCommit={(next) =>
+                                commitScore(student, SCORE_TYPE_EXTRA, name, next)
+                              }
+                              onOutOfRange={(next) => {
+                                setPendingRange({
+                                  student,
+                                  type: SCORE_TYPE_EXTRA,
+                                  indId: name,
+                                  score: next,
+                                })
+                                rangeState.open()
+                              }}
+                            />
+                          </td>
+                        )
                       })}
                     </tr>
                   ))}

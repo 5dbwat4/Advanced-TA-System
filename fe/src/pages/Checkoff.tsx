@@ -1,4 +1,15 @@
-import { Alert, Button, Modal, Spinner, toast as herouiToast, useOverlayState } from '@heroui/react'
+import {
+  Alert,
+  Button,
+  Dropdown,
+  Label,
+  ListBox,
+  Modal,
+  Select,
+  Spinner,
+  toast as herouiToast,
+  useOverlayState,
+} from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -13,32 +24,53 @@ import { QuestionDrawer, type QuestionMark } from '@/components/checkoff/Questio
 import { ScoreForm } from '@/components/checkoff/ScoreForm'
 import { StepIndicator } from '@/components/checkoff/StepIndicator'
 import { StudentFinder } from '@/components/checkoff/StudentFinder'
+import MoreHorizontal from '~icons/lucide/more-horizontal'
+import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
+import Users from '~icons/lucide/users'
 import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
+  fetchBankQuestions,
   fetchCheckoff,
+  fetchCheckoffRecords,
   fetchClassSettings,
+  listBanks,
   type CheckoffExperiment,
   type CheckoffQuestion,
+  type CheckoffRecord,
   type CheckoffStudent,
   type ClassSettings,
+  type QuestionBank,
   type Score,
   type UserPreferences,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { getErrorMessage } from '@/lib/error'
+import { useCheckoffBankOverride } from '@/lib/checkoff-bank'
 import {
+  clearCheckoffPresence,
   notifyCheckoffStarted,
   useCheckoffMaster,
   useCheckoffWatch,
   type CheckoffStartedEvent,
   type SlaveCardState,
 } from '@/lib/checkoff-socket'
+import { getErrorMessage } from '@/lib/error'
+import { formatLocaleDateTime } from '@/lib/format'
+import { SCORE_TYPES } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, type ScoreRatio } from '@/lib/scoring'
 import { useCurrentClass } from '@/lib/store'
+import { cn } from '@/lib/utils'
+
+/** 分数类型 → 中文标签 */
+const TYPE_LABELS = new Map<number, string>(
+  SCORE_TYPES.map((type) => [type.value, type.label]),
+)
+
+/** 「跟随实验设置」在题目集下拉中的哨兵值 */
+const FOLLOW_BANK = '__follow__'
 
 export default function Checkoff() {
   const currentClass = useCurrentClass()
@@ -61,10 +93,17 @@ export default function Checkoff() {
   const [marks, setMarks] = useState<Record<string, QuestionMark | undefined>>({})
   const [existingScores, setExistingScores] = useState<Score[]>([])
   const [step, setStep] = useState(0)
-  const [nameAsked, setNameAsked] = useState(false)
+  const [searching, setSearching] = useState(false)
   const [questionIndex, setQuestionIndex] = useState(0)
+  const [records, setRecords] = useState<CheckoffRecord[]>([])
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  const [banks, setBanks] = useState<QuestionBank[]>([])
+  const [draftBank, setDraftBank] = useState<string | null>(null)
 
   const prefsState = useOverlayState()
+  const presenceState = useOverlayState()
+  const bankState = useOverlayState()
+  const { bankId: bankOverrideId, save: saveBankOverride } = useCheckoffBankOverride()
 
   const isMulti = user?.preferences?.device === 'multi'
   const master = useCheckoffMaster(isMulti, user?.id)
@@ -82,7 +121,64 @@ export default function Checkoff() {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
   }, [])
 
-  useCheckoffWatch(classId, handleCheckoffStarted)
+  const peers = useCheckoffWatch(classId, handleCheckoffStarted)
+
+  const openPresence = useCallback(() => {
+    presenceState.open()
+    if (!classId) return
+    setRecordsLoading(true)
+    fetchCheckoffRecords(classId)
+      .then((res) => setRecords(res.records))
+      .catch((error) => toast.error(getErrorMessage(error, '加载记录失败')))
+      .finally(() => setRecordsLoading(false))
+  }, [classId, presenceState])
+
+  // 回到「选择实验 / 定位学生」表示不再验收，清空在场信息
+  useEffect(() => {
+    if (classId && step <= 1) clearCheckoffPresence(classId)
+  }, [classId, step])
+
+  // 「使用其它题目集」：本地覆盖实验设定的题目集，直接拉取该题库的题目
+  useEffect(() => {
+    if (!experiment || !bankOverrideId) return
+    let cancelled = false
+    setQuestionsLoaded(false)
+    setQuestionsError(null)
+    fetchBankQuestions(bankOverrideId)
+      .then((res) => {
+        if (cancelled) return
+        setQuestions(
+          res.questions.map((question) => ({
+            id: question.id,
+            question: question.question,
+            answer: question.answer,
+          })),
+        )
+        setQuestionsLoaded(true)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setQuestionsError(getErrorMessage(error, '加载题目失败'))
+        setQuestionsLoaded(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [experiment, bankOverrideId, finderReloadKey])
+
+  const openBankPicker = useCallback(() => {
+    bankState.open()
+    setDraftBank(bankOverrideId)
+    listBanks()
+      .then((res) => setBanks(res.banks))
+      .catch((error) => toast.error(getErrorMessage(error, '加载题目集失败')))
+  }, [bankState, bankOverrideId])
+
+  const confirmBankOverride = useCallback(() => {
+    saveBankOverride(draftBank)
+    bankState.close()
+    toast.success(draftBank ? '已切换题目集' : '已跟随实验设置')
+  }, [saveBankOverride, draftBank, bankState])
 
   useEffect(() => {
     if (!classId) return
@@ -129,7 +225,7 @@ export default function Checkoff() {
     setQuestionsLoaded(false)
     setQuestionsError(null)
     setQuestionIndex(0)
-    setNameAsked(false)
+    setSearching(false)
     setStep(1)
   }, [])
 
@@ -146,7 +242,7 @@ export default function Checkoff() {
       setDrawn([])
       setMarks({})
       setQuestionIndex(0)
-      setNameAsked(false)
+      setSearching(false)
       setStep(2)
       if (classId) notifyCheckoffStarted({ classId, studentName: next.name })
     },
@@ -163,14 +259,15 @@ export default function Checkoff() {
     setMarks({})
     setExistingScores([])
     setQuestionIndex(0)
-    setNameAsked(false)
+    setSearching(false)
     setStep(1)
-  }, [])
+    if (classId) clearCheckoffPresence(classId)
+  }, [classId])
 
   const handleStep = useCallback(
     (next: number) => {
       if (questionsError && next === 3) return
-      if (next === 1) setNameAsked(false)
+      if (next === 1) setSearching(false)
       setStep(next)
     },
     [questionsError],
@@ -201,7 +298,7 @@ export default function Checkoff() {
         experimentTitle: experiment?.title ?? '',
       }
     } else if (step === 1) {
-      state = nameAsked
+      state = searching
         ? { kind: 'ask_name' }
         : {
             kind: 'idle',
@@ -229,7 +326,7 @@ export default function Checkoff() {
   }, [
     isMulti,
     step,
-    nameAsked,
+    searching,
     experiment,
     student,
     drawn,
@@ -290,9 +387,35 @@ export default function Checkoff() {
       <PageHeader
         title="验收"
         actions={
-          <IconAction label="偏好" onPress={prefsState.open}>
-            <Settings2 width={15} height={15} className="shrink-0" />
-          </IconAction>
+          <>
+            <IconAction label="偏好" onPress={prefsState.open}>
+              <Settings2 width={15} height={15} className="shrink-0" />
+            </IconAction>
+            <Dropdown>
+              <Dropdown.Trigger>
+                <Button isIconOnly size="sm" variant="ghost" aria-label="更多">
+                  <MoreHorizontal width={16} height={16} className="shrink-0" />
+                </Button>
+              </Dropdown.Trigger>
+              <Dropdown.Popover className="min-w-[220px]">
+                <Dropdown.Menu
+                  onAction={(key) => {
+                    if (key === 'presence') openPresence()
+                    else if (key === 'bank') openBankPicker()
+                  }}
+                >
+                  <Dropdown.Item id="presence" textValue="现在谁正在验收">
+                    <Users width={15} height={15} className="shrink-0 text-fg-muted" />
+                    <Label>现在谁正在验收</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item id="bank" textValue="使用其它题目集">
+                    <NotebookText width={15} height={15} className="shrink-0 text-fg-muted" />
+                    <Label>使用其它题目集</Label>
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+          </>
         }
       />
 
@@ -345,7 +468,7 @@ export default function Checkoff() {
                 classId={currentClass.id}
                 experimentId={experiment.id}
                 reloadKey={finderReloadKey}
-                includeQuestions
+                includeQuestions={!bankOverrideId}
                 onSelect={selectStudent}
                 onQuestionsLoaded={(loaded) => {
                   setQuestions(loaded)
@@ -356,8 +479,11 @@ export default function Checkoff() {
                   setQuestionsError(message)
                   setQuestionsLoaded(false)
                 }}
+                onSearchFocus={() => {
+                  if (step === 1) setSearching(true)
+                }}
                 onSearchBlur={() => {
-                  if (step === 1) setNameAsked(true)
+                  if (step === 1) setSearching(false)
                 }}
               />
             )}
@@ -425,6 +551,152 @@ export default function Checkoff() {
                   layout="rows"
                 />
               </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+      <Modal state={presenceState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-lg">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <Users width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>现在谁正在验收</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-5">
+                <section className="flex flex-col gap-2">
+                  <div className="text-xs font-semibold tracking-wider text-fg-subtle">
+                    正在线上 {peers.length}
+                  </div>
+                  {peers.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-line py-4 text-center text-xs text-fg-subtle">
+                      暂无其他人在验收页
+                    </p>
+                  ) : (
+                    peers.map((peer) => (
+                      <div
+                        key={peer.userId}
+                        className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600/15 text-xs font-bold text-brand-600 dark:text-brand-300">
+                          {peer.name.slice(0, 1)}
+                        </div>
+                        <div className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
+                          {peer.name}
+                          {peer.userId === user?.id && (
+                            <span className="ml-1 text-xs font-normal text-fg-subtle">（我）</span>
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            'shrink-0 text-xs',
+                            peer.studentName
+                              ? 'font-medium text-brand-600 dark:text-brand-300'
+                              : 'text-fg-subtle',
+                          )}
+                        >
+                          {peer.studentName ? `正在验收 ${peer.studentName}` : '空闲'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </section>
+
+                <section className="flex flex-col gap-2">
+                  <div className="text-xs font-semibold tracking-wider text-fg-subtle">最近保存</div>
+                  {recordsLoading ? (
+                    <div className="flex justify-center py-4">
+                      <Spinner size="sm" />
+                    </div>
+                  ) : records.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-line py-4 text-center text-xs text-fg-subtle">
+                      暂无记录
+                    </p>
+                  ) : (
+                    records.map((record, index) => (
+                      <div
+                        key={`${record.stuId}-${record.type}-${record.updatedAt}-${index}`}
+                        className="flex items-center gap-3 rounded-xl border border-line px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-fg">
+                            {record.studentName}
+                          </div>
+                          <div className="truncate text-xs text-fg-muted">
+                            {record.experimentMark ? `${record.experimentMark} · ` : ''}
+                            {record.experimentTitle} · {TYPE_LABELS.get(record.type) ?? record.type}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="tabular text-sm font-bold text-fg">{record.score}</div>
+                          <div className="text-[11px] text-fg-subtle">
+                            {record.graderName ?? '—'} · {formatLocaleDateTime(record.updatedAt)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </section>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+      <Modal state={bankState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <NotebookText width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>使用其它题目集</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-3">
+                <p className="text-xs text-fg-subtle">
+                  选择后将覆盖实验设定的题目集；此设置仅保存在当前设备。
+                </p>
+                <Select
+                  aria-label="题目集"
+                  className="w-full"
+                  placeholder="跟随实验设置"
+                  value={draftBank ?? FOLLOW_BANK}
+                  onChange={(key) =>
+                    setDraftBank(key == null || key === FOLLOW_BANK ? null : String(key))
+                  }
+                >
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox>
+                      <ListBox.Item id={FOLLOW_BANK} textValue="跟随实验设置">
+                        跟随实验设置
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                      {banks.map((bank) => (
+                        <ListBox.Item key={bank.id} id={bank.id} textValue={bank.name}>
+                          {bank.name}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  取消
+                </Button>
+                <Button variant="primary" onPress={confirmBankOverride}>
+                  保存
+                </Button>
+              </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
         </Modal.Backdrop>
