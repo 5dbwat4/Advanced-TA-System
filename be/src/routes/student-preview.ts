@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 
 import { prisma } from '../lib/prisma'
-import { REMARK_TYPE_REPORT } from '../lib/remark'
 import type { StudentViewPayload } from '../lib/student-view'
 import { parseClassSettings, resolveScoreRatio, weightedTotal } from '../lib/xzzd-push'
 
@@ -45,7 +44,7 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(404).send({ error: 'NOT_FOUND', message: '链接无效或内容不存在' })
     }
 
-    const [klass, scoreRows, reportReview, remarkRow] = await Promise.all([
+    const [klass, scoreRows, reportReview, remarkRows] = await Promise.all([
       prisma.class.findUnique({ where: { id: experiment.classId }, select: { settings: true } }),
       prisma.score.findMany({
         where: { stuId, indId: experiment.id, type: { in: [0, 1, 2] } },
@@ -56,15 +55,11 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
         where: { stuId_experimentId: { stuId, experimentId: experiment.id } },
         select: { ruleId: true, ruleContent: true },
       }),
-      prisma.remark.findUnique({
-        where: {
-          stuId_experimentId_type: {
-            stuId,
-            experimentId: experiment.id,
-            type: REMARK_TYPE_REPORT,
-          },
-        },
-        select: { text: true },
+      // 附言按类型分开存储（0=验收，1=实验报告），学生页两类都展示
+      prisma.remark.findMany({
+        where: { stuId, experimentId: experiment.id, text: { not: '' } },
+        orderBy: { type: 'asc' },
+        select: { type: true, text: true },
       }),
     ])
 
@@ -111,7 +106,8 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
         graderName: row.grader?.name ?? null,
         updatedAt: row.updatedAt,
       })),
-      remark: remarkRow?.text ?? null,
+      /** 附言（0=验收，1=实验报告），仅返回非空项 */
+      remarks: remarkRows.map((row) => ({ type: row.type, text: row.text })),
       report,
     }
   })

@@ -525,8 +525,8 @@ export type StudentPreviewData = {
     ruleContent: unknown
     items: unknown
   } | null
-  /** 助教填写的附言 */
-  remark: string | null
+  /** 助教填写的附言（0=验收，1=实验报告），仅含非空项 */
+  remarks: Array<{ type: number; text: string }>
 }
 
 export function fetchStudentPreview(token: string): Promise<StudentPreviewData> {

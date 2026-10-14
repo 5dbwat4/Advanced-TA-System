@@ -33,6 +33,10 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom'],
   },
+  optimizeDeps: {
+    // 本地 file: 链接的包保持源码形态（不预打包），否则改动不会热更新、且会用到过期缓存。
+    exclude: ['minecraft-404-page', 'isbinaryfile-browser'],
+  },
   build: {
     rolldownOptions: {
       output: {

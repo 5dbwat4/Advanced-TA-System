@@ -89,71 +89,77 @@ export function totalScore(
   return total
 }
 
-/** 批阅结果条目：小节头 或 被选中的卡片 */
-export type ReportSelectionEntry =
-  | {
-      kind: 'section'
-      id: string
-      title: string
-      /** 小节得分（含初始分、上限与加减分） */
-      score: number
-    }
-  | {
-      kind: 'card'
-      id: string
-      mode: CriterionMode
-      /** 简短规则（卡片标题位） */
-      rule: string
-      /** 详细标准 */
-      detail: string
-      /** 分值（正数） */
-      score: number
-      /** 附注 */
-      appendix: string
-    }
+/** 批阅结果中的一张卡片（仅含已选中的） */
+export type ReportCardEntry = {
+  id: string
+  mode: CriterionMode
+  /** 简短规则（卡片标题位） */
+  rule: string
+  /** 详细标准 */
+  detail: string
+  /** 分值（正数） */
+  score: number
+  /** 附注 */
+  appendix: string
+}
+
+/** 批阅结果分组：小节（含其下选中卡片）或顶层卡片 */
+export type ReportGroup =
+  | { kind: 'section'; id: string; title: string; score: number; cards: ReportCardEntry[] }
+  | { kind: 'card'; card: ReportCardEntry }
 
 /**
- * 汇总批阅中所有被助教选中的卡片，按原有顺序展开为「小节头 + 选中卡片」列表。
- * 小节始终出现（即使其内没有任何选中卡片）；顶层卡片与临时卡片一并计入。
+ * 汇总批阅中所有被助教选中的卡片，按原有顺序组织为「小节 + 选中卡片」的分组结构，
+ * 便于展示页按评分标准的层级样式渲染。小节始终出现（即使其内没有任何选中卡片）；
+ * 顶层卡片与临时卡片一并计入。
  */
-export function collectReportSelections(
+export function collectReportGroups(
   items: CriterionItem[],
   states: Record<string, CriterionCardState>,
   extras: CriterionExtras,
-): ReportSelectionEntry[] {
-  const entries: ReportSelectionEntry[] = []
+): ReportGroup[] {
+  const groups: ReportGroup[] = []
 
-  const emitCard = (card: CriterionCard) => {
+  const emit = (card: CriterionCard): ReportCardEntry | null => {
     const state = states[card.id]
-    if (!state?.selected) return
-    entries.push({
-      kind: 'card',
+    if (!state?.selected) return null
+    return {
       id: card.id,
       mode: card.mode,
       rule: card.rule.trim(),
       detail: card.detail.trim(),
       score: cardScore(card, state),
       appendix: state.appendix.trim(),
-    })
+    }
   }
 
   for (const item of items) {
     if (item.type === 'card') {
-      emitCard(item)
+      const card = emit(item)
+      if (card) groups.push({ kind: 'card', card })
       continue
     }
-    const cards = [...item.children, ...(extras[item.id] ?? [])]
-    entries.push({
+
+    const cards: ReportCardEntry[] = []
+    for (const card of [...item.children, ...(extras[item.id] ?? [])]) {
+      const entry = emit(card)
+      if (entry) cards.push(entry)
+    }
+    groups.push({
       kind: 'section',
       id: item.id,
       title: item.title.trim(),
       score: sectionScore(item, states, extras),
+      cards,
     })
-    for (const card of cards) emitCard(card)
   }
-  for (const card of extras.root ?? []) emitCard(card)
 
-  return entries
+  for (const card of extras.root ?? []) {
+    const entry = emit(card)
+    if (entry) groups.push({ kind: 'card', card: entry })
+  }
+
+  return groups
 }
 
 /** 收集评分标准与临时卡片中的所有卡片定义 */

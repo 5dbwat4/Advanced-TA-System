@@ -30,6 +30,7 @@ const Login = lazy(() => import('@/pages/Login'))
 const More = lazy(() => import('@/pages/More'))
 const NewBank = lazy(() => import('@/pages/NewBank'))
 const NewCourse = lazy(() => import('@/pages/NewCourse'))
+const NotFound = lazy(() => import('@/pages/NotFound'))
 const Questions = lazy(() => import('@/pages/Questions'))
 const ReportCriteria = lazy(() => import('@/pages/ReportCriteria'))
 const ReportGrade = lazy(() => import('@/pages/ReportGrade'))
@@ -93,12 +94,12 @@ export default function App() {
           <Route path="/changelog" element={<Changelog />} />
           <Route path="/license" element={<Licenses />} />
           <Route path="/license/full" element={<LicensesFull />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
         <Route path="/terms" element={<Terms />} />
         <Route path="/checkin" element={<Checkin />} />
         <Route path="/checkin/:token" element={<CheckinSession />} />
         <Route path="/student-preview/view" element={<StudentPreviewView />} />
-        <Route path="*" element={<Navigate to="/console" replace />} />
       </Routes>
     </Suspense>
   )

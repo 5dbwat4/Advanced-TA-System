@@ -8,9 +8,21 @@ import ClipboardList from '~icons/lucide/clipboard-list'
 import Cpu from '~icons/lucide/cpu'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import FlaskConical from '~icons/lucide/flask-conical'
-import { collectReportSelections, decodeReviewContent } from '@/components/criteria/scoring'
+import MessageSquareText from '~icons/lucide/message-square-text'
+import Rows3 from '~icons/lucide/rows-3'
+import {
+  collectReportGroups,
+  decodeReviewContent,
+  type ReportCardEntry,
+} from '@/components/criteria/scoring'
 import { deserializeItems } from '@/components/criteria/serialize'
-import { ApiError, fetchStudentPreview, type StudentPreviewData } from '@/lib/api'
+import {
+  ApiError,
+  fetchStudentPreview,
+  REMARK_TYPE_CHECKOFF,
+  REMARK_TYPE_REPORT,
+  type StudentPreviewData,
+} from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatDateTime } from '@/lib/format'
 import { ratioPercentages } from '@/lib/scoring'
@@ -83,8 +95,8 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
   const reportContent = data.report
     ? decodeReviewContent(data.report.ruleContent)
     : { cards: {}, extras: {} }
-  const selections = reportItems.length
-    ? collectReportSelections(reportItems, reportContent.cards, reportContent.extras)
+  const reportGroups = reportItems.length
+    ? collectReportGroups(reportItems, reportContent.cards, reportContent.extras)
     : []
 
   return (
@@ -177,67 +189,96 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
           报告得分详情
         </div>
 
-        {selections.length > 0 || data.remark ? (
-          <div className="mt-4 flex flex-col gap-2">
-            {selections.map((entry) =>
-              entry.kind === 'section' ? (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between gap-3 border-b border-line pb-1"
-                >
-                  <span className="text-xs font-semibold text-fg-muted">
-                    {entry.title || '未命名小节'}
-                  </span>
-                  <span className="tabular text-xs text-fg-subtle">
-                    本节 {formatScore(entry.score)} 分
-                  </span>
-                </div>
-              ) : (
-                <div key={entry.id} className="rounded-2xl border border-line p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-fg">
-                        {entry.rule || entry.detail || '（未填写规则）'}
-                      </div>
-                      {entry.rule && entry.detail && (
-                        <div className="mt-0.5 whitespace-pre-wrap text-xs text-fg-subtle">
-                          {entry.detail}
-                        </div>
-                      )}
-                      {entry.appendix && (
-                        <div className="mt-1 whitespace-pre-wrap text-xs text-fg-muted">
-                          附注：{entry.appendix}
-                        </div>
-                      )}
-                    </div>
-                    <span
-                      className={cn(
-                        'tabular shrink-0 text-sm font-bold',
-                        entry.mode === 'add'
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-danger',
-                      )}
-                    >
-                      {entry.mode === 'add' ? '+' : '−'}
-                      {formatScore(entry.score)}
+        {reportGroups.length > 0 ? (
+          <div className="mt-4 flex flex-col gap-3">
+            {reportGroups.map((group) =>
+              group.kind === 'section' ? (
+                <div key={group.id} className="rounded-xl border border-line bg-sunken p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                    <Rows3
+                      width={13}
+                      height={13}
+                      className="shrink-0 text-brand-600 dark:text-brand-300"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{group.title || '未命名小节'}</span>
+                    <span className="tabular shrink-0 text-brand-600 dark:text-brand-300">
+                      {formatScore(group.score)} 分
                     </span>
                   </div>
+                  {group.cards.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1.5 border-s border-line ps-3">
+                      {group.cards.map((card) => (
+                        <ReportCardRow key={card.id} entry={card} />
+                      ))}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <ReportCardRow key={group.card.id} entry={group.card} />
               ),
-            )}
-
-            {data.remark && (
-              <div className="rounded-2xl border border-line p-3">
-                <div className="text-[11px] text-fg-subtle">附言</div>
-                <div className="mt-0.5 whitespace-pre-wrap text-sm text-fg">{data.remark}</div>
-              </div>
             )}
           </div>
         ) : (
           <p className="mt-3 text-sm text-fg-subtle">无批阅记录。</p>
         )}
       </section>
+
+      {data.remarks.length > 0 && (
+        <section className="mt-4 rounded-3xl border border-line bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
+            <MessageSquareText width={14} height={14} className="shrink-0" />
+            附言
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3">
+            {data.remarks.map((remark) => (
+              <div key={remark.type} className="rounded-2xl border border-line p-3">
+                <div className="text-[11px] font-medium text-fg-subtle">
+                  {REMARK_LABELS.get(remark.type) ?? '附言'}
+                </div>
+                <div className="mt-0.5 whitespace-pre-wrap text-sm text-fg">{remark.text}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </>
+  )
+}
+
+/** 附言类型标签（0=验收，1=实验报告） */
+const REMARK_LABELS = new Map<number, string>([
+  [REMARK_TYPE_CHECKOFF, '验收附言'],
+  [REMARK_TYPE_REPORT, '报告附言'],
+])
+
+/** 单张批阅卡片：左侧带符号分值，右侧规则 / 详细标准 / 附注。 */
+function ReportCardRow({ entry }: { entry: ReportCardEntry }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-line bg-elevated px-2.5 py-2">
+      <span
+        className={cn(
+          'tabular shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold',
+          entry.mode === 'add'
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            : 'bg-danger/10 text-danger',
+        )}
+      >
+        {entry.mode === 'add' ? '+' : '−'}
+        {formatScore(entry.score)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-medium text-fg">{entry.rule || '（未填写规则）'}</div>
+        {entry.detail && (
+          <div className="mt-0.5 whitespace-pre-wrap text-[11px] text-fg-subtle">{entry.detail}</div>
+        )}
+        {entry.appendix && (
+          <div className="mt-1 whitespace-pre-wrap text-[11px] text-fg-muted">
+            附注：{entry.appendix}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

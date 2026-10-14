@@ -1,0 +1,33 @@
+{
+  "name": "minecraft-404-page",
+  "version": "1.0.0",
+  "description": "React port of a Minecraft-themed 404 page: an interactive three.js voxel scene (vendored three.js included).",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src/**/*",
+    "index.d.ts",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "react",
+    "404",
+    "not-found",
+    "three.js",
+    "minecraft",
+    "voxel"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "license": "MIT"
+}
