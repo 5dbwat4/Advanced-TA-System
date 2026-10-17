@@ -81,14 +81,14 @@ export default function ReportGrade() {
         setSyncData(preview)
         setTables(classTables)
         setFocusByStuId(
-          new Map((focusRes?.focusStudents ?? []).map((item) => [item.stuId, item.reason])),
+          new Map((focusRes?.focusStudents ?? []).map((item) => [item.userId, item.reason])),
         )
-        setCheckpointStuIds(new Set((checkpointRes?.claims ?? []).map((item) => item.stuId)))
+        setCheckpointStuIds(new Set((checkpointRes?.claims ?? []).map((item) => item.userId)))
         setScores(
           new Map(
             classTables.scores
               .filter((score) => score.type === 2 && score.indId === id)
-              .map((score) => [score.stuId, score]),
+              .map((score) => [score.userId, score]),
           ),
         )
       } catch (err) {
@@ -112,7 +112,7 @@ export default function ReportGrade() {
   const gradeStudents = useMemo<GradeStudent[]>(() => {
     if (!syncData || !tables) return []
 
-    const stuIdByNo = new Map(tables.students.map((student) => [student.studentNo, student.stuId]))
+    const userIdByNo = new Map(tables.students.map((student) => [student.studentId, student.userId]))
 
     const latestByPerson = new Map<number, ZjuamHomeworkSubmission>()
     for (const submission of syncData.submissions) {
@@ -127,17 +127,17 @@ export default function ReportGrade() {
     const list: GradeStudent[] = []
     for (const personId of latestByPerson.keys()) {
       const upstream = studentsById.get(personId)
-      const studentNo = upstream?.studentNo ?? ''
-      const stuId = studentNo ? (stuIdByNo.get(studentNo) ?? null) : null
+      const studentId = upstream?.studentId ?? ''
+      const userId = studentId ? (userIdByNo.get(studentId) ?? null) : null
       list.push({
         personId,
-        stuId,
+        userId,
         name: upstream?.name ?? String(personId),
-        studentNo,
-        score: stuId ? (scores.get(stuId) ?? null) : null,
+        studentId,
+        score: userId ? (scores.get(userId) ?? null) : null,
       })
     }
-    list.sort((a, b) => a.studentNo.localeCompare(b.studentNo))
+    list.sort((a, b) => a.studentId.localeCompare(b.studentId))
     return list
   }, [syncData, tables, scores, studentsById])
 
@@ -167,7 +167,7 @@ export default function ReportGrade() {
       setSelectedPersonId(personId)
       const student = gradeStudents.find((item) => item.personId === personId)
       if (student) {
-        const key = student.studentNo || String(student.personId)
+        const key = student.studentId || String(student.personId)
         window.history.replaceState(null, '', `#${encodeURIComponent(key)}`)
       }
     },
@@ -181,45 +181,45 @@ export default function ReportGrade() {
   const handleScoreSaved = useCallback((score: Score) => {
     setScores((prev) => {
       const next = new Map(prev)
-      next.set(score.stuId, score)
+      next.set(score.userId, score)
       return next
     })
   }, [])
 
   const { user } = useAuth()
   const myUserId = user?.id ?? null
-  const selectedStuId = selectedStudent?.stuId ?? null
+  const selectedStuId = selectedStudent?.userId ?? null
 
   /** 他人保存/删除成绩：刷新左侧分数列表；他人保存则记录为可同步内容 */
   const handleRemoteScore = useCallback(
     (event: ReportScoreEvent) => {
       setScores((prev) => {
         const next = new Map(prev)
-        if (event.score) next.set(event.stuId, event.score)
-        else next.delete(event.stuId)
+        if (event.score) next.set(event.userId, event.score)
+        else next.delete(event.userId)
         return next
       })
       if (!event.score || event.byUserId === myUserId) return
-      setRemoteSaves((prev) => new Map(prev).set(event.stuId, event))
+      setRemoteSaves((prev) => new Map(prev).set(event.userId, event))
     },
     [myUserId],
   )
 
   useReportRoom({
     experimentId: id,
-    stuId: selectedStuId,
+    studentId: selectedStuId,
     onPresence: setPeers,
     onScore: handleRemoteScore,
   })
 
-  /** stuId → 正在批改该学生的他人姓名（去重，排除自己） */
+  /** 学生 userId → 正在批改该学生的他人姓名（去重，排除自己） */
   const editorsByStuId = useMemo(() => {
     const map = new Map<string, string[]>()
     for (const peer of peers) {
-      if (!peer.stuId || peer.userId === myUserId) continue
-      const names = map.get(peer.stuId) ?? []
+      if (!peer.studentId || peer.userId === myUserId) continue
+      const names = map.get(peer.studentId) ?? []
       if (!names.includes(peer.name)) names.push(peer.name)
-      map.set(peer.stuId, names)
+      map.set(peer.studentId, names)
     }
     return map
   }, [peers, myUserId])
@@ -227,14 +227,14 @@ export default function ReportGrade() {
   const coEditors = selectedStuId ? (editorsByStuId.get(selectedStuId) ?? []) : []
   const saveNotice = selectedStuId ? (remoteSaves.get(selectedStuId) ?? null) : null
 
-  /** stuId → 名单标记（重点关注 / 已领取 Checkpoint） */
+  /** userId → 名单标记（重点关注 / 已领取 Checkpoint） */
   const flagsByStuId = useMemo(() => {
     const map = new Map<string, StudentFlag>()
-    for (const [stuId, reason] of focusByStuId) {
-      map.set(stuId, { focusReason: reason, checkpoint: checkpointStuIds.has(stuId) })
+    for (const [userId, reason] of focusByStuId) {
+      map.set(userId, { focusReason: reason, checkpoint: checkpointStuIds.has(userId) })
     }
-    for (const stuId of checkpointStuIds) {
-      if (!map.has(stuId)) map.set(stuId, { focusReason: null, checkpoint: true })
+    for (const userId of checkpointStuIds) {
+      if (!map.has(userId)) map.set(userId, { focusReason: null, checkpoint: true })
     }
     return map
   }, [focusByStuId, checkpointStuIds])
@@ -242,22 +242,22 @@ export default function ReportGrade() {
   /** 同步对方成绩：从数据库 GET 最新批阅与附言，覆盖到编辑器 */
   const handleSync = useCallback(async () => {
     if (!id || !saveNotice) return
-    const { stuId } = saveNotice
+    const { userId } = saveNotice
     try {
       const [review, remark] = await Promise.all([
-        fetchReportReview(stuId, id),
-        fetchRemark(stuId, id, REMARK_TYPE_REPORT),
+        fetchReportReview(userId, id),
+        fetchRemark(userId, id, REMARK_TYPE_REPORT),
       ])
       setSync({
         nonce: Date.now(),
-        stuId,
+        userId,
         ruleId: review?.ruleId ?? null,
         ruleContent: review?.ruleContent ?? null,
         remark: remark?.text ?? '',
       })
       setRemoteSaves((prev) => {
         const next = new Map(prev)
-        next.delete(stuId)
+        next.delete(userId)
         return next
       })
       toast.success('已同步对方成绩')
@@ -267,11 +267,11 @@ export default function ReportGrade() {
   }, [id, saveNotice])
 
   /** 仅当待处理事件仍是最新那条时才清除（避免异步 onClose 误删新事件） */
-  const dismissRemoteSave = useCallback((stuId: string, event: ReportScoreEvent) => {
+  const dismissRemoteSave = useCallback((userId: string, event: ReportScoreEvent) => {
     setRemoteSaves((prev) => {
-      if (prev.get(stuId) !== event) return prev
+      if (prev.get(userId) !== event) return prev
       const next = new Map(prev)
-      next.delete(stuId)
+      next.delete(userId)
       return next
     })
   }, [])
@@ -320,7 +320,7 @@ export default function ReportGrade() {
       timeout: 0,
       indicator: <ArrowRightLeft width={18} height={18} />,
       actionProps: { children: '同步', onPress: () => void handleSync() },
-      onClose: () => dismissRemoteSave(event.stuId, event),
+      onClose: () => dismissRemoteSave(event.userId, event),
     })
   }, [saveNotice, handleSync, dismissRemoteSave])
 
@@ -430,7 +430,7 @@ function submissionTime(submission: ZjuamHomeworkSubmission): number {
   return Number.isFinite(time) ? time : submission.id
 }
 
-/** 读取 URL hash（如 #20210001）并按学号 / personId / stuId / 姓名匹配学生 */
+/** 读取 URL hash（如 #20210001）并按学号 / personId / userId / 姓名匹配学生 */
 function readHashStudent(students: GradeStudent[]): GradeStudent | null {
   const raw = window.location.hash.replace(/^#/, '')
   if (!raw) return null
@@ -443,9 +443,9 @@ function readHashStudent(students: GradeStudent[]): GradeStudent | null {
   return (
     students.find(
       (student) =>
-        student.studentNo === value ||
+        student.studentId === value ||
         String(student.personId) === value ||
-        student.stuId === value ||
+        student.userId === value ||
         student.name === value,
     ) ?? null
   )

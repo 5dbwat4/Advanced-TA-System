@@ -41,47 +41,28 @@ const CLASSES: SeedClass[] = [
   { id: 'cls-sys3-1', name: '系统III 1班', type: '2026-sys3', xzzdClassId: null },
 ]
 
+/** 助教 / 教师默认归入的班级（单班模型） */
+const STAFF_CLASS_ID = 'cls-sys2-1'
+
 type SeedStudent = {
-  stuId: string
+  id: string
   name: string
-  studentNo: string
+  studentId: string
   classId: string
 }
 
 const STUDENTS: SeedStudent[] = [
-  // 同一学号出现在两个班级，演示「一人多班」规则
-  { stuId: 'stu-sys2-1-zhangsan', name: '张三', studentNo: '3240101001', classId: 'cls-sys2-1' },
-  { stuId: 'stu-sys2-2-zhangsan', name: '张三', studentNo: '3240101001', classId: 'cls-sys2-2' },
-  { stuId: 'stu-sys2-1-lisi', name: '李四', studentNo: '3240101002', classId: 'cls-sys2-1' },
-  { stuId: 'stu-sys2-1-wangwu', name: '王五', studentNo: '3240101003', classId: 'cls-sys2-1' },
-  { stuId: 'stu-sys2-2-zhaoliu', name: '赵六', studentNo: '3240101004', classId: 'cls-sys2-2' },
-  { stuId: 'stu-sys1-1-sunqi', name: '孙七', studentNo: '3240102001', classId: 'cls-sys1-1' },
-  { stuId: 'stu-sys3-1-zhouba', name: '周八', studentNo: '3240103001', classId: 'cls-sys3-1' },
+  // 同一学号出现在两个班级 = 两条 User（单班模型）
+  { id: 'stu-sys2-1-zhangsan', name: '张三', studentId: '3240101001', classId: 'cls-sys2-1' },
+  { id: 'stu-sys2-2-zhangsan', name: '张三', studentId: '3240101001', classId: 'cls-sys2-2' },
+  { id: 'stu-sys2-1-lisi', name: '李四', studentId: '3240101002', classId: 'cls-sys2-1' },
+  { id: 'stu-sys2-1-wangwu', name: '王五', studentId: '3240101003', classId: 'cls-sys2-1' },
+  { id: 'stu-sys2-2-zhaoliu', name: '赵六', studentId: '3240101004', classId: 'cls-sys2-2' },
+  { id: 'stu-sys1-1-sunqi', name: '孙七', studentId: '3240102001', classId: 'cls-sys1-1' },
+  { id: 'stu-sys3-1-zhouba', name: '周八', studentId: '3240103001', classId: 'cls-sys3-1' },
 ]
 
 async function main() {
-  for (const entry of USERS) {
-    const password = entry.password ? await hashPassword(entry.password) : undefined
-    await prisma.user.upsert({
-      where: { studentId: entry.studentId },
-      update: {
-        name: entry.name,
-        role: entry.role,
-        username: entry.username,
-        ...(password ? { password } : {}),
-      },
-      create: {
-        name: entry.name,
-        role: entry.role,
-        studentId: entry.studentId,
-        username: entry.username,
-        password: password ?? null,
-      },
-    })
-    console.log(`✓ ${entry.role.padEnd(7)} ${entry.name} (${entry.studentId})`)
-  }
-  console.log(`\nSeeded ${USERS.length} users.`)
-
   for (const entry of CLASSES) {
     await prisma.class.upsert({
       where: { id: entry.id },
@@ -91,11 +72,59 @@ async function main() {
   }
   console.log(`Seeded ${CLASSES.length} classes.`)
 
+  for (const entry of USERS) {
+    const password = entry.password ? await hashPassword(entry.password) : undefined
+    const existing = await prisma.user.findFirst({
+      where: { studentId: entry.studentId, role: entry.role },
+      select: { id: true },
+    })
+    if (existing) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: entry.name,
+          username: entry.username,
+          classId: STAFF_CLASS_ID,
+          status: 'ACTIVE',
+          removedAt: null,
+          ...(password ? { password } : {}),
+        },
+      })
+    } else {
+      await prisma.user.create({
+        data: {
+          name: entry.name,
+          role: entry.role,
+          studentId: entry.studentId,
+          username: entry.username,
+          password: password ?? null,
+          classId: STAFF_CLASS_ID,
+        },
+      })
+    }
+    console.log(`✓ ${entry.role.padEnd(7)} ${entry.name} (${entry.studentId})`)
+  }
+  console.log(`\nSeeded ${USERS.length} staff users.`)
+
   for (const entry of STUDENTS) {
-    await prisma.student.upsert({
-      where: { stuId: entry.stuId },
-      update: { name: entry.name, studentNo: entry.studentNo, classId: entry.classId },
-      create: entry,
+    await prisma.user.upsert({
+      where: { id: entry.id },
+      update: {
+        name: entry.name,
+        studentId: entry.studentId,
+        classId: entry.classId,
+        role: 'STUDENT',
+        status: 'ACTIVE',
+        removedAt: null,
+      },
+      create: {
+        id: entry.id,
+        name: entry.name,
+        studentId: entry.studentId,
+        classId: entry.classId,
+        role: 'STUDENT',
+        status: 'ACTIVE',
+      },
     })
   }
   console.log(`Seeded ${STUDENTS.length} students.`)

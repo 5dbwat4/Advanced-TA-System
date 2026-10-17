@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import { prisma } from './prisma'
-import { isStaff } from './roles'
+import { isStaff, isStudent } from './roles'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -10,14 +10,14 @@ declare module 'fastify' {
   }
 }
 
-/** 读取当前用户所属班级 id 列表（请求级缓存，挂在 request 上避免重复查询） */
+/** 读取当前用户所属班级 id：单班模型下最多一个 */
 export async function myClassIds(request: FastifyRequest): Promise<string[]> {
   if (request.classIdsCache) return request.classIdsCache
 
   const { sub } = request.user as { sub: string }
   const loading = (async () => {
-    const me = await prisma.user.findUnique({ where: { id: sub }, include: { classes: true } })
-    return (me?.classes ?? []).map((c) => c.id)
+    const me = await prisma.user.findUnique({ where: { id: sub }, select: { classId: true } })
+    return me?.classId ? [me.classId] : []
   })()
   request.classIdsCache = loading
   return loading
@@ -28,6 +28,16 @@ export function requireStaff(request: FastifyRequest, reply: FastifyReply): bool
   const { role } = request.user as { role?: string }
   if (typeof role !== 'string' || !isStaff(role)) {
     reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
+    return false
+  }
+  return true
+}
+
+/** 要求学生角色，否则发送 403 并返回 false */
+export function requireStudent(request: FastifyRequest, reply: FastifyReply): boolean {
+  const { role } = request.user as { role?: string }
+  if (typeof role !== 'string' || !isStudent(role)) {
+    reply.code(403).send({ error: 'FORBIDDEN', message: '仅学生可操作' })
     return false
   }
   return true

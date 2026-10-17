@@ -4,17 +4,42 @@ import { z } from 'zod'
 
 import { requireStaff } from '../lib/class-access'
 import { checkpointRuleBit, checkpointRuleLabels } from '../lib/checkpoints'
+import { verifyCourseBindToken } from '../lib/course-bind'
+import { hashPassword } from '../lib/password'
 import { prisma } from '../lib/prisma'
 import { publicUser } from '../lib/user'
 import type { ZjuamEnrollment } from '../lib/zjuam'
 import { listEnrollments } from '../lib/zjuam'
 import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
 
-const createClassSchema = z.object({
-  xzzdClassId: z.string().trim().min(1).max(64),
-  name: z.string().trim().min(1).max(64),
-  type: z.enum(['2026-sys1', '2026-sys2', '2026-sys3']),
+const classParamsSchema = z.object({
+  id: z.string().min(1),
 })
+
+/** 为新班级创建账号：绑定授权由“获取课程”时签发，服务端不再信任客户端课程 id */
+const newClassAccountSchema = z.object({
+  bindToken: z.string().min(1),
+  classId: z.string().trim().min(1).optional(),
+  type: z.enum(['2026-sys1', '2026-sys2', '2026-sys3']).optional(),
+  name: z.string().trim().min(1).max(32),
+  username: z.string().trim().min(1).max(32),
+  password: z.string().min(8).max(128),
+})
+
+/** 带 HTTP 状态码的业务异常（由全局错误处理器输出） */
+class ClassAccountError extends Error {
+  constructor(
+    readonly statusCode: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+function classAccountError(statusCode: number, code: string, message: string): ClassAccountError {
+  return new ClassAccountError(statusCode, code, message)
+}
 
 const classParamsSchema = z.object({
   id: z.string().min(1),
@@ -28,7 +53,7 @@ const rosterBodySchema = z.object({
 const rosterApplySchema = z.object({
   added: z.array(
     z.object({
-      studentNo: z.string().trim().min(1),
+      studentId: z.string().trim().min(1),
       name: z.string().trim().min(1),
     }),
   ),
@@ -56,7 +81,7 @@ const classSettingsPatchSchema = z.object({
 })
 
 const focusCreateSchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   reason: z.string().trim().max(200).optional(),
 })
 
@@ -71,7 +96,7 @@ const focusDeleteSchema = z.object({
 const focusParamsSchema = z.object({ id: z.string().min(1), focusId: z.string().min(1) })
 
 const checkpointCreateSchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
 })
 
 const checkpointDeleteSchema = z.object({
@@ -79,10 +104,10 @@ const checkpointDeleteSchema = z.object({
 })
 
 /** 重点关注记录统一 include（学生姓名 / 学号） */
-const focusInclude = { student: { select: { name: true, studentNo: true } } } as const
+const focusInclude = { student: { select: { name: true, studentId: true } } } as const
 
 /** Checkpoint 记录统一 include（学生姓名 / 学号） */
-const checkpointInclude = { student: { select: { name: true, studentNo: true } } } as const
+const checkpointInclude = { student: { select: { name: true, studentId: true } } } as const
 
 export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 解析课程设置 JSON 字符串（损坏时按空对象处理） */
@@ -112,7 +137,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { sub } = request.user as { sub: string }
     const owned = await prisma.class.findFirst({
-      where: { id: classId, tas: { some: { id: sub } } },
+      where: { id: classId, users: { some: { id: sub } } },
     })
     if (!owned) {
       reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级' })
@@ -122,66 +147,128 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     return klass
   }
 
-  /** 新建班级并将当前用户关联到该班级 */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  /**
+   * 为新班级创建助教 / 教师账号。
+   * 单班模型下，绑定新课程不再移动当前账号，而是复制身份信息到新账号。
+   */
+  fastify.post(
+    '/new-account',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request, reply)) return reply
 
-    const parsed = createClassSchema.safeParse(request.body)
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
-    }
-
-    const { xzzdClassId, name, type } = parsed.data
-
-    let klass
-    try {
-      klass = await prisma.class.create({ data: { xzzdClassId, name, type } })
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该课程已存在' })
+      const parsed = newClassAccountSchema.safeParse(request.body ?? {})
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
-      throw error
-    }
 
-    const { sub } = request.user as { sub: string }
-    const updatedUser = await prisma.user.update({
-      where: { id: sub },
-      data: { classes: { connect: { id: klass.id } } },
-      include: { classes: true },
-    })
+      const { sub } = request.user as { sub: string }
+      const current = await prisma.user.findUnique({ where: { id: sub } })
+      if (!current || !current.studentId) {
+        return reply.code(400).send({
+          error: 'IDENTITY_MISSING',
+          message: '当前账号缺少学号，请先通过统一身份认证登录并完善信息',
+        })
+      }
 
-    return reply.code(201).send({
-      class: { id: klass.id, name: klass.name, type: klass.type, xzzdClassId: klass.xzzdClassId },
-      user: publicUser(updatedUser),
-    })
-  })
+      const { bindToken, classId, type, name, username, password } = parsed.data
+      const bind = verifyCourseBindToken(fastify, bindToken, sub)
+      if (!bind) {
+        return reply.code(401).send({
+          error: 'BIND_TOKEN_INVALID',
+          message: '课程绑定授权已失效，请重新获取课程',
+        })
+      }
 
-  /** 将当前用户关联到指定班级 */
-  fastify.post('/:id/join', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+      const passwordHash = await hashPassword(password)
 
-    const parsed = classParamsSchema.safeParse(request.params)
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
-    }
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          let klass: Class | null = null
+          if (classId) {
+            klass = await tx.class.findUnique({ where: { id: classId } })
+            if (!klass) {
+              throw classAccountError(404, 'CLASS_NOT_FOUND', '课程不存在')
+            }
+            if (klass.xzzdClassId !== bind.courseId) {
+              throw classAccountError(403, 'CLASS_MISMATCH', '该班级不属于授权课程')
+            }
+          } else {
+            klass = await tx.class.findUnique({ where: { xzzdClassId: bind.courseId } })
+            if (!klass) {
+              klass = await tx.class.create({
+                data: {
+                  xzzdClassId: bind.courseId,
+                  name: bind.courseName,
+                  type: type ?? '2026-sys2',
+                },
+              })
+            }
+          }
+          if (!klass) {
+            throw classAccountError(400, 'INVALID_BODY', '缺少课程信息')
+          }
 
-    const klass = await prisma.class.findUnique({ where: { id: parsed.data.id } })
-    if (!klass) {
-      return reply.code(404).send({ error: 'CLASS_NOT_FOUND', message: '课程不存在' })
-    }
+          const existing = await tx.user.findFirst({
+            where: { classId: klass.id, role: current.role, studentId: current.studentId },
+            select: { id: true },
+          })
+          if (existing) {
+            throw classAccountError(409, 'ACCOUNT_EXISTS', '该班级已存在当前助教的账号')
+          }
 
-    const { sub } = request.user as { sub: string }
-    const updatedUser = await prisma.user.update({
-      where: { id: sub },
-      data: { classes: { connect: { id: klass.id } } },
-      include: { classes: true },
-    })
+          const usernameTaken = await tx.user.findFirst({
+            where: { classId: klass.id, username },
+            select: { id: true },
+          })
+          if (usernameTaken) {
+            throw classAccountError(409, 'USERNAME_TAKEN', '该用户名在本班已存在')
+          }
 
-    return reply.send({ user: publicUser(updatedUser) })
-  })
+          const created = await tx.user.create({
+            data: {
+              name,
+              role: current.role,
+              studentId: current.studentId,
+              username,
+              password: passwordHash,
+              avatar: current.avatar,
+              zjuamAccount: current.zjuamAccount,
+              zjuamPassword: current.zjuamPassword,
+              zjuPersonId: current.zjuPersonId,
+              zjuSyncedAt: current.zjuSyncedAt,
+              preferences: current.preferences,
+              classId: klass.id,
+              status: 'ACTIVE',
+            },
+            include: { klass: true },
+          })
+
+          return { klass, created }
+        })
+
+        const token = await reply.jwtSign({ sub: result.created.id, role: result.created.role })
+        return reply.code(201).send({
+          token,
+          user: publicUser(result.created),
+          class: {
+            id: result.klass.id,
+            name: result.klass.name,
+            type: result.klass.type,
+            xzzdClassId: result.klass.xzzdClassId,
+          },
+        })
+      } catch (error) {
+        if (error instanceof ClassAccountError) {
+          return reply.code(error.statusCode).send({ error: error.code, message: error.message })
+        }
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '课程或用户名已存在' })
+        }
+        throw error
+      }
+    },
+  )
 
   /** 预览学在浙大学生名单同步差异（仅比对，不写库） */
   fastify.post(
@@ -228,16 +315,20 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         return sendZjuamError(reply, error)
       }
 
-      const currentStudents = await prisma.student.findMany({ where: { classId: klass.id } })
-      const currentNos = new Set(currentStudents.map((student) => student.studentNo))
-      const fetchedNos = new Set(enrollments.map((enrollment) => enrollment.studentNo))
+      const currentStudents = await prisma.user.findMany({
+        where: { classId: klass.id, role: 'STUDENT', status: 'ACTIVE', studentId: { not: null } },
+        select: { studentId: true, name: true },
+      })
+      const currentNos = new Set(currentStudents.map((student) => student.studentId ?? ''))
+      const fetchedNos = new Set(enrollments.map((enrollment) => enrollment.studentId))
 
       const added = enrollments
-        .filter((enrollment) => !currentNos.has(enrollment.studentNo))
-        .map((enrollment) => ({ studentNo: enrollment.studentNo, name: enrollment.name }))
+        .filter((enrollment) => !currentNos.has(enrollment.studentId))
+        .map((enrollment) => ({ studentId: enrollment.studentId, name: enrollment.name }))
       const removed = currentStudents
-        .filter((student) => !fetchedNos.has(student.studentNo))
-        .map((student) => ({ studentNo: student.studentNo, name: student.name }))
+        .filter((student) => !fetchedNos.has(student.studentId ?? ''))
+        .map((student) => ({ studentId: student.studentId ?? '', name: student.name }))
+        .filter((student) => student.studentId.length > 0)
 
       return reply.send({
         added,
@@ -283,24 +374,36 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         for (const entry of added) {
-          const existing = await tx.student.findFirst({
-            where: { classId: klass.id, studentNo: entry.studentNo },
+          const existing = await tx.user.findFirst({
+            where: { classId: klass.id, role: 'STUDENT', studentId: entry.studentId },
           })
           if (existing) {
-            await tx.student.update({
-              where: { stuId: existing.stuId },
-              data: { name: entry.name },
+            await tx.user.update({
+              where: { id: existing.id },
+              data: { name: entry.name, status: 'ACTIVE', removedAt: null },
             })
           } else {
-            await tx.student.create({
-              data: { studentNo: entry.studentNo, name: entry.name, classId: klass.id },
+            await tx.user.create({
+              data: {
+                studentId: entry.studentId,
+                name: entry.name,
+                classId: klass.id,
+                role: 'STUDENT',
+                status: 'ACTIVE',
+              },
             })
           }
         }
 
         if (removed.length > 0) {
-          await tx.student.deleteMany({
-            where: { classId: klass.id, studentNo: { in: removed } },
+          await tx.user.updateMany({
+            where: {
+              classId: klass.id,
+              role: 'STUDENT',
+              status: 'ACTIVE',
+              studentId: { in: removed },
+            },
+            data: { status: 'REMOVED', removedAt: syncedAt },
           })
         }
 
@@ -328,6 +431,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 读取课程设置 */
   fastify.get('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -387,6 +492,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** Checkpoint 名单列表 */
   fastify.get('/:id/checkpoints', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -429,9 +536,11 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const { stuId } = parsedBody.data
+      const { userId } = parsedBody.data
 
-      const student = await prisma.student.findFirst({ where: { stuId, classId: klass.id } })
+      const student = await prisma.user.findFirst({
+        where: { id: userId, classId: klass.id, role: 'STUDENT', status: 'ACTIVE' },
+      })
       if (!student) {
         return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
       }
@@ -442,7 +551,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       let claim
       try {
         claim = await prisma.checkpointClaimed.create({
-          data: { classId: klass.id, stuId, appliedRules },
+          data: { classId: klass.id, userId, appliedRules },
           include: checkpointInclude,
         })
       } catch (error) {
@@ -493,6 +602,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     '/:id/focus-students',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
+      if (!requireStaff(request, reply)) return reply
+
       const parsed = classParamsSchema.safeParse(request.params)
       if (!parsed.success) {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -531,9 +642,11 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const { stuId, reason } = parsedBody.data
+      const { userId, reason } = parsedBody.data
 
-      const student = await prisma.student.findFirst({ where: { stuId, classId: klass.id } })
+      const student = await prisma.user.findFirst({
+        where: { id: userId, classId: klass.id, role: 'STUDENT', status: 'ACTIVE' },
+      })
       if (!student) {
         return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
       }
@@ -541,7 +654,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       let focusStudent
       try {
         focusStudent = await prisma.focusStudent.create({
-          data: { classId: klass.id, stuId, reason: reason ?? '' },
+          data: { classId: klass.id, userId, reason: reason ?? '' },
           include: focusInclude,
         })
       } catch (error) {

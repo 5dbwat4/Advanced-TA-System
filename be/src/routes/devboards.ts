@@ -4,8 +4,8 @@ import { z } from 'zod'
 
 import { myClassIds, requireStaff } from '../lib/class-access'
 import {
-  loadBoardStudents,
-  resolveBoardStudentIds,
+  loadBoardUsers,
+  resolveBoardUserIds,
   serializeBoard,
 } from '../lib/devboards'
 import { prisma } from '../lib/prisma'
@@ -14,25 +14,25 @@ const listQuerySchema = z.object({
   classId: z.string().trim().min(1),
 })
 
-const studentIdsSchema = z.array(z.string().trim().min(1)).max(50)
+const userIdsSchema = z.array(z.string().trim().min(1)).max(50)
 
 const createBodySchema = z.object({
   classId: z.string().trim().min(1),
   dbId: z.string().trim().min(1).max(64),
   boardId: z.string().trim().max(64).nullable().optional(),
   phone: z.string().trim().max(32).nullable().optional(),
-  stuIds: studentIdsSchema.optional(),
+  userIds: userIdsSchema.optional(),
 })
 
 const updateBodySchema = z.object({
   dbId: z.string().trim().min(1).max(64).optional(),
   boardId: z.string().trim().max(64).nullable().optional(),
   phone: z.string().trim().max(32).nullable().optional(),
-  stuIds: studentIdsSchema.optional(),
+  userIds: userIdsSchema.optional(),
 })
 
 const borrowBodySchema = z.object({
-  stuIds: studentIdsSchema.min(1),
+  userIds: userIdsSchema.min(1),
   phone: z.string().trim().max(32).nullable().optional(),
 })
 
@@ -45,7 +45,7 @@ const importRowSchema = z.object({
   boardId: z.string().trim().max(64).nullable().optional(),
   phone: z.string().trim().max(32).nullable().optional(),
   borrowed: z.boolean().optional(),
-  studentNos: z.array(z.string().trim().min(1)).max(50).optional(),
+  studentIds: z.array(z.string().trim().min(1)).max(50).optional(),
 })
 
 const importBodySchema = z.object({
@@ -89,7 +89,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 序列化单块开发板（附加学生信息） */
   async function sendBoard(reply: FastifyReply, board: DevBoard, statusCode = 200) {
-    const students = await loadBoardStudents(board.classId, [board])
+    const students = await loadBoardUsers(board.classId, [board])
     return reply.code(statusCode).send({ devBoard: serializeBoard(board, students) })
   }
 
@@ -107,7 +107,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
       where: { classId },
       orderBy: [{ borrowed: 'desc' }, { dbId: 'asc' }],
     })
-    const students = await loadBoardStudents(classId, boards)
+    const students = await loadBoardUsers(classId, boards)
 
     return reply.send({
       devBoards: boards.map((board) => serializeBoard(board, students)),
@@ -126,8 +126,8 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
     const { classId, dbId, boardId, phone } = parsed.data
     if (!(await requireClassAccess(request, reply, classId))) return reply
 
-    const stuIds = await resolveBoardStudentIds(classId, parsed.data.stuIds ?? [])
-    if (stuIds === null) {
+    const userIds = await resolveBoardUserIds(classId, parsed.data.userIds ?? [])
+    if (userIds === null) {
       return reply.code(400).send({ error: 'STUDENT_NOT_FOUND', message: '存在不属于该班级的学生' })
     }
 
@@ -139,7 +139,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
           dbId,
           boardId: boardId ?? null,
           phone: phone ?? null,
-          stuIds: JSON.stringify(stuIds),
+          userIds: JSON.stringify(userIds),
         },
       })
     } catch (error) {
@@ -173,14 +173,14 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
     if (parsedBody.data.dbId !== undefined) data.dbId = parsedBody.data.dbId
     if (parsedBody.data.boardId !== undefined) data.boardId = parsedBody.data.boardId
     if (parsedBody.data.phone !== undefined) data.phone = parsedBody.data.phone
-    if (parsedBody.data.stuIds !== undefined) {
-      const stuIds = await resolveBoardStudentIds(board.classId, parsedBody.data.stuIds)
-      if (stuIds === null) {
+    if (parsedBody.data.userIds !== undefined) {
+      const userIds = await resolveBoardUserIds(board.classId, parsedBody.data.userIds)
+      if (userIds === null) {
         return reply
           .code(400)
           .send({ error: 'STUDENT_NOT_FOUND', message: '存在不属于该班级的学生' })
       }
-      data.stuIds = JSON.stringify(stuIds)
+      data.userIds = JSON.stringify(userIds)
     }
 
     let updated
@@ -229,8 +229,8 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const stuIds = await resolveBoardStudentIds(board.classId, parsedBody.data.stuIds)
-    if (stuIds === null) {
+    const userIds = await resolveBoardUserIds(board.classId, parsedBody.data.userIds)
+    if (userIds === null) {
       return reply.code(400).send({ error: 'STUDENT_NOT_FOUND', message: '存在不属于该班级的学生' })
     }
 
@@ -238,7 +238,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
       where: { id: board.id },
       data: {
         borrowed: true,
-        stuIds: JSON.stringify(stuIds),
+        userIds: JSON.stringify(userIds),
         ...(parsedBody.data.phone !== undefined ? { phone: parsedBody.data.phone } : {}),
       },
     })
@@ -278,11 +278,11 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
     const { classId, rows } = parsed.data
     if (!(await requireClassAccess(request, reply, classId))) return reply
 
-    const students = await prisma.student.findMany({
-      where: { classId },
-      select: { stuId: true, studentNo: true },
+    const students = await prisma.user.findMany({
+      where: { classId, role: 'STUDENT', status: 'ACTIVE', studentId: { not: null } },
+      select: { id: true, studentId: true },
     })
-    const byStudentNo = new Map(students.map((student) => [student.studentNo, student.stuId]))
+    const byStudentNo = new Map(students.map((student) => [student.studentId ?? '', student.id]))
 
     const existing = await prisma.devBoard.findMany({
       where: { classId },
@@ -296,14 +296,14 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index]
       const rowNumber = index + 2
-      const studentNos = [...new Set(row.studentNos ?? [])]
+      const studentIds = [...new Set(row.studentIds ?? [])]
 
       if (existingDbIds.has(row.dbId)) {
         failed.push({ row: rowNumber, dbId: row.dbId, reason: 'DB id 已存在' })
         continue
       }
 
-      const missing = studentNos.filter((studentNo) => !byStudentNo.has(studentNo))
+      const missing = studentIds.filter((studentId) => !byStudentNo.has(studentId))
       if (missing.length > 0) {
         failed.push({
           row: rowNumber,
@@ -314,14 +314,14 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const borrowed = row.borrowed ?? false
-      if (borrowed && studentNos.length === 0) {
+      if (borrowed && studentIds.length === 0) {
         failed.push({ row: rowNumber, dbId: row.dbId, reason: '已借出但未填写合用学生学号' })
         continue
       }
 
-      const stuIds = studentNos
-        .map((studentNo) => byStudentNo.get(studentNo))
-        .filter((stuId): stuId is string => stuId !== undefined)
+      const userIds = studentIds
+        .map((studentId) => byStudentNo.get(studentId))
+        .filter((userId): userId is string => userId !== undefined)
 
       try {
         await prisma.devBoard.create({
@@ -331,7 +331,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
             boardId: row.boardId ?? null,
             phone: row.phone ?? null,
             borrowed,
-            stuIds: JSON.stringify(stuIds),
+            userIds: JSON.stringify(userIds),
           },
         })
         existingDbIds.add(row.dbId)

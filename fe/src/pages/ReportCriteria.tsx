@@ -21,8 +21,8 @@ import { fetchCriteria, fetchCriteriaImpact, saveCriteria, updateCriteria } from
 import { getErrorMessage } from '@/lib/error'
 import { cn } from '@/lib/utils'
 
-function impactKey(item: { stuId: string; experimentId: string }): string {
-  return `${item.stuId}-${item.experimentId}`
+function impactKey(item: { userId: string; experimentId: string }): string {
+  return `${item.userId}-${item.experimentId}`
 }
 
 const SHARE_CODE_PATTERN = /^[0-9a-f]{48}$/i
@@ -339,7 +339,7 @@ export default function ReportCriteria() {
                                   {item.name}
                                 </span>
                                 <span className="tabular block text-[11px] text-fg-subtle">
-                                  {item.studentNo} · {item.experimentMark}
+                                  {item.studentId} · {item.experimentMark}
                                 </span>
                               </span>
                               {changeCount > 0 && (

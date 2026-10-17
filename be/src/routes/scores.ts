@@ -7,14 +7,14 @@ import { emitReportScore, emitScoreChange } from '../lib/realtime'
 import { toScoreDto } from '../lib/score'
 
 const putScoreSchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   type: z.number().int().min(0).max(3),
   indId: z.string().trim().min(1),
   score: z.number().min(-1000).max(1000),
 })
 
 const deleteScoreSchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   type: z.number().int().min(0).max(3),
   indId: z.string().trim().min(1),
 })
@@ -40,7 +40,7 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
 
       const scores = await prisma.score.findMany({
         where: { student: { classId } },
-        orderBy: [{ stuId: 'asc' }, { type: 'asc' }, { indId: 'asc' }],
+        orderBy: [{ userId: 'asc' }, { type: 'asc' }, { indId: 'asc' }],
         include: { grader: { select: { id: true, name: true } } },
       })
       return { scores: scores.map(toScoreDto) }
@@ -51,15 +51,15 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
       return { scores: [] }
     }
 
-    const students = await prisma.student.findMany({
-      where: { classId: { in: classIds } },
-      select: { stuId: true },
+    const students = await prisma.user.findMany({
+      where: { classId: { in: classIds }, role: 'STUDENT', status: 'ACTIVE' },
+      select: { id: true },
     })
-    const studentIds = students.map((s) => s.stuId)
+    const studentIds = students.map((s) => s.id)
 
     const scores = await prisma.score.findMany({
-      where: { stuId: { in: studentIds } },
-      orderBy: [{ stuId: 'asc' }, { type: 'asc' }, { indId: 'asc' }],
+      where: { userId: { in: studentIds } },
+      orderBy: [{ userId: 'asc' }, { type: 'asc' }, { indId: 'asc' }],
       include: { grader: { select: { id: true, name: true } } },
     })
     return { scores: scores.map(toScoreDto) }
@@ -75,10 +75,12 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { stuId, type, indId, score } = parsed.data
+    const { userId, type, indId, score } = parsed.data
 
-    const student = await prisma.student.findUnique({ where: { stuId } })
-    if (!student) {
+    const student = await prisma.user.findFirst({
+      where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+    })
+    if (!student || !student.classId) {
       return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
     }
 
@@ -100,9 +102,9 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const saved = await prisma.score.upsert({
-      where: { stuId_type_indId: { stuId, type, indId } },
+      where: { userId_type_indId: { userId, type, indId } },
       update: { labId, score, graderId: sub },
-      create: { stuId, type, indId, labId, score, graderId: sub },
+      create: { userId, type, indId, labId, score, graderId: sub },
       include: { grader: { select: { id: true, name: true } } },
     })
 
@@ -112,7 +114,7 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
       score: toScoreDto(saved),
     })
     if (type === 2) {
-      emitReportScore(indId, stuId, toScoreDto(saved), sub, saved.grader?.name ?? '')
+      emitReportScore(indId, userId, toScoreDto(saved), sub, saved.grader?.name ?? '')
     }
 
     return reply.send({ score: toScoreDto(saved) })
@@ -128,17 +130,19 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { stuId, type, indId } = parsed.data
+    const { userId, type, indId } = parsed.data
 
     const existing = await prisma.score.findUnique({
-      where: { stuId_type_indId: { stuId, type, indId } },
+      where: { userId_type_indId: { userId, type, indId } },
     })
     if (!existing) {
       return reply.code(404).send({ error: 'SCORE_NOT_FOUND', message: '分数不存在' })
     }
 
-    const student = await prisma.student.findUnique({ where: { stuId } })
-    if (!student) {
+    const student = await prisma.user.findFirst({
+      where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+    })
+    if (!student || !student.classId) {
       return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
     }
 
@@ -148,12 +152,12 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     await prisma.score.delete({
-      where: { stuId_type_indId: { stuId, type, indId } },
+      where: { userId_type_indId: { userId, type, indId } },
     })
 
-    emitScoreChange(student.classId, { action: 'delete', classId: student.classId, stuId, type, indId })
+    emitScoreChange(student.classId, { action: 'delete', classId: student.classId, userId, type, indId })
     if (type === 2) {
-      emitReportScore(indId, stuId, null, sub, '')
+      emitReportScore(indId, userId, null, sub, '')
     }
 
     return reply.send({ ok: true })

@@ -58,8 +58,19 @@ export function parsePreferences(raw: string | null | undefined): UserPreference
 }
 
 /** 对外暴露的安全用户信息（不含密码 / 凭据） */
-export function publicUser(user: User & { classes?: Class[] }) {
+export function publicUser(user: User & { klass?: Class | null }) {
   const credentials = parseCredentials(user)
+  const classes = user.klass
+    ? [
+        {
+          id: user.klass.id,
+          name: user.klass.name,
+          type: user.klass.type,
+          xzzdClassId: user.klass.xzzdClassId,
+          lastRosterSyncAt: user.klass.lastRosterSyncAt,
+        },
+      ]
+    : []
   return {
     id: user.id,
     name: user.name,
@@ -67,13 +78,9 @@ export function publicUser(user: User & { classes?: Class[] }) {
     avatar: user.avatar,
     studentId: user.studentId,
     username: user.username,
-    classes: (user.classes ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      type: c.type,
-      xzzdClassId: c.xzzdClassId,
-      lastRosterSyncAt: c.lastRosterSyncAt,
-    })),
+    classId: user.classId,
+    classes,
+    status: user.status,
     hasPassword: Boolean(user.password),
     preferences: parsePreferences(user.preferences),
     zjuamAccount: user.zjuamAccount,

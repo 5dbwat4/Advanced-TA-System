@@ -51,7 +51,7 @@ import { cn } from '@/lib/utils'
 
 type ViewTab = 'basic' | 'scores' | 'actions' | 'all'
 
-type StudentOption = { id: string; name: string; studentNo: string }
+type StudentOption = { id: string; name: string; studentId: string }
 
 type FocusStatus = {
   label: '正常' | '有挂科风险'
@@ -96,7 +96,7 @@ export default function FocusStudents() {
     () =>
       new Map<string, number>(
         (tableData?.scores ?? []).map(
-          (item) => [scoreKey(item.stuId, item.type, item.indId), item.score] as const,
+          (item) => [scoreKey(item.userId, item.type, item.indId), item.score] as const,
         ),
       ),
     [tableData],
@@ -139,19 +139,19 @@ export default function FocusStudents() {
   const rows = useMemo(
     () =>
       focusStudents.filter((item) =>
-        matchStudent(query, item.student ?? { name: '', studentNo: '' }),
+        matchStudent(query, item.student ?? { name: '', studentId: '' }),
       ),
     [focusStudents, query],
   )
 
   const candidates = useMemo<StudentOption[]>(() => {
-    const focusIds = new Set(focusStudents.map((item) => item.stuId))
+    const focusIds = new Set(focusStudents.map((item) => item.userId))
     return classStudents
-      .filter((student) => !focusIds.has(student.stuId))
+      .filter((student) => !focusIds.has(student.userId))
       .map((student) => ({
-        id: student.stuId,
+        id: student.userId,
         name: student.name,
-        studentNo: student.studentNo,
+        studentId: student.studentId,
       }))
   }, [classStudents, focusStudents])
 
@@ -244,7 +244,7 @@ export default function FocusStudents() {
     setAdding(true)
     try {
       await addFocusStudent(classId, {
-        stuId: String(addStuId),
+        userId: String(addStuId),
         reason: addReason.trim() || undefined,
       })
       await reload()
@@ -491,7 +491,7 @@ export default function FocusStudents() {
                   <tbody>
                     {rows.map((item) => {
                       const name = item.student?.name ?? '—'
-                      const studentNo = item.student?.studentNo ?? ''
+                      const studentId = item.student?.studentId ?? ''
                        const status = focusStatus()
                       return (
                         <tr key={item.id} className="transition-colors hover:bg-sunken/40">
@@ -514,7 +514,7 @@ export default function FocusStudents() {
                             <div className="font-bold">{name}</div>
                           </td>
                           <td className="tabular border-b border-r border-line px-4 py-2 text-fg-muted">
-                            {studentNo || '—'}
+                            {studentId || '—'}
                           </td>
                           <td className="border-b border-r border-line px-4 py-2">
                             {item.reason ? (
@@ -542,7 +542,7 @@ export default function FocusStudents() {
                             classExperiments.flatMap((experiment) =>
                               SCORE_TYPES.map((type) => {
                                 const value = scores.get(
-                                  scoreKey(item.stuId, type.value, experiment.id),
+                                  scoreKey(item.userId, type.value, experiment.id),
                                 )
                                 return (
                                   <td
@@ -684,9 +684,9 @@ export default function FocusStudents() {
                           <ListBox.Item
                             key={item.id}
                             id={item.id}
-                            textValue={`${item.name} ${item.studentNo}`}
+                            textValue={`${item.name} ${item.studentId}`}
                           >
-                            {item.name} {item.studentNo}
+                            {item.name} {item.studentId}
                             <ListBox.ItemIndicator />
                           </ListBox.Item>
                         ))}

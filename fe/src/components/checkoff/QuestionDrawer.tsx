@@ -259,7 +259,7 @@ export function QuestionDrawer({
         </div>
         <div className="min-w-0 flex-1">
           <span className="font-semibold text-fg">{student.name}</span>
-          <span className="tabular ml-2 text-xs text-fg-muted">{student.studentNo}</span>
+          <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
         <span className="rounded-lg border border-line bg-sunken px-2.5 py-1 text-[11px] font-semibold text-fg-muted">
           {drawn.length} 题

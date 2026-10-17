@@ -1,5 +1,6 @@
 import { Button, Input, Modal, useOverlayState } from '@heroui/react'
 import { useCallback, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTimeoutFn } from 'react-use'
 import { toast } from 'sonner'
 
@@ -38,8 +39,16 @@ const SECTIONS: TocItem[] = [
   { id: 'credits', label: 'Credits' },
 ]
 
+const STUDENT_SECTIONS: TocItem[] = [
+  { id: 'profile', label: '个人信息' },
+  { id: 'preferences', label: '偏好设置' },
+  { id: 'cache', label: '缓存' },
+  { id: 'credits', label: 'Credits' },
+]
+
 export default function Settings() {
   const { user, refresh, updateSettings } = useAuth()
+  const navigate = useNavigate()
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [, , resetHighlight] = useTimeoutFn(() => setHighlightId(null), 1600)
 
@@ -69,6 +78,8 @@ export default function Settings() {
   const nameState = useOverlayState()
 
   const hasPassword = user?.hasPassword ?? false
+  const isStudent = user?.role === 'STUDENT'
+  const sections = isStudent ? STUDENT_SECTIONS : SECTIONS
   const passkeys = user?.passkeys ?? []
   const roleLabel =
     user?.role === 'TEACHER' ? '教师' : user?.role === 'TA' ? '助教' : '学生'
@@ -135,6 +146,16 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      {isStudent && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-3"
+          onPress={() => navigate('/home')}
+        >
+          返回主页
+        </Button>
+      )}
       <PageHeader title="设置" />
       <div className="flex items-start gap-8">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -157,10 +178,12 @@ export default function Settings() {
                 姓名
               </div>
               <div className="mt-1 flex items-center gap-1.5">
-                <div className="min-w-0 flex-1 truncate text-sm text-fg">{user?.username ?? '—'}</div>
-                <IconAction label="修改用户名" onPress={openNameEdit}>
-                  <Pencil width={14} height={14} className="shrink-0" />
-                </IconAction>
+                <div className="min-w-0 flex-1 truncate text-sm text-fg">{user?.name ?? '—'}</div>
+                {!isStudent && (
+                  <IconAction label="修改用户名" onPress={openNameEdit}>
+                    <Pencil width={14} height={14} className="shrink-0" />
+                  </IconAction>
+                )}
               </div>
             </div>
             <div className="rounded-xl border border-line bg-sunken px-4 py-3">
@@ -338,17 +361,21 @@ export default function Settings() {
           </Modal.Backdrop>
         </Modal>
 
-        <section id="zjuam" className={sectionClass('zjuam')}>
-          <ZjuamSection index={1} />
-        </section>
+        {!isStudent && (
+          <section id="zjuam" className={sectionClass('zjuam')}>
+            <ZjuamSection index={1} />
+          </section>
+        )}
 
         <section id="preferences" className={sectionClass('preferences')}>
           <PreferenceSection index={2} />
         </section>
 
-        <section id="system" className={sectionClass('system')}>
-          <SystemSection index={3} />
-        </section>
+        {!isStudent && (
+          <section id="system" className={sectionClass('system')}>
+            <SystemSection index={3} />
+          </section>
+        )}
 
         <section id="cache" className={sectionClass('cache')}>
           <CacheSection index={4} />
@@ -359,7 +386,7 @@ export default function Settings() {
         </section>
         </div>
 
-        <TableOfContents items={SECTIONS} />
+        <TableOfContents items={sections} />
       </div>
     </div>
   )

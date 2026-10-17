@@ -32,11 +32,13 @@ export function RequireAuth() {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   }
 
-  const needsSetup = !user.username
+  const needsSetup = !user.username && user.role !== 'STUDENT'
   const onSetup = location.pathname === '/setup'
 
   if (needsSetup && !onSetup) return <Navigate to="/setup" replace />
-  if (!needsSetup && onSetup) return <Navigate to="/console" replace />
+  if (!needsSetup && onSetup) {
+    return <Navigate to={user.role === 'STUDENT' ? '/home' : '/console'} replace />
+  }
 
   return <Outlet />
 }

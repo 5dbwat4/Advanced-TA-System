@@ -72,7 +72,7 @@ export function GradePanel({
   const [states, setStates] = useState<Record<string, CriterionCardState>>({})
   const [extras, setExtras] = useState<Record<string, CriterionCard[]>>({})
   const [dirty, setDirty] = useState(false)
-  const [savedOverride, setSavedOverride] = useState<{ stuId: string; score: Score } | null>(null)
+  const [savedOverride, setSavedOverride] = useState<{ userId: string; score: Score } | null>(null)
   const [savingReport, setSavingReport] = useState(false)
 
   const [addTarget, setAddTarget] = useState('root')
@@ -113,22 +113,22 @@ export function GradePanel({
     criteriaState.open()
   }, [criteriaOpenToken, criteriaState])
 
-  const stuId = student?.stuId ?? null
+  const userId = student?.userId ?? null
   const total = items ? totalScore(items, states, extras) : 0
   const hasCriteria = items != null
   const savedScore =
-    savedOverride && savedOverride.stuId === stuId ? savedOverride.score : (student?.score ?? null)
+    savedOverride && savedOverride.userId === userId ? savedOverride.score : (student?.score ?? null)
   const displayScore = hasCriteria ? total : (savedScore?.score ?? null)
   const showSavedMeta = savedScore != null && (!hasCriteria || savedScore.score === total)
-  const canSaveReport = hasCriteria && stuId != null && ruleKey != null
+  const canSaveReport = hasCriteria && userId != null && ruleKey != null
   const remarkSync = useMemo(
     () =>
-      sync && sync.stuId === stuId ? { nonce: sync.nonce, text: sync.remark } : undefined,
-    [sync, stuId],
+      sync && sync.userId === userId ? { nonce: sync.nonce, text: sync.remark } : undefined,
+    [sync, userId],
   )
 
   useEffect(() => {
-    if (!stuId) return
+    if (!userId) return
     let cancelled = false
     setDirty(false)
     // 未批改（无分数）的报告：优先套用本地默认评分标准
@@ -142,7 +142,7 @@ export function GradePanel({
       setExtras({})
       return
     }
-    fetchReportReview(stuId, experimentId)
+    fetchReportReview(userId, experimentId)
       .then(async (review) => {
         if (cancelled) return
         if (!review) {
@@ -173,10 +173,10 @@ export function GradePanel({
     return () => {
       cancelled = true
     }
-  }, [stuId, experimentId, localDefault])
+  }, [userId, experimentId, localDefault])
 
   useEffect(() => {
-    if (!sync || !stuId || sync.stuId !== stuId) return
+    if (!sync || !userId || sync.userId !== userId) return
     const rid = sync.ruleId
     if (!rid) return
     let cancelled = false
@@ -204,18 +204,18 @@ export function GradePanel({
     return () => {
       cancelled = true
     }
-  }, [sync, stuId])
+  }, [sync, userId])
 
   useEffect(() => {
-    if (!dirty || !items || !ruleKey || !stuId) return
+    if (!dirty || !items || !ruleKey || !userId) return
     const timer = window.setTimeout(() => {
       const content = encodeReviewContent(states, extras, items)
-      saveReportReview({ stuId, experimentId, ruleId: ruleKey, ruleContent: content }).catch(() => {
+      saveReportReview({ userId, experimentId, ruleId: ruleKey, ruleContent: content }).catch(() => {
         toast.error('批阅记录保存失败')
       })
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [dirty, items, ruleKey, stuId, experimentId, states, extras])
+  }, [dirty, items, ruleKey, userId, experimentId, states, extras])
 
   /** 将弹窗中加载的评分标准套用到当前学生 */
   const applyCriteria = (loadedItems: CriterionItem[], key: string) => {
@@ -294,14 +294,14 @@ export function GradePanel({
   }
 
   const saveReportScore = async () => {
-    if (!stuId || !ruleKey || !items) return
+    if (!userId || !ruleKey || !items) return
     setSavingReport(true)
     try {
       const content = encodeReviewContent(states, extras, items)
-      await saveReportReview({ stuId, experimentId, ruleId: ruleKey, ruleContent: content })
+      await saveReportReview({ userId, experimentId, ruleId: ruleKey, ruleContent: content })
       setDirty(false)
-      const res = await saveScore({ stuId, type: 2, indId: experimentId, score: total })
-      setSavedOverride({ stuId, score: res.score })
+      const res = await saveScore({ userId, type: 2, indId: experimentId, score: total })
+      setSavedOverride({ userId, score: res.score })
       onScoreSaved?.(res.score)
       toast.success('已保存报告分')
     } catch (err) {
@@ -436,7 +436,7 @@ export function GradePanel({
           </Dropdown>
         </div>
 
-        {student.stuId == null ? (
+        {student.userId == null ? (
           <Alert status="warning">
             <Alert.Indicator />
             <Alert.Content>
@@ -458,7 +458,7 @@ export function GradePanel({
         )}
 
         <RemarkField
-          stuId={stuId}
+          userId={userId}
           experimentId={experimentId}
           type={REMARK_TYPE_REPORT}
           sync={remarkSync}

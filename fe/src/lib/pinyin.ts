@@ -21,13 +21,13 @@ export function pinyinIndex(name: string): PinyinParts {
 }
 
 /** 姓名 / 学号 / 拼音 / 拼音首字母 模糊匹配（空查询视为匹配） */
-export function matchStudent(query: string, student: { name: string; studentNo: string }): boolean {
+export function matchStudent(query: string, student: { name: string; studentId: string }): boolean {
   const raw = query.trim().toLowerCase()
   if (!raw) return true
 
   const compact = raw.replace(/[\s_-]+/g, '')
   if (compact.length === 0) return true
-  if (student.studentNo.toLowerCase().includes(compact)) return true
+  if (student.studentId.toLowerCase().includes(compact)) return true
   if (student.name.toLowerCase().includes(raw)) return true
 
   const { full, initials } = pinyinIndex(student.name)

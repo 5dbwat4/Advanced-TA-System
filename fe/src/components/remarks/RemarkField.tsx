@@ -10,12 +10,12 @@ import { getErrorMessage } from '@/lib/error'
  * 切换学生时加载，停止输入后自动保存。
  */
 export function RemarkField({
-  stuId,
+  userId,
   experimentId,
   type,
   sync,
 }: {
-  stuId: string | null
+  userId: string | null
   experimentId: string
   /** 附言类型：0=验收，1=实验报告 */
   type: number
@@ -33,14 +33,14 @@ export function RemarkField({
   }, [sync])
 
   useEffect(() => {
-    if (!stuId) {
+    if (!userId) {
       setText('')
       savedRef.current = ''
       return
     }
     let cancelled = false
     setLoading(true)
-    fetchRemark(stuId, experimentId, type)
+    fetchRemark(userId, experimentId, type)
       .then((remark) => {
         if (cancelled) return
         const value = remark?.text ?? ''
@@ -54,14 +54,14 @@ export function RemarkField({
     return () => {
       cancelled = true
     }
-  }, [stuId, experimentId, type])
+  }, [userId, experimentId, type])
 
   const persist = useCallback(
     async (value: string) => {
-      if (!stuId || value === savedRef.current) return
+      if (!userId || value === savedRef.current) return
       setSaving(true)
       try {
-        await saveRemark({ stuId, experimentId, type, text: value })
+        await saveRemark({ userId, experimentId, type, text: value })
         savedRef.current = value
       } catch (error) {
         toast.error(getErrorMessage(error, '附言保存失败'))
@@ -69,14 +69,14 @@ export function RemarkField({
         setSaving(false)
       }
     },
-    [stuId, experimentId, type],
+    [userId, experimentId, type],
   )
 
   useEffect(() => {
-    if (loading || !stuId || text === savedRef.current) return
+    if (loading || !userId || text === savedRef.current) return
     const timer = window.setTimeout(() => void persist(text), 800)
     return () => window.clearTimeout(timer)
-  }, [text, loading, stuId, persist])
+  }, [text, loading, userId, persist])
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -87,8 +87,8 @@ export function RemarkField({
       <TextArea
         rows={3}
         value={text}
-        disabled={loading || !stuId}
-        placeholder={stuId ? '可以是评价、说明、鼓励等等' : '请先选择学生'}
+        disabled={loading || !userId}
+        placeholder={userId ? '可以是评价、说明、鼓励等等' : '请先选择学生'}
         aria-label="附言"
         style={{ resize: 'vertical' }}
         onChange={(event) => setText(event.target.value)}

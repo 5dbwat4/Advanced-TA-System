@@ -12,7 +12,6 @@ import { PendingButton } from '@/components/ui/PendingButton'
 import {
   addTa,
   apiFetch,
-  joinClass,
   listClasses,
   listTas,
   type ClassInfo,
@@ -34,8 +33,8 @@ export function SystemSection({ index = 0 }: { index?: number }) {
   const [taStudentId, setTaStudentId] = useState('')
   const [taAdding, setTaAdding] = useState(false)
   const [classes, setClasses] = useState<ClassInfo[]>([])
-  const [joiningId, setJoiningId] = useState<string | null>(null)
-  const { user, refresh } = useAuth()
+  const [bindTokens, setBindTokens] = useState<Record<string, string>>({})
+  const { user } = useAuth()
   const navigate = useNavigate()
 
   const fetchCourses = useCallback(async () => {
@@ -44,11 +43,15 @@ export function SystemSection({ index = 0 }: { index?: number }) {
     try {
       const local = getZjuamCredential()
       const body = local ? { account: local.account, password: local.password } : {}
-      const data = await apiFetch<{ courses: Course[] }>('/api/auth/zjuam/courses', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+      const data = await apiFetch<{ courses: Course[]; bindTokens?: Record<string, string> }>(
+        '/api/auth/zjuam/courses',
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      )
       setCourses(data.courses)
+      setBindTokens(data.bindTokens ?? {})
     } catch (error) {
       const message = getErrorMessage(error, '获取课程失败')
       setError(message)
@@ -80,17 +83,19 @@ export function SystemSection({ index = 0 }: { index?: number }) {
     }
   }, [])
 
-  const joinExisting = async (classId: string) => {
-    setJoiningId(classId)
-    try {
-      await joinClass(classId)
-      await refresh()
-      toast.success('已加入该课程')
-    } catch (error) {
-      toast.error(getErrorMessage(error, '加入失败'))
-    } finally {
-      setJoiningId(null)
+  const openNewAccount = (course: Course, existingClass?: ClassInfo) => {
+    const bindToken = bindTokens[String(course.id)]
+    if (!bindToken) {
+      toast.error('没有该课程的绑定授权，请确认你是任课教师')
+      return
     }
+    navigate('/console/courses/new-account', {
+      state: {
+        bindToken,
+        classId: existingClass?.id,
+        className: existingClass?.name ?? course.displayName ?? course.name,
+      },
+    })
   }
 
   const courseState = useOverlayState({
@@ -136,7 +141,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">助教绑定课程</div>
             <div className="truncate text-xs text-fg-subtle">
-              从“学在浙大”获取并绑定当前账号的课程
+              绑定新班级时会创建独立账号，当前账号保留在原班级
             </div>
           </div>
           <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
@@ -154,6 +159,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
               <Modal.Body className="flex flex-col gap-4">
                 <p className="text-xs text-fg-subtle">
                   将使用你保存的浙大统一身份认证账号登录“学在浙大”，获取你的课程列表。
+                  每个班级使用独立账号，绑定后会自动切换到新账号。
                 </p>
                 {error ? (
                   <div className="rounded-xl border border-dashed border-danger/40 py-10 text-center text-xs text-danger">
@@ -183,8 +189,11 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                       const joined =
                         existingClass !== undefined &&
                         (user?.classes.some((item) => item.id === existingClass.id) ?? false)
-                      const adding = existingClass === undefined && course.isInstructor
-                      const clickable = adding || (existingClass !== undefined && !joined)
+                      const bindToken = bindTokens[String(course.id)]
+                      const adding =
+                        existingClass === undefined && course.isInstructor && Boolean(bindToken)
+                      const clickable =
+                        Boolean(bindToken) && (adding || (existingClass !== undefined && !joined))
                       const content = (
                         <>
                           <div className="min-w-0 flex-1">
@@ -198,6 +207,11 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                           {existingClass && (
                             <span className="rounded-lg bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-300">
                               已录入
+                            </span>
+                          )}
+                          {existingClass && !joined && !bindToken && (
+                            <span className="rounded-lg bg-danger/10 px-2 py-0.5 text-[11px] font-semibold text-danger">
+                              无授权
                             </span>
                           )}
                           {joined && (
@@ -237,16 +251,7 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                         <button
                           key={course.id}
                           type="button"
-                          disabled={existingClass !== undefined && joiningId === existingClass.id}
-                          onClick={() => {
-                            if (existingClass) void joinExisting(existingClass.id)
-                            else
-                              navigate(
-                                `/console/courses/new?id=${course.id}&name=${encodeURIComponent(
-                                  course.displayName ?? course.name,
-                                )}`,
-                              )
-                          }}
+                          onClick={() => openNewAccount(course, existingClass)}
                           className={cn(
                             rowClass,
                             stateClass,

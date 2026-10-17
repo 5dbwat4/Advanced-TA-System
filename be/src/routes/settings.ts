@@ -52,7 +52,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: { password: passwordHash },
-        include: { classes: true },
+        include: { klass: true },
       })
       return reply.send({ user: publicUser(updatedUser) })
     }
@@ -60,7 +60,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     if (parsed.data.action === 'set_username') {
       const { username } = parsed.data
       const taken = await prisma.user.findFirst({
-        where: { username, NOT: { id: user.id } },
+        where: { username, classId: user.classId, NOT: { id: user.id } },
         select: { id: true },
       })
       if (taken) {
@@ -69,7 +69,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: { username, name: username },
-        include: { classes: true },
+        include: { klass: true },
       })
       return reply.send({ user: publicUser(updatedUser) })
     }
@@ -78,7 +78,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: { avatar: parsed.data.avatar },
-        include: { classes: true },
+        include: { klass: true },
       })
       return reply.send({ user: publicUser(updatedUser) })
     }
@@ -93,7 +93,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: { webauthn: next.length === 0 ? null : serializeCredentials(next) },
-      include: { classes: true },
+      include: { klass: true },
     })
 
     return reply.send({ user: publicUser(updatedUser) })
@@ -127,7 +127,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     const updated = await prisma.user.update({
       where: { id: sub },
       data: { preferences: JSON.stringify(next) },
-      include: { classes: true },
+      include: { klass: true },
     })
     return reply.send({ user: publicUser(updated) })
   })

@@ -1,10 +1,10 @@
 export function StudentIdentity({
   name,
-  studentNo,
+  studentId,
   size = 'sm',
 }: {
   name: string
-  studentNo: string
+  studentId: string
   size?: 'sm' | 'lg'
 }) {
   return (
@@ -20,7 +20,7 @@ export function StudentIdentity({
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate font-semibold text-fg">{name}</div>
-        <div className="tabular mt-0.5 text-xs text-fg-muted">{studentNo}</div>
+        <div className="tabular mt-0.5 text-xs text-fg-muted">{studentId}</div>
       </div>
     </div>
   )

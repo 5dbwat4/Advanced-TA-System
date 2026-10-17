@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { encryptSecret } from '../lib/crypto'
+import { signCourseBindToken } from '../lib/course-bind'
 import { prisma } from '../lib/prisma'
 import { publicUser } from '../lib/user'
 import { listCourses } from '../lib/zjuam'
@@ -35,7 +36,7 @@ export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
     const user = await prisma.user.update({
       where: { id: sub },
       data: { zjuamAccount: account, zjuamPassword: encryptSecret(password) },
-      include: { classes: true },
+      include: { klass: true },
     })
 
     return reply.send({ user: publicUser(user) })
@@ -52,7 +53,7 @@ export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
     const user = await prisma.user.update({
       where: { id: sub },
       data: { zjuamPassword: null },
-      include: { classes: true },
+      include: { klass: true },
     })
 
     return reply.send({ user: publicUser(user) })
@@ -66,6 +67,22 @@ export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { sub } = request.user as { sub: string }
+
+    // 只允许获取当前登录账号自己的课程，避免用他人的统一身份认证换取绑定授权
+    if (parsed.data.account) {
+      const current = await prisma.user.findUnique({
+        where: { id: sub },
+        select: { zjuamAccount: true, studentId: true },
+      })
+      const account = parsed.data.account
+      if (account !== current?.zjuamAccount && account !== current?.studentId) {
+        return reply.code(403).send({
+          error: 'ZJUAM_ACCOUNT_MISMATCH',
+          message: '只能获取当前账号自己的课程',
+        })
+      }
+    }
+
     const credentials = await resolveZjuamCredentials(sub, parsed.data)
     if (!credentials) {
       return reply
@@ -75,7 +92,19 @@ export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       const courses = await listCourses(credentials.account, credentials.password)
-      return reply.send({ courses })
+
+      // 仅为“任课教师”的课程签发短期绑定授权；非任课课程不签发
+      const bindTokens: Record<string, string> = {}
+      for (const course of courses) {
+        if (!course.isInstructor) continue
+        bindTokens[String(course.id)] = signCourseBindToken(fastify, {
+          userId: sub,
+          courseId: String(course.id),
+          courseName: course.displayName || course.name,
+        })
+      }
+
+      return reply.send({ courses, bindTokens })
     } catch (error) {
       return sendZjuamError(reply, error)
     }

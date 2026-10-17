@@ -1,4 +1,4 @@
-import { Prisma, type Class, type User } from '@prisma/client'
+import type { Class, User } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
@@ -10,7 +10,7 @@ const createTaSchema = z.object({
   studentId: z.string().trim().min(1).max(32),
 })
 
-type TaWithClass = User & { classes: Class[] }
+type TaWithClass = User & { klass: Class | null }
 
 /** 助教列表项的安全输出结构 */
 function toTa(user: TaWithClass) {
@@ -19,7 +19,10 @@ function toTa(user: TaWithClass) {
     name: user.name,
     studentId: user.studentId,
     username: user.username,
-    classes: user.classes.map((c) => ({ id: c.id, name: c.name, type: c.type })),
+    classId: user.classId,
+    classes: user.klass
+      ? [{ id: user.klass.id, name: user.klass.name, type: user.klass.type }]
+      : [],
     activated: Boolean(user.username),
     hasPassword: Boolean(user.password),
     zjuamAccount: user.zjuamAccount,
@@ -34,14 +37,18 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
 
     const tas = await prisma.user.findMany({
       where: { role: 'TA' },
-      include: { classes: true },
+      include: { klass: true },
       orderBy: { createdAt: 'asc' },
     })
 
     return { tas: tas.map(toTa) }
   })
 
-  /** 添加助教（仅预置学号，账号处于未解封状态） */
+  /**
+   * 添加助教（仅预置学号，账号处于未解封状态）。
+   * TODO: 单班模型下应按班级预置（`{ studentId, classId }`）或取消该接口，
+   * 目前保留既有行为，按全局学号去重。
+   */
   fastify.post('/tas', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!requireStaff(request, reply)) return reply
 
@@ -52,21 +59,18 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { studentId } = parsed.data
 
-    let user
-    try {
-      user = await prisma.user.create({
-        data: { studentId, name: studentId, role: 'TA' },
-      })
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该学号已存在于系统中' })
-      }
-      throw error
+    const existing = await prisma.user.findFirst({
+      where: { studentId, role: 'TA' },
+      select: { id: true },
+    })
+    if (existing) {
+      return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该学号已存在于系统中' })
     }
 
-    return reply.code(201).send({ ta: toTa({ ...user, classes: [] }) })
+    const user = await prisma.user.create({
+      data: { studentId, name: studentId, role: 'TA' },
+    })
+
+    return reply.code(201).send({ ta: toTa({ ...user, klass: null }) })
   })
 }

@@ -37,10 +37,10 @@ export function serializeCredentials(credentials: StoredCredential[]): string {
  */
 export async function findUserByCredentialId(
   credentialId: string,
-): Promise<{ user: User & { classes: Class[] }; credential: StoredCredential } | null> {
+): Promise<{ user: User & { klass: Class | null }; credential: StoredCredential } | null> {
   const users = await prisma.user.findMany({
     where: { webauthn: { not: null } },
-    include: { classes: true },
+    include: { klass: true },
   })
   for (const user of users) {
     const credential = parseCredentials(user).find((item) => item.id === credentialId)

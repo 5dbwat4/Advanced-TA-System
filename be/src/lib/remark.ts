@@ -9,7 +9,7 @@ export type RemarkWithEditor = Remark & { updatedBy: Pick<User, 'name'> | null }
 
 /** 附言对外结构（附最后编辑人姓名） */
 export type RemarkDto = {
-  stuId: string
+  userId: string
   experimentId: string
   type: number
   text: string
@@ -21,7 +21,7 @@ export type RemarkDto = {
 /** 将附言记录序列化为对外结构 */
 export function toRemarkDto(remark: RemarkWithEditor): RemarkDto {
   return {
-    stuId: remark.stuId,
+    userId: remark.userId,
     experimentId: remark.experimentId,
     type: remark.type,
     text: remark.text,

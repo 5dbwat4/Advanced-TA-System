@@ -128,9 +128,9 @@ export default function Reports() {
     const rows = submissions?.submissions ?? []
     return [...rows].sort((a, b) => {
       const noA =
-        a.created_by?.id == null ? '' : (studentsById.get(a.created_by.id)?.studentNo ?? '')
+        a.created_by?.id == null ? '' : (studentsById.get(a.created_by.id)?.studentId ?? '')
       const noB =
-        b.created_by?.id == null ? '' : (studentsById.get(b.created_by.id)?.studentNo ?? '')
+        b.created_by?.id == null ? '' : (studentsById.get(b.created_by.id)?.studentId ?? '')
       return noA.localeCompare(noB)
     })
   }, [submissions, studentsById])
@@ -150,18 +150,18 @@ export default function Reports() {
       return { submitted, graded: null, remaining: null }
     }
 
-    const stuIdByNo = new Map(localStudents.map((student) => [student.studentNo, student.stuId]))
+    const userIdByNo = new Map(localStudents.map((student) => [student.studentId, student.userId]))
     const gradedStuIds = new Set(
       localScores
         .filter((score) => score.type === 2 && score.indId === selectedId)
-        .map((score) => score.stuId),
+        .map((score) => score.userId),
     )
 
     let graded = 0
     for (const personId of submittedPersonIds) {
-      const studentNo = studentsById.get(personId)?.studentNo
-      const stuId = studentNo ? stuIdByNo.get(studentNo) : undefined
-      if (stuId && gradedStuIds.has(stuId)) graded += 1
+      const studentId = studentsById.get(personId)?.studentId
+      const userId = studentId ? userIdByNo.get(studentId) : undefined
+      if (userId && gradedStuIds.has(userId)) graded += 1
     }
 
     return { submitted, graded, remaining: submitted - graded }
@@ -358,7 +358,7 @@ function SubmissionTable({
             const student = personId == null ? undefined : students.get(personId)
             return (
               <tr key={item.id} className="transition-colors hover:bg-sunken/40">
-                <td className={`${CELL_CLASS} tabular`}>{student?.studentNo ?? '—'}</td>
+                <td className={`${CELL_CLASS} tabular`}>{student?.studentId ?? '—'}</td>
                 <td className={CELL_CLASS}>{student?.name ?? personId ?? '—'}</td>
                 <td className={`${CELL_CLASS} tabular`}>{formatDateTime(item.created_at)}</td>
                 <td className={`${CELL_CLASS} tabular text-right`}>

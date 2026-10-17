@@ -200,8 +200,8 @@ export function FilePreviewPanel({
         <span className="min-w-0 truncate text-sm font-bold">
           {student ? student.name : '文件预览'}
         </span>
-        {student && student.studentNo && (
-          <span className="tabular shrink-0 text-[11px] text-fg-subtle">{student.studentNo}</span>
+        {student && student.studentId && (
+          <span className="tabular shrink-0 text-[11px] text-fg-subtle">{student.studentId}</span>
         )}
         {active && (
           <div className="ms-auto flex min-w-0 items-center gap-2">

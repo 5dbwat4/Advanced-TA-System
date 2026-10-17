@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { ApiError, apiFetch, getToken, setToken, type User, type UserPreferences } from '@/lib/api'
+import { ApiError, apiFetch, getToken, isLoginSelection, setToken, type LoginResult, type User, type UserPreferences } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
 
@@ -9,7 +9,10 @@ type AuthContextValue = {
   loading: boolean
   bootstrapError: string | null
   retryBootstrap: () => void
-  login: (endpoint: string, body: Record<string, unknown>) => Promise<User>
+  login: (endpoint: string, body: Record<string, unknown>) => Promise<LoginResult>
+  selectAccount: (selectionToken: string, userId: string) => Promise<User>
+  exchangeStudentPreview: (token: string) => Promise<User>
+  adoptSession: (session: { token: string; user: User }) => void
   completeSetup: (body: { username: string; password?: string }) => Promise<User>
   refresh: () => Promise<void>
   updateSettings: (
@@ -71,15 +74,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       bootstrapError,
       retryBootstrap,
       login: async (endpoint, body) => {
-        const res = await apiFetch<{ token: string; user: User }>(endpoint, {
+        const res = await apiFetch<LoginResult>(endpoint, {
           method: 'POST',
           body: JSON.stringify(body),
+        })
+        if (isLoginSelection(res)) return res
+        setToken(res.token)
+        setUser(res.user)
+        setBootstrapError(null)
+        saveLastUser(res.user)
+        return res.user
+      },
+      selectAccount: async (selectionToken, userId) => {
+        const res = await apiFetch<{ token: string; user: User }>('/api/auth/select', {
+          method: 'POST',
+          body: JSON.stringify({ selectionToken, userId }),
         })
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)
         saveLastUser(res.user)
         return res.user
+      },
+      exchangeStudentPreview: async (token) => {
+        const res = await apiFetch<{ token: string; user: User }>('/api/auth/student/exchange', {
+          method: 'POST',
+          body: JSON.stringify({ token }),
+        })
+        setToken(res.token)
+        setUser(res.user)
+        setBootstrapError(null)
+        saveLastUser(res.user)
+        return res.user
+      },
+      adoptSession: (session) => {
+        setToken(session.token)
+        setUser(session.user)
+        setBootstrapError(null)
+        saveLastUser(session.user)
       },
       completeSetup: async (body) => {
         const res = await apiFetch<{ user: User }>('/api/auth/setup', {

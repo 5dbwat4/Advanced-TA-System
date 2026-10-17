@@ -8,7 +8,7 @@ export type LastUser = {
   name: string
   username: string | null
   studentId: string | null
-  role: 'TA' | 'TEACHER'
+  role: 'TA' | 'TEACHER' | 'STUDENT'
   hasWebauthn: boolean
   hasPassword: boolean
   savedAt: number
@@ -28,7 +28,12 @@ export function getLastUser(): LastUser | null {
       name: value.name,
       username: typeof value.username === 'string' ? value.username : null,
       studentId: typeof value.studentId === 'string' ? value.studentId : null,
-      role: value.role === 'TEACHER' ? 'TEACHER' : 'TA',
+      role:
+        value.role === 'TEACHER'
+          ? 'TEACHER'
+          : value.role === 'STUDENT'
+            ? 'STUDENT'
+            : 'TA',
       hasWebauthn: Boolean(value.hasWebauthn),
       hasPassword: Boolean(value.hasPassword),
       savedAt,

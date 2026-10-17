@@ -134,7 +134,7 @@ export default function ExperimentDetail() {
     setRatio(resolveScoreRatio(settingsRes.settings, experimentId))
     setStudents(checkoff.students)
     setScores(
-      new Map(checkoff.scores.map((item) => [scoreKey(item.stuId, item.type, item.indId), item.score])),
+      new Map(checkoff.scores.map((item) => [scoreKey(item.userId, item.type, item.indId), item.score])),
     )
   }, [])
 
@@ -193,12 +193,12 @@ export default function ExperimentDetail() {
     }
   }
 
-  const scoreOf = (stuId: string, type: number) =>
-    experiment ? scores.get(scoreKey(stuId, type, experiment.id)) : undefined
+  const scoreOf = (userId: string, type: number) =>
+    experiment ? scores.get(scoreKey(userId, type, experiment.id)) : undefined
 
-  const totalOf = (stuId: string) =>
+  const totalOf = (userId: string) =>
     weightedTotal(
-      [scoreOf(stuId, 0) ?? null, scoreOf(stuId, 1) ?? null, scoreOf(stuId, 2) ?? null],
+      [scoreOf(userId, 0) ?? null, scoreOf(userId, 1) ?? null, scoreOf(userId, 2) ?? null],
       ratio,
     )
 
@@ -631,13 +631,13 @@ export default function ExperimentDetail() {
             </thead>
             <tbody>
               {students.map((student) => (
-                <tr key={student.stuId} className="transition-colors hover:bg-sunken/40">
+                <tr key={student.userId} className="transition-colors hover:bg-sunken/40">
                   <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
                     <div className="font-bold">{student.name}</div>
-                    <div className="tabular text-xs text-fg-muted">{student.studentNo}</div>
+                    <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
                   </td>
                   {SCORE_TYPES.map((type) => {
-                    const value = scoreOf(student.stuId, type.value)
+                    const value = scoreOf(student.userId, type.value)
                     return (
                       <td
                         key={type.value}
@@ -648,7 +648,7 @@ export default function ExperimentDetail() {
                     )
                   })}
                   <td className="tabular border-b border-line px-4 py-2 text-center font-bold">
-                    {totalOf(student.stuId)?.toFixed(1) ?? (
+                    {totalOf(student.userId)?.toFixed(1) ?? (
                       <span className="font-normal text-fg-subtle">—</span>
                     )}
                   </td>

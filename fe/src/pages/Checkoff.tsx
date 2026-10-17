@@ -618,7 +618,7 @@ export default function Checkoff() {
                   ) : (
                     records.map((record, index) => (
                       <div
-                        key={`${record.stuId}-${record.type}-${record.updatedAt}-${index}`}
+                        key={`${record.userId}-${record.type}-${record.updatedAt}-${index}`}
                         className="flex items-center gap-3 rounded-xl border border-line px-3 py-2"
                       >
                         <div className="min-w-0 flex-1">

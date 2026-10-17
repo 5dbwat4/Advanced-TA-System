@@ -58,7 +58,7 @@ type PushEventPayload = {
   status?: PushStepStatus | PushStudentStatus
   detail?: string
   message?: string
-  stuId?: string
+  userId?: string
   targets?: XzzdPushTarget[]
 }
 
@@ -177,9 +177,9 @@ export default function XzzdPush() {
             setTargets(payload.targets)
             return
           }
-          if (message.event === 'push' && payload.stuId && payload.status) {
+          if (message.event === 'push' && payload.userId && payload.status) {
             const status = payload.status as PushStudentStatus
-            setStudentStatus((prev) => ({ ...prev, [payload.stuId as string]: status }))
+            setStudentStatus((prev) => ({ ...prev, [payload.userId as string]: status }))
             return
           }
           if (message.event === 'done') {
@@ -452,11 +452,11 @@ function AssembledTable({
           </thead>
           <tbody>
             {targets.map((item) => (
-              <tr key={item.stuId} className="transition-colors hover:bg-sunken/40">
+              <tr key={item.userId} className="transition-colors hover:bg-sunken/40">
                 <td className={CELL_CLASS}>
                   {item.name}
                   <span className="tabular text-fg-subtle">
-                    {item.personId != null ? `（${item.personId}）` : `（${item.studentNo}）`}
+                    {item.personId != null ? `（${item.personId}）` : `（${item.studentId}）`}
                   </span>
                 </td>
                 <td className={`${CELL_CLASS} tabular text-center`}>{formatScore(item.functionScore)}</td>
@@ -485,7 +485,7 @@ function AssembledTable({
                   )}
                 </td>
                 <td className={`${CELL_CLASS} border-r-0`}>
-                  <PushStatusCell target={item} status={statuses[item.stuId]} />
+                  <PushStatusCell target={item} status={statuses[item.userId]} />
                 </td>
               </tr>
             ))}

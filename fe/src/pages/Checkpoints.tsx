@@ -42,7 +42,7 @@ import { matchStudent } from '@/lib/pinyin'
 import { useAsyncData } from '@/lib/request'
 import { useCurrentClass } from '@/lib/store'
 
-type StudentOption = { id: string; name: string; studentNo: string }
+type StudentOption = { id: string; name: string; studentId: string }
 
 type DeleteTarget = { kind: 'single'; target: CheckpointClaim } | { kind: 'bulk' }
 
@@ -103,19 +103,19 @@ export default function Checkpoints() {
   const rows = useMemo(
     () =>
       claims.filter((item) =>
-        matchStudent(query, item.student ?? { name: '', studentNo: '' }),
+        matchStudent(query, item.student ?? { name: '', studentId: '' }),
       ),
     [claims, query],
   )
 
   const candidates = useMemo<StudentOption[]>(() => {
-    const claimIds = new Set(claims.map((item) => item.stuId))
+    const claimIds = new Set(claims.map((item) => item.userId))
     return classStudents
-      .filter((student) => !claimIds.has(student.stuId))
+      .filter((student) => !claimIds.has(student.userId))
       .map((student) => ({
-        id: student.stuId,
+        id: student.userId,
         name: student.name,
-        studentNo: student.studentNo,
+        studentId: student.studentId,
       }))
   }, [classStudents, claims])
 
@@ -172,7 +172,7 @@ export default function Checkpoints() {
     if (!classId || addStuId == null) return
     setAdding(true)
     try {
-      await addCheckpointStudent(classId, { stuId: String(addStuId) })
+      await addCheckpointStudent(classId, { userId: String(addStuId) })
       await reload()
       toast.success('已加入 Checkpoint 名单')
       addState.close()
@@ -344,7 +344,7 @@ export default function Checkpoints() {
                   <tbody>
                     {rows.map((item) => {
                       const name = item.student?.name ?? '—'
-                      const studentNo = item.student?.studentNo ?? ''
+                      const studentId = item.student?.studentId ?? ''
                       return (
                         <tr key={item.id} className="transition-colors hover:bg-sunken/40">
                           {editing && (
@@ -366,7 +366,7 @@ export default function Checkpoints() {
                             <div className="font-bold">{name}</div>
                           </td>
                           <td className="tabular border-b border-r border-line px-4 py-2 text-fg-muted">
-                            {studentNo || '—'}
+                            {studentId || '—'}
                           </td>
                           <td className="border-b border-r border-line px-4 py-2">
                             {item.appliedRuleLabels.length === 0 ? (
@@ -451,9 +451,9 @@ export default function Checkpoints() {
                           <ListBox.Item
                             key={item.id}
                             id={item.id}
-                            textValue={`${item.name} ${item.studentNo}`}
+                            textValue={`${item.name} ${item.studentId}`}
                           >
-                            {item.name} {item.studentNo}
+                            {item.name} {item.studentId}
                             <ListBox.ItemIndicator />
                           </ListBox.Item>
                         ))}

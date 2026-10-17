@@ -15,8 +15,8 @@ export const SCORE_TYPES = [
   { value: 2, label: '报告' },
 ] as const
 
-export function scoreKey(stuId: string, type: number, indId: string): string {
-  return `${stuId}:${type}:${indId}`
+export function scoreKey(userId: string, type: number, indId: string): string {
+  return `${userId}:${type}:${indId}`
 }
 
 /** 从若干分数里提取「独立计分项目」的项目名（去重并按中文排序） */

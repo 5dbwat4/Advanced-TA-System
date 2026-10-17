@@ -6,13 +6,13 @@ import { prisma } from '../lib/prisma'
 import { REMARK_TYPE_CHECKOFF, toRemarkDto } from '../lib/remark'
 
 const querySchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   experimentId: z.string().trim().min(1),
   type: z.coerce.number().int().min(0),
 })
 
 const saveSchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   experimentId: z.string().trim().min(1),
   type: z.coerce.number().int().min(0).default(REMARK_TYPE_CHECKOFF),
   text: z.string().max(5000),
@@ -28,9 +28,9 @@ export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
     }
 
-    const { stuId, experimentId, type } = parsed.data
+    const { userId, experimentId, type } = parsed.data
     const remark = await prisma.remark.findUnique({
-      where: { stuId_experimentId_type: { stuId, experimentId, type } },
+      where: { userId_experimentId_type: { userId, experimentId, type } },
       include: { updatedBy: { select: { name: true } } },
     })
     if (!remark) {
@@ -77,10 +77,12 @@ export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { stuId, experimentId, type, text } = parsed.data
+    const { userId, experimentId, type, text } = parsed.data
     const { sub } = request.user as { sub: string }
 
-    const student = await prisma.student.findUnique({ where: { stuId } })
+    const student = await prisma.user.findFirst({
+      where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+    })
     if (!student) {
       return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
     }
@@ -90,9 +92,9 @@ export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const remark = await prisma.remark.upsert({
-      where: { stuId_experimentId_type: { stuId, experimentId, type } },
+      where: { userId_experimentId_type: { userId, experimentId, type } },
       update: { text, updatedById: sub },
-      create: { stuId, experimentId, type, text, updatedById: sub },
+      create: { userId, experimentId, type, text, updatedById: sub },
       include: { updatedBy: { select: { name: true } } },
     })
 

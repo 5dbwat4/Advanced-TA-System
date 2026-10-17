@@ -9,7 +9,7 @@ import { toScoreDto } from '../lib/score'
 
 const submitSchema = z.object({
   experimentId: z.string().trim().min(1),
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   scores: z
     .array(
       z.object({
@@ -51,17 +51,22 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       .sort((a, b) => compareExperimentMark(a.mark, b.mark))
 
     // 班级人数不多，一次返回完整名单供前端本地检索（含拼音）
-    const students = await prisma.student.findMany({
-      where: { classId },
-      orderBy: { studentNo: 'asc' },
-      select: { stuId: true, name: true, studentNo: true },
+    const studentRows = await prisma.user.findMany({
+      where: { classId, role: 'STUDENT', status: 'ACTIVE' },
+      orderBy: { studentId: 'asc' },
+      select: { id: true, name: true, studentId: true },
     })
+    const students = studentRows.map((user) => ({
+      userId: user.id,
+      name: user.name,
+      studentId: user.studentId ?? '',
+    }))
 
     const scores =
       experimentId && students.length > 0
         ? await prisma.score.findMany({
             where: {
-              stuId: { in: students.map((s) => s.stuId) },
+              userId: { in: students.map((s) => s.userId) },
               indId: experimentId,
               type: { in: [0, 1, 2] },
             },
@@ -159,11 +164,11 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const scores = await prisma.score.findMany({
-      where: { student: { classId }, type: { in: [0, 1, 2] } },
+      where: { student: { classId, status: 'ACTIVE' }, type: { in: [0, 1, 2] } },
       orderBy: { updatedAt: 'desc' },
       take: 10,
       include: {
-        student: { select: { name: true, studentNo: true } },
+        student: { select: { name: true, studentId: true } },
         grader: { select: { name: true } },
       },
     })
@@ -177,9 +182,9 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     const records = scores.map((score) => {
       const experiment = expById.get(score.indId)
       return {
-        stuId: score.stuId,
+        userId: score.userId,
         studentName: score.student.name,
-        studentNo: score.student.studentNo,
+        studentId: score.student.studentId ?? '',
         type: score.type,
         score: score.score,
         experimentMark: experiment?.mark ?? '',
@@ -202,10 +207,12 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { experimentId, stuId, scores } = parsed.data
+    const { experimentId, userId, scores } = parsed.data
 
-    const student = await prisma.student.findUnique({ where: { stuId } })
-    if (!student) {
+    const student = await prisma.user.findFirst({
+      where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+    })
+    if (!student || !student.classId) {
       return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
     }
 
@@ -227,11 +234,11 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     await prisma.$transaction(async (tx) => {
       for (const item of scores) {
         if (item.score === null) {
-          await tx.score.deleteMany({ where: { stuId, type: item.type, indId: experimentId } })
+          await tx.score.deleteMany({ where: { userId, type: item.type, indId: experimentId } })
           events.push({
             action: 'delete',
             classId: student.classId,
-            stuId,
+            userId,
             type: item.type,
             indId: experimentId,
           })
@@ -239,10 +246,10 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         const saved = await tx.score.upsert({
-          where: { stuId_type_indId: { stuId, type: item.type, indId: experimentId } },
+          where: { userId_type_indId: { userId, type: item.type, indId: experimentId } },
           update: { labId: experimentId, score: item.score, graderId: sub },
           create: {
-            stuId,
+            userId,
             type: item.type,
             indId: experimentId,
             labId: experimentId,

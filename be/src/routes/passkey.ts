@@ -135,7 +135,7 @@ export const passkeyRoutes: FastifyPluginAsync = async (fastify) => {
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: { webauthn: serializeCredentials(merged) },
-        include: { classes: true },
+        include: { klass: true },
       })
 
       return reply.send({ verified: true, user: publicUser(updatedUser) })
@@ -151,16 +151,22 @@ export const passkeyRoutes: FastifyPluginAsync = async (fastify) => {
     let sub = ''
 
     if (identifier) {
-      const user = await prisma.user.findFirst({
-        where: { OR: [{ username: identifier }, { studentId: identifier }] },
+      const users = await prisma.user.findMany({
+        where: {
+          OR: [{ username: identifier }, { studentId: identifier }],
+          status: 'ACTIVE',
+          webauthn: { not: null },
+        },
+        select: { id: true, webauthn: true },
       })
-      const credentials = user ? parseCredentials(user) : []
-      if (user && credentials.length > 0) {
+      const credentials = users.flatMap((user) => parseCredentials(user))
+      if (credentials.length > 0) {
         allowCredentials = credentials.map((credential) => ({
           id: credential.id,
           transports: credential.transports,
         }))
-        sub = user.id
+        // 仅唯一候选时绑定 sub，多班候选交由凭据本身确定账号
+        sub = users.length === 1 ? users[0].id : ''
       }
     }
 

@@ -15,7 +15,7 @@ export type ScoreChangeEvent =
       classId: string
       score: ScoreDto
     }
-  | { action: 'delete'; classId: string; stuId: string; type: number; indId: string }
+  | { action: 'delete'; classId: string; userId: string; type: number; indId: string }
 
 /** 验收开始事件（按班级验收房间广播，仅打开验收页的用户收到） */
 export type CheckoffStartedEvent = {
@@ -106,9 +106,9 @@ function extractToken(socket: Socket): string | null {
 async function loadClassIds(userId: string): Promise<string[]> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    include: { classes: true },
+    select: { classId: true },
   })
-  return (me?.classes ?? []).map((c) => c.id)
+  return me?.classId ? [me.classId] : []
 }
 
 /** 读取验收广播所需的用户信息（姓名 / 角色 / 所属班级） */
@@ -117,10 +117,10 @@ async function loadBroadcastContext(
 ): Promise<{ name: string; role: string; classIds: string[] } | null> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, role: true, classes: { select: { id: true } } },
+    select: { name: true, role: true, classId: true },
   })
   if (!me) return null
-  return { name: me.name, role: me.role, classIds: me.classes.map((c) => c.id) }
+  return { name: me.name, role: me.role, classIds: me.classId ? [me.classId] : [] }
 }
 
 export type SlaveCardState =
@@ -236,7 +236,7 @@ function reportRoom(experimentId: string): string {
 }
 
 /** 某连接在实验内「正在批改」的在场信息 */
-type ReportPresence = { userId: string; name: string; stuId: string | null }
+type ReportPresence = { userId: string; name: string; studentId: string | null }
 
 /** experimentId → (socketId → presence) */
 const reportPresences = new Map<string, Map<string, ReportPresence>>()
@@ -255,7 +255,7 @@ function broadcastReportPresence(experimentId: string): void {
 function removeReportPresence(socket: Socket): void {
   const experimentId = socket.data.reportExperimentId as string | undefined
   socket.data.reportExperimentId = undefined
-  socket.data.reportStuId = undefined
+  socket.data.reportStudentId = undefined
   if (!experimentId) return
   const room = reportPresences.get(experimentId)
   if (!room) return
@@ -279,7 +279,8 @@ export function createRealtime(fastify: FastifyInstance): Server {
   /** 订阅某个班级的成绩广播（校验班级归属；切换时先退出其它班级房间） */
   async function subscribeClass(socket: Socket, classId: string): Promise<string[]> {
     const userId = socket.data.user?.sub as string | undefined
-    if (!userId) return []
+    const role = socket.data.user?.role as string | undefined
+    if (!userId || !role || !isStaff(role)) return []
     const classIds = await loadClassIds(userId)
     if (!classIds.includes(classId)) return []
     for (const room of [...socket.rooms]) {
@@ -334,10 +335,10 @@ export function createRealtime(fastify: FastifyInstance): Server {
           removeReportPresence(socket)
         }
         socket.data.reportExperimentId = experimentId
-        socket.data.reportStuId = null
+        socket.data.reportStudentId = null
         const room = reportPresences.get(experimentId) ?? new Map<string, ReportPresence>()
         reportPresences.set(experimentId, room)
-        room.set(socket.id, { userId: user.sub, name: ctx.name, stuId: null })
+        room.set(socket.id, { userId: user.sub, name: ctx.name, studentId: null })
         await socket.join(reportRoom(experimentId))
         ack?.({ peers: reportPeers(experimentId) })
         broadcastReportPresence(experimentId)
@@ -346,14 +347,14 @@ export function createRealtime(fastify: FastifyInstance): Server {
 
     socket.on(
       'report:focus',
-      ({ experimentId, stuId } = {} as { experimentId?: string; stuId?: string | null }) => {
+      ({ experimentId, studentId } = {} as { experimentId?: string; studentId?: string | null }) => {
         if (socket.data.reportExperimentId !== experimentId) return
         const entry = reportPresences.get(experimentId)?.get(socket.id)
         if (!entry) return
-        const next = typeof stuId === 'string' && stuId.length > 0 ? stuId : null
-        if (entry.stuId === next) return
-        entry.stuId = next
-        socket.data.reportStuId = next
+        const next = typeof studentId === 'string' && studentId.length > 0 ? studentId : null
+        if (entry.studentId === next) return
+        entry.studentId = next
+        socket.data.reportStudentId = next
         broadcastReportPresence(experimentId)
       },
     )
@@ -588,7 +589,7 @@ export function emitScoreChange(classId: string, payload: ScoreChangeEvent): voi
 
 /** 报告成绩保存/删除事件（按实验广播：左侧列表刷新 + 同人「同步」提示） */
 export type ReportScoreEvent = {
-  stuId: string
+  userId: string
   /** null 表示删除 */
   score: ScoreDto | null
   byUserId: string
@@ -598,13 +599,13 @@ export type ReportScoreEvent = {
 /** 向实验房间广播报告成绩事件（「同步」内容由前端按需 GET 拉取） */
 export function emitReportScore(
   experimentId: string,
-  stuId: string,
+  userId: string,
   score: ScoreDto | null,
   byUserId: string,
   byName: string,
 ): void {
   io?.to(reportRoom(experimentId)).emit('report:score', {
-    stuId,
+    userId,
     score,
     byUserId,
     byName,

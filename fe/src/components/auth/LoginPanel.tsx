@@ -11,6 +11,7 @@ import ArrowRight from '~icons/lucide/arrow-right'
 import BookOpenCheck from '~icons/lucide/book-open-check'
 import Ellipsis from '~icons/lucide/ellipsis'
 import Fingerprint from '~icons/lucide/fingerprint'
+import GraduationCap from '~icons/lucide/graduation-cap'
 import KeyRound from '~icons/lucide/key-round'
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import ShieldCheck from '~icons/lucide/shield-check'
@@ -19,7 +20,7 @@ import Users from '~icons/lucide/users'
 import { Logo } from '@/components/ui/Logo'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { ApiError } from '@/lib/api'
+import { ApiError, isLoginSelection } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import type { IconComponent } from '@/lib/icon'
@@ -27,7 +28,6 @@ import { clearLastUser, getLastUser, lastUserIdentifier, type LastUser } from '@
 import { getAuthenticationOptions } from '@/lib/passkey'
 import { cn } from '@/lib/utils'
 
-type Role = 'TA' | 'TEACHER'
 type Method = 'password' | 'zjuam'
 
 const METHODS: { key: Method; icon: IconComponent; label: string }[] = [
@@ -45,7 +45,6 @@ export function LoginPanel() {
   const isDark = resolvedTheme === 'dark'
   const [lastUser, setLastUser] = useState<LastUser | null>(() => getLastUser())
   const [showFull, setShowFull] = useState(false)
-  const [role, setRole] = useState<Role>('TA')
   const [method, setMethod] = useState<Method>('password')
   const [identifier, setIdentifier] = useState('')
   const [account, setAccount] = useState('')
@@ -76,7 +75,6 @@ export function LoginPanel() {
 
   const continueWithOtherMethod = () => {
     if (!lastUser) return
-    setRole(lastUser.role)
     setMethod('password')
     setCaptchaToken(null)
     setIdentifier(lastIdentifier)
@@ -91,7 +89,6 @@ export function LoginPanel() {
     setLastUser(null)
     setShowFull(true)
     setPrefilled(false)
-    setRole('TA')
     setMethod('password')
     setCaptchaToken(null)
     setIdentifier('')
@@ -109,21 +106,30 @@ export function LoginPanel() {
 
     setLoading(true)
 
-    const isZjuam = role === 'TA' && method === 'zjuam'
-    const endpoint = isZjuam
-      ? '/api/auth/zjuam/login'
-      : role === 'TEACHER'
-        ? '/api/auth/login/teacher'
-        : '/api/auth/login/ta'
+    const isZjuam = method === 'zjuam'
+    const endpoint = isZjuam ? '/api/auth/zjuam/login' : '/api/auth/login'
     const body = isZjuam
       ? { account: account.trim(), password, captchaToken: captchaToken ?? undefined }
       : { identifier: identifier.trim(), password, captchaToken: captchaToken ?? undefined }
 
     const from = (location.state as { from?: string } | null)?.from
     try {
-      const user = await login(endpoint, body)
+      const result = await login(endpoint, body)
+      if (isLoginSelection(result)) {
+        navigate('/login/select', {
+          replace: true,
+          state: {
+            selectionToken: result.selectionToken,
+            candidates: result.candidates,
+            from,
+          },
+        })
+        return
+      }
+      const user = result
       toast.success(`欢迎回来，${user.name}`)
-      const dest = user.username ? (from ?? '/console') : '/setup'
+      const dest =
+        user.role === 'STUDENT' ? '/home' : user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
       if (HCAPTCHA_SITEKEY) {
@@ -136,20 +142,23 @@ export function LoginPanel() {
     }
   }
 
-  const isZjuam = role === 'TA' && method === 'zjuam'
+  const isZjuam = method === 'zjuam'
 
   const passkeyLogin = async (hint?: string) => {
     setPasskeyLoading(true)
     try {
       const { options, challengeToken } = await getAuthenticationOptions(hint)
       const assertion = await startAuthentication({ optionsJSON: options })
-      const user = await login('/api/auth/passkey/authentication-verify', {
+      const result = await login('/api/auth/passkey/authentication-verify', {
         response: assertion,
         challengeToken,
       })
+      if (isLoginSelection(result)) return
+      const user = result
       toast.success(`欢迎回来，${user.name}`)
       const from = (location.state as { from?: string } | null)?.from
-      const dest = user.username ? (from ?? '/console') : '/setup'
+      const dest =
+        user.role === 'STUDENT' ? '/home' : user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
       if ((error as Error).name === 'NotAllowedError') return
@@ -200,6 +209,8 @@ export function LoginPanel() {
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300">
                 {lastUser.role === 'TEACHER' ? (
                   <BookOpenCheck width={20} height={20} className="shrink-0" />
+                ) : lastUser.role === 'STUDENT' ? (
+                  <GraduationCap width={20} height={20} className="shrink-0" />
                 ) : (
                   <ShieldCheck width={20} height={20} className="shrink-0" />
                 )}
@@ -207,7 +218,12 @@ export function LoginPanel() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-fg">{lastUser.name}</div>
                 <div className="truncate text-xs text-fg-subtle">
-                  {lastIdentifier || '—'} · {lastUser.role === 'TEACHER' ? '教师' : '助教'}
+                  {lastIdentifier || '—'} ·{' '}
+                  {lastUser.role === 'TEACHER'
+                    ? '教师'
+                    : lastUser.role === 'STUDENT'
+                      ? '学生'
+                      : '助教'}
                 </div>
               </div>
               <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[10px] font-semibold text-fg-subtle">
@@ -240,9 +256,8 @@ export function LoginPanel() {
           </motion.div>
         ) : (
           <>
-            {/* login method selector (TA only) */}
-            {role === 'TA' && (
-              <div className="mt-6">
+            {/* login method selector */}
+            <div className="mt-6">
                 <div className="mb-1.5 text-xs font-semibold text-fg-muted">登录方式</div>
                 <div className="grid grid-cols-2 gap-1 rounded-2xl border border-line bg-sunken p-1.5">
                   {METHODS.map((item) => {
@@ -275,11 +290,10 @@ export function LoginPanel() {
                   })}
                 </div>
               </div>
-            )}
 
             <AnimatePresence mode="wait">
               <motion.form
-                key={role + method}
+                key={method}
                 onSubmit={submit}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -361,8 +375,7 @@ export function LoginPanel() {
               </motion.form>
             </AnimatePresence>
 
-            {role === 'TA' && (
-              <div className="mt-6 flex flex-col gap-4">
+            <div className="mt-6 flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-line" />
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">
@@ -382,7 +395,6 @@ export function LoginPanel() {
                   使用通行密钥登录
                 </PendingButton>
               </div>
-            )}
           </>
         )}
 

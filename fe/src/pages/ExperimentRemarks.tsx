@@ -28,18 +28,18 @@ const REMARK_COLUMNS: Array<{ type: number; label: string }> = [
   { type: REMARK_TYPE_REPORT, label: '报告评语' },
 ]
 
-function remarkKey(stuId: string, type: number): string {
-  return `${stuId}:${type}`
+function remarkKey(userId: string, type: number): string {
+  return `${userId}:${type}`
 }
 
 /** 单元格：本地编辑 + 停止输入防抖保存 */
 function RemarkCell({
-  stuId,
+  userId,
   experimentId,
   type,
   initial,
 }: {
-  stuId: string
+  userId: string
   experimentId: string
   type: number
   initial: string
@@ -51,14 +51,14 @@ function RemarkCell({
   useEffect(() => {
     setText(initial)
     savedRef.current = initial
-  }, [initial, stuId, type])
+  }, [initial, userId, type])
 
   const persist = useCallback(
     async (value: string) => {
       if (value === savedRef.current) return
       setSaving(true)
       try {
-        await saveRemark({ stuId, experimentId, type, text: value })
+        await saveRemark({ userId, experimentId, type, text: value })
         savedRef.current = value
       } catch (error) {
         toast.error(getErrorMessage(error, '附言保存失败'))
@@ -66,7 +66,7 @@ function RemarkCell({
         setSaving(false)
       }
     },
-    [stuId, experimentId, type],
+    [userId, experimentId, type],
   )
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export default function ExperimentRemarks() {
         if (cancelled) return
         setExperiment(exp)
         setStudents(checkoff.students)
-        setRemarks(new Map(remarkList.map((item) => [remarkKey(item.stuId, item.type), item.text])))
+        setRemarks(new Map(remarkList.map((item) => [remarkKey(item.userId, item.type), item.text])))
       } catch (error) {
         if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
       } finally {
@@ -178,18 +178,18 @@ export default function ExperimentRemarks() {
             </thead>
             <tbody>
               {students.map((student) => (
-                <tr key={student.stuId} className="align-top">
+                <tr key={student.userId} className="align-top">
                   <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-3">
                     <div className="font-bold">{student.name}</div>
-                    <div className="tabular text-xs text-fg-muted">{student.studentNo}</div>
+                    <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
                   </td>
                   {REMARK_COLUMNS.map((col) => (
                     <td key={col.type} className="border-b border-r border-line p-2 last:border-r-0">
                       <RemarkCell
-                        stuId={student.stuId}
+                        userId={student.userId}
                         experimentId={experimentId}
                         type={col.type}
-                        initial={remarks.get(remarkKey(student.stuId, col.type)) ?? ''}
+                        initial={remarks.get(remarkKey(student.userId, col.type)) ?? ''}
                       />
                     </td>
                   ))}

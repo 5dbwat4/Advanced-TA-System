@@ -120,8 +120,8 @@ export function StudentListPanel({
         ) : (
           visible.map((student) => {
             const active = student.personId === selectedPersonId
-            const editors = student.stuId ? (editorsByStuId.get(student.stuId) ?? []) : []
-            const flag = student.stuId ? flagsByStuId.get(student.stuId) : undefined
+            const editors = student.userId ? (editorsByStuId.get(student.userId) ?? []) : []
+            const flag = student.userId ? flagsByStuId.get(student.userId) : undefined
             const flagLines: string[] = []
             if (flag?.focusReason != null) {
               const reason = flag.focusReason.trim()
@@ -161,7 +161,7 @@ export function StudentListPanel({
                     )}
                   </span>
                   <span className="tabular block text-[11px] text-fg-subtle">
-                    {student.studentNo || `person ${student.personId}`}
+                    {student.studentId || `person ${student.personId}`}
                   </span>
                   {editors.length > 0 && (
                     <span className="mt-0.5 block truncate text-[11px] font-medium text-amber-600 dark:text-amber-400">

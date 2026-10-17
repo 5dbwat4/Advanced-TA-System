@@ -133,11 +133,11 @@ export function StudentFinder({
       <div className="mt-4 space-y-2">
         <AnimatePresence mode="popLayout">
           {filtered.map((student, i) => {
-            const studentScores = scores.filter((score) => score.stuId === student.stuId)
+            const studentScores = scores.filter((score) => score.userId === student.userId)
             const summary = summaryFor(studentScores)
             return (
               <motion.button
-                key={student.stuId}
+                key={student.userId}
                 type="button"
                 layout
                 initial={{ opacity: 0, y: 10 }}
@@ -152,7 +152,7 @@ export function StudentFinder({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-fg">{student.name}</div>
-                  <div className="tabular mt-0.5 text-xs text-fg-muted">{student.studentNo}</div>
+                  <div className="tabular mt-0.5 text-xs text-fg-muted">{student.studentId}</div>
                 </div>
                 {summary ? (
                   <Chip size="sm" variant="soft" color="accent" className="tabular">

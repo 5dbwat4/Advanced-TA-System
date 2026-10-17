@@ -106,11 +106,11 @@ function StudentPicker({
           <ListBox renderEmptyState={() => <HeroEmptyState>没有匹配的学生</HeroEmptyState>}>
             {visible.map((student) => (
               <ListBox.Item
-                key={student.stuId}
-                id={student.stuId}
-                textValue={`${student.name} ${student.studentNo}`}
+                key={student.userId}
+                id={student.userId}
+                textValue={`${student.name} ${student.studentId}`}
               >
-                {student.name} {student.studentNo}
+                {student.name} {student.studentId}
                 <ListBox.ItemIndicator />
               </ListBox.Item>
             ))}
@@ -175,7 +175,7 @@ export default function Boards() {
   const [dbIdDraft, setDbIdDraft] = useState('')
   const [boardIdDraft, setBoardIdDraft] = useState('')
   const [phoneDraft, setPhoneDraft] = useState('')
-  const [stuIdDrafts, setStuIdDrafts] = useState<Key[]>([])
+  const [userIdDrafts, setStuIdDrafts] = useState<Key[]>([])
   const [saving, setSaving] = useState(false)
 
   const openCreate = () => {
@@ -192,7 +192,7 @@ export default function Boards() {
     setDbIdDraft(board.dbId)
     setBoardIdDraft(board.boardId ?? '')
     setPhoneDraft(board.phone ?? '')
-    setStuIdDrafts(board.stuIds)
+    setStuIdDrafts(board.userIds)
     formState.open()
   }
 
@@ -204,7 +204,7 @@ export default function Boards() {
         dbId: dbIdDraft.trim(),
         boardId: boardIdDraft.trim() || null,
         phone: phoneDraft.trim() || null,
-        stuIds: stuIdDrafts.map(String),
+        userIds: userIdDrafts.map(String),
       }
       if (editingBoard) {
         const { devBoard } = await updateDevBoard(editingBoard.id, body)
@@ -236,7 +236,7 @@ export default function Boards() {
 
   const openBorrow = (board: DevBoard) => {
     setBorrowTarget(board)
-    setBorrowStuIds(board.stuIds)
+    setBorrowStuIds(board.userIds)
     setBorrowPhone(board.phone ?? '')
     borrowState.open()
   }
@@ -246,7 +246,7 @@ export default function Boards() {
     setBorrowing(true)
     try {
       const { devBoard } = await borrowDevBoard(borrowTarget.id, {
-        stuIds: borrowStuIds.map(String),
+        userIds: borrowStuIds.map(String),
         phone: borrowPhone.trim() || null,
       })
       upsertBoard(devBoard)
@@ -542,7 +542,7 @@ export default function Boards() {
                     aria-label="联系电话"
                   />
                 </div>
-                <StudentPicker students={students} value={stuIdDrafts} onChange={setStuIdDrafts} />
+                <StudentPicker students={students} value={userIdDrafts} onChange={setStuIdDrafts} />
               </Modal.Body>
               <Modal.Footer>
                 <Button slot="close" variant="secondary">

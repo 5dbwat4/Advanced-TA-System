@@ -30,9 +30,9 @@ export type CriteriaImpactChange = {
 }
 
 export type CriteriaImpactItem = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
+  studentId: string
   experimentId: string
   experimentMark: string
   experimentTitle: string
@@ -52,9 +52,9 @@ export type CriteriaImpactResult = {
 
 /** 影响计算所需的批阅输入（结构兼容 api.CriteriaImpactReview） */
 export type ImpactReviewInput = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
+  studentId: string
   experimentId: string
   experimentMark: string
   experimentTitle: string
@@ -198,9 +198,9 @@ export function computeCriteriaImpact(
     if (changes.length === 0) continue
 
     items.push({
-      stuId: review.stuId,
+      userId: review.userId,
       name: review.name,
-      studentNo: review.studentNo,
+      studentId: review.studentId,
       experimentId: review.experimentId,
       experimentMark: review.experimentMark,
       experimentTitle: review.experimentTitle,

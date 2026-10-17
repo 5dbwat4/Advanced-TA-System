@@ -5,7 +5,7 @@ export const DEFAULT_SCORE_RATIO = [2, 5, 0]
 
 /** 分数记录（来自本地 Score 表，已带评分人姓名） */
 export type XzzdPushScoreRow = {
-  stuId: string
+  userId: string
   /** 0=功能测试 1=验收问答 2=报告 */
   type: number
   score: number
@@ -15,9 +15,9 @@ export type XzzdPushScoreRow = {
 
 /** 单个学生的推送组装结果 */
 export type XzzdPushTarget = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
+  studentId: string
   /** 学在浙大 person id；未匹配到为 null */
   personId: number | null
   functionScore: number | null
@@ -180,32 +180,32 @@ export type AssemblePushTargetsInput = {
   template: string
   ratio: number[]
   /** 生成学生查看页链接（站点根地址 + 签名 token） */
-  studentViewUrl: (stuId: string) => string
+  studentViewUrl: (userId: string) => string
   /** 本地学生名单 */
-  students: Array<{ stuId: string; name: string; studentNo: string }>
+  students: Array<{ userId: string; name: string; studentId: string }>
   /** 学在浙大学生名单（用于学号 → person id 映射） */
   upstreamStudents: ZjuamCourseStudent[]
   scores: XzzdPushScoreRow[]
-  /** 该实验下每个学生的备注（{@REMARK}），key 为 stuId */
+  /** 该实验下每个学生的备注（{@REMARK}），key 为 userId */
   remarks: Map<string, string>
 }
 
 /** 按模板组装每个学生的最终分与评语（不发送任何请求） */
 export function assemblePushTargets(input: AssemblePushTargetsInput): XzzdPushTarget[] {
-  const upstreamByNo = new Map(input.upstreamStudents.map((item) => [item.studentNo, item]))
+  const upstreamByNo = new Map(input.upstreamStudents.map((item) => [item.studentId, item]))
 
   const scoresByStu = new Map<string, XzzdPushScoreRow[]>()
   for (const row of input.scores) {
-    const list = scoresByStu.get(row.stuId)
+    const list = scoresByStu.get(row.userId)
     if (list) list.push(row)
-    else scoresByStu.set(row.stuId, [row])
+    else scoresByStu.set(row.userId, [row])
   }
 
   // 验收取「验收问答」的评分人，报告取「报告」的评分人
   const preferredType = input.kind === 'report' ? 2 : 1
 
   return input.students.map((student) => {
-    const rows = scoresByStu.get(student.stuId) ?? []
+    const rows = scoresByStu.get(student.userId) ?? []
     const scoreOf = (type: number) => rows.find((row) => row.type === type)?.score ?? null
     const functionScore = scoreOf(0)
     const answerScore = scoreOf(1)
@@ -227,16 +227,16 @@ export function assemblePushTargets(input: AssemblePushTargetsInput): XzzdPushTa
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]
     const graderName = preferredGrader?.graderName ?? latestGrader?.graderName ?? null
 
-    const upstream = upstreamByNo.get(student.studentNo) ?? null
+    const upstream = upstreamByNo.get(student.studentId) ?? null
 
     const comment = renderCommentTemplate(input.template, {
-      studentViewUrl: input.studentViewUrl(student.stuId),
+      studentViewUrl: input.studentViewUrl(student.userId),
       taAssigner: graderName ?? '—',
       scoreFunction: formatScore(functionScore),
       scoreAnswer: formatScore(answerScore),
       scoreReport: formatScore(reportScore),
       timeModified: formatDateTime(modifiedAt),
-      remark: input.remarks.get(student.stuId)?.trim() || '（空）',
+      remark: input.remarks.get(student.userId)?.trim() || '（空）',
     })
 
     let skippedReason: string | null = null
@@ -244,9 +244,9 @@ export function assemblePushTargets(input: AssemblePushTargetsInput): XzzdPushTa
     else if (pushScore == null) skippedReason = '缺少成绩，无法计算推送分数'
 
     return {
-      stuId: student.stuId,
+      userId: student.userId,
       name: student.name,
-      studentNo: student.studentNo,
+      studentId: student.studentId,
       personId: upstream?.id ?? null,
       functionScore,
       answerScore,

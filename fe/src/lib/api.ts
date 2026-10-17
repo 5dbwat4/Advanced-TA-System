@@ -4,7 +4,7 @@ import { getZjuamCredential } from '@/lib/zjuam'
 
 const TOKEN_KEY = 'tasaas.token'
 
-export type Role = 'TA' | 'TEACHER'
+export type Role = 'TA' | 'TEACHER' | 'STUDENT'
 
 export type MarkdownEditorId = 'uiw' | 'mdx'
 
@@ -26,7 +26,7 @@ export type ClassInfo = {
   lastRosterSyncAt?: string | null
 }
 
-export type RosterEntry = { studentNo: string; name: string }
+export type RosterEntry = { studentId: string; name: string }
 
 export type RosterDiff = {
   added: RosterEntry[]
@@ -35,11 +35,12 @@ export type RosterDiff = {
 }
 
 export type Student = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
-  classId: string
-  klass: ClassInfo
+  studentId: string
+  classId: string | null
+  status: string
+  klass: ClassInfo | null
 }
 
 export type Ta = {
@@ -47,6 +48,7 @@ export type Ta = {
   name: string
   studentId: string
   username: string | null
+  classId: string | null
   classes: ClassInfo[]
   activated: boolean
   hasPassword: boolean
@@ -55,7 +57,7 @@ export type Ta = {
 }
 
 export type Score = {
-  stuId: string
+  userId: string
   type: number
   indId: string
   labId: string | null
@@ -79,7 +81,9 @@ export type User = {
   avatar: number | null
   studentId: string | null
   username: string | null
+  classId: string | null
   classes: ClassInfo[]
+  status: string
   hasWebauthn: boolean
   hasPassword: boolean
   passkeys: Passkey[]
@@ -150,9 +154,30 @@ export type CheckoffExperiment = {
 }
 
 export type CheckoffStudent = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
+  studentId: string
+}
+
+export type LoginCandidate = {
+  userId: string
+  name: string
+  studentId: string | null
+  classId: string | null
+  className: string | null
+  role: Role
+}
+
+export type LoginSelection = {
+  requiresSelection: true
+  selectionToken: string
+  candidates: LoginCandidate[]
+}
+
+export type LoginResult = { token: string; user: User } | LoginSelection
+
+export function isLoginSelection(result: LoginResult): result is LoginSelection {
+  return 'requiresSelection' in result && result.requiresSelection === true
 }
 
 export type CheckoffQuestion = {
@@ -430,7 +455,7 @@ export type ZjuamCourseStudent = {
   id: number
   name: string
   /** 学号 */
-  studentNo: string
+  studentId: string
 }
 
 /** 推送流程第一步（只读）拉取到的上游数据 */
@@ -443,9 +468,9 @@ export type ZjuamHomeworkSyncData = {
 
 /** 推送流程组装出的单个学生结果（对应后端 lib/xzzd-push.ts） */
 export type XzzdPushTarget = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
+  studentId: string
   /** 学在浙大 person id；未匹配到为 null */
   personId: number | null
   functionScore: number | null
@@ -509,7 +534,7 @@ export type StudentPreviewData = {
     checkoffDeadline: string | null
     reportDeadline: string | null
   }
-  student: { name: string; studentNo: string }
+  student: { userId: string; name: string; studentId: string }
   /** 生效评分占比：功能测试 / 验收问答 / 报告 */
   ratio: number[]
   total: number | null
@@ -536,20 +561,28 @@ export function fetchStudentPreview(token: string): Promise<StudentPreviewData> 
   )
 }
 
-export async function createClass(body: {
-  xzzdClassId: string
+export type CreateClassAccountInput = {
+  bindToken: string
+  classId?: string
+  type?: '2026-sys1' | '2026-sys2' | '2026-sys3'
   name: string
-  type: '2026-sys1' | '2026-sys2' | '2026-sys3'
-}): Promise<{ class: ClassInfo; user: User }> {
-  return apiFetch<{ class: ClassInfo; user: User }>('/api/classes', {
+  username: string
+  password: string
+}
+
+export type CreateClassAccountResult = {
+  token: string
+  user: User
+  class: ClassInfo
+}
+
+export function createClassAccount(
+  body: CreateClassAccountInput,
+): Promise<CreateClassAccountResult> {
+  return apiFetch<CreateClassAccountResult>('/api/classes/new-account', {
     method: 'POST',
     body: JSON.stringify(body),
   })
-}
-
-export async function joinClass(id: string): Promise<User> {
-  const res = await apiFetch<{ user: User }>(`/api/classes/${id}/join`, { method: 'POST' })
-  return res.user
 }
 
 export async function previewRoster(classId: string): Promise<RosterDiff> {
@@ -616,11 +649,11 @@ export function updateClassSettings(
 export type FocusStudent = {
   id: string
   classId: string
-  stuId: string
+  userId: string
   reason: string
   createdAt: string
   updatedAt: string
-  student: { name: string; studentNo: string }
+  student: { name: string; studentId: string }
 }
 
 export function listFocusStudents(classId: string): Promise<{ focusStudents: FocusStudent[] }> {
@@ -629,7 +662,7 @@ export function listFocusStudents(classId: string): Promise<{ focusStudents: Foc
 
 export function addFocusStudent(
   classId: string,
-  body: { stuId: string; reason?: string },
+  body: { userId: string; reason?: string },
 ): Promise<{ focusStudent: FocusStudent }> {
   return apiFetch<{ focusStudent: FocusStudent }>(`/api/classes/${classId}/focus-students`, {
     method: 'POST',
@@ -664,12 +697,12 @@ export function deleteFocusStudents(
 export type CheckpointClaim = {
   id: string
   classId: string
-  stuId: string
+  userId: string
   appliedRules: number
   appliedRuleLabels: string[]
   createdAt: string
   updatedAt: string
-  student: { name: string; studentNo: string }
+  student: { name: string; studentId: string }
 }
 
 export function fetchCheckpointClaims(classId: string): Promise<{ claims: CheckpointClaim[] }> {
@@ -678,7 +711,7 @@ export function fetchCheckpointClaims(classId: string): Promise<{ claims: Checkp
 
 export function addCheckpointStudent(
   classId: string,
-  body: { stuId: string },
+  body: { userId: string },
 ): Promise<{ claim: CheckpointClaim }> {
   return apiFetch<{ claim: CheckpointClaim }>(`/api/classes/${classId}/checkpoints`, {
     method: 'POST',
@@ -719,7 +752,7 @@ export function fetchCheckoff(params: {
 
 export function submitCheckoff(body: {
   experimentId: string
-  stuId: string
+  userId: string
   scores: { type: number; score: number | null }[]
 }): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>('/api/checkoff', {
@@ -729,9 +762,9 @@ export function submitCheckoff(body: {
 }
 
 export type CheckoffRecord = {
-  stuId: string
+  userId: string
   studentName: string
-  studentNo: string
+  studentId: string
   type: number
   score: number
   experimentMark: string
@@ -809,7 +842,7 @@ export async function fetchClassTables(classId?: string): Promise<ClassTables> {
 }
 
 export function saveScore(body: {
-  stuId: string
+  userId: string
   type: number
   indId: string
   score: number
@@ -824,7 +857,7 @@ export function listStudents(classId: string): Promise<{ students: Student[] }> 
   return apiFetch<{ students: Student[] }>(`/api/students?classId=${encodeURIComponent(classId)}`)
 }
 
-export type DevBoardStudent = { stuId: string; name: string; studentNo: string }
+export type DevBoardStudent = { userId: string; name: string; studentId: string }
 
 export type DevBoard = {
   id: string
@@ -836,7 +869,7 @@ export type DevBoard = {
   phone: string | null
   borrowed: boolean
   /** 当前登记的合用学生 id（已过滤失效学生） */
-  stuIds: string[]
+  userIds: string[]
   students: DevBoardStudent[]
   createdAt: string
   updatedAt: string
@@ -846,7 +879,7 @@ export type DevBoardInput = {
   dbId: string
   boardId?: string | null
   phone?: string | null
-  stuIds?: string[]
+  userIds?: string[]
 }
 
 export function listDevBoards(classId: string): Promise<{ devBoards: DevBoard[] }> {
@@ -881,7 +914,7 @@ export function deleteDevBoard(id: string): Promise<{ ok: true }> {
 
 export function borrowDevBoard(
   id: string,
-  body: { stuIds: string[]; phone?: string | null },
+  body: { userIds: string[]; phone?: string | null },
 ): Promise<{ devBoard: DevBoard }> {
   return apiFetch<{ devBoard: DevBoard }>(`/api/devboards/${id}/borrow`, {
     method: 'POST',
@@ -898,7 +931,7 @@ export type DevBoardImportRow = {
   boardId?: string | null
   phone?: string | null
   borrowed?: boolean
-  studentNos?: string[]
+  studentIds?: string[]
 }
 
 export type DevBoardImportResult = {
@@ -975,9 +1008,9 @@ export function deleteCriteria(key: string): Promise<{ ok: boolean }> {
 
 /** 影响预览：引用某评分标准的批阅（含身份与批阅内容） */
 export type CriteriaImpactReview = {
-  stuId: string
+  userId: string
   name: string
-  studentNo: string
+  studentId: string
   experimentId: string
   experimentMark: string
   experimentTitle: string
@@ -1001,7 +1034,7 @@ export async function fetchCriteriaImpact(
 }
 
 export type ReportReview = {
-  stuId: string
+  userId: string
   experimentId: string
   ruleId: string
   ruleContent: unknown
@@ -1011,17 +1044,17 @@ export type ReportReview = {
 }
 
 export async function fetchReportReview(
-  stuId: string,
+  userId: string,
   experimentId: string,
 ): Promise<ReportReview | null> {
   const res = await apiFetch<{ review: ReportReview | null }>(
-    `/api/report-reviews?stuId=${encodeURIComponent(stuId)}&experimentId=${encodeURIComponent(experimentId)}`,
+    `/api/report-reviews?userId=${encodeURIComponent(userId)}&experimentId=${encodeURIComponent(experimentId)}`,
   )
   return res.review
 }
 
 export function saveReportReview(body: {
-  stuId: string
+  userId: string
   experimentId: string
   ruleId: string
   ruleContent: unknown
@@ -1037,7 +1070,7 @@ export const REMARK_TYPE_CHECKOFF = 0
 export const REMARK_TYPE_REPORT = 1
 
 export type Remark = {
-  stuId: string
+  userId: string
   experimentId: string
   type: number
   text: string
@@ -1047,12 +1080,12 @@ export type Remark = {
 }
 
 export async function fetchRemark(
-  stuId: string,
+  userId: string,
   experimentId: string,
   type: number,
 ): Promise<Remark | null> {
   const res = await apiFetch<{ remark: Remark | null }>(
-    `/api/remarks?stuId=${encodeURIComponent(stuId)}&experimentId=${encodeURIComponent(experimentId)}&type=${type}`,
+    `/api/remarks?userId=${encodeURIComponent(userId)}&experimentId=${encodeURIComponent(experimentId)}&type=${type}`,
   )
   return res.remark
 }
@@ -1066,7 +1099,7 @@ export async function fetchExperimentRemarks(experimentId: string): Promise<Rema
 }
 
 export function saveRemark(body: {
-  stuId: string
+  userId: string
   experimentId: string
   type: number
   text: string

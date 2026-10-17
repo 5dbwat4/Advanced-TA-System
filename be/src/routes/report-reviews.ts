@@ -5,12 +5,12 @@ import { requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
 
 const listQuerySchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   experimentId: z.string().trim().min(1),
 })
 
 const saveSchema = z.object({
-  stuId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
   experimentId: z.string().trim().min(1),
   ruleId: z.string().regex(/^[0-9a-f]{48}$/),
   ruleContent: z.unknown(),
@@ -26,9 +26,9 @@ export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
     }
 
-    const { stuId, experimentId } = parsed.data
+    const { userId, experimentId } = parsed.data
     const review = await prisma.reportReview.findUnique({
-      where: { stuId_experimentId: { stuId, experimentId } },
+      where: { userId_experimentId: { userId, experimentId } },
       include: { remarkBy: { select: { name: true } } },
     })
     if (!review) {
@@ -37,7 +37,7 @@ export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.send({
       review: {
-        stuId: review.stuId,
+        userId: review.userId,
         experimentId: review.experimentId,
         ruleId: review.ruleId,
         ruleContent: parseJson(review.ruleContent),
@@ -57,10 +57,12 @@ export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { stuId, experimentId, ruleId, ruleContent } = parsed.data
+    const { userId, experimentId, ruleId, ruleContent } = parsed.data
     const { sub } = request.user as { sub: string }
 
-    const student = await prisma.student.findUnique({ where: { stuId } })
+    const student = await prisma.user.findFirst({
+      where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+    })
     if (!student) {
       return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
     }
@@ -71,15 +73,15 @@ export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const content = JSON.stringify(ruleContent ?? null)
     const review = await prisma.reportReview.upsert({
-      where: { stuId_experimentId: { stuId, experimentId } },
+      where: { userId_experimentId: { userId, experimentId } },
       update: { ruleId, ruleContent: content, remarkById: sub },
-      create: { stuId, experimentId, ruleId, ruleContent: content, remarkById: sub },
+      create: { userId, experimentId, ruleId, ruleContent: content, remarkById: sub },
       include: { remarkBy: { select: { name: true } } },
     })
 
     return reply.send({
       review: {
-        stuId: review.stuId,
+        userId: review.userId,
         experimentId: review.experimentId,
         ruleId: review.ruleId,
         ruleContent: parseJson(review.ruleContent),

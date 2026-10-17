@@ -14,7 +14,14 @@ export function RedirectIfAuthed() {
     )
   }
 
-  if (user) return <Navigate to={user.username ? '/console' : '/setup'} replace />
+  if (user) {
+    return (
+      <Navigate
+        to={user.role === 'STUDENT' ? '/home' : user.username ? '/console' : '/setup'}
+        replace
+      />
+    )
+  }
 
   return <Outlet />
 }

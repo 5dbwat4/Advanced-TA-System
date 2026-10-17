@@ -7,13 +7,13 @@ import { connectScoreSocket } from '@/lib/realtime'
 export type ReportPeer = {
   userId: string
   name: string
-  /** 正在批改的学生（Student.stuId），未选中为 null */
-  stuId: string | null
+  /** 正在批改的学生（User.id），未选中为 null */
+  studentId: string | null
 }
 
 /** 他人保存 / 删除报告成绩事件（「同步」时会再从数据库 GET 最新内容） */
 export type ReportScoreEvent = {
-  stuId: string
+  userId: string
   /** null 表示删除 */
   score: Score | null
   byUserId: string
@@ -22,8 +22,8 @@ export type ReportScoreEvent = {
 
 type ReportRoomOptions = {
   experimentId: string | undefined
-  /** 当前正在批改的学生（stuId），未选中 / 未匹配为 null */
-  stuId: string | null
+  /** 当前正在批改的学生（User.id），未选中 / 未匹配为 null */
+  studentId: string | null
   onPresence: (peers: ReportPeer[]) => void
   onScore: (event: ReportScoreEvent) => void
 }
@@ -34,16 +34,16 @@ type ReportRoomOptions = {
  */
 export function useReportRoom({
   experimentId,
-  stuId,
+  studentId,
   onPresence,
   onScore,
 }: ReportRoomOptions): void {
   const presenceRef = useRef(onPresence)
   const scoreRef = useRef(onScore)
-  const stuIdRef = useRef(stuId)
+  const studentIdRef = useRef(studentId)
   presenceRef.current = onPresence
   scoreRef.current = onScore
-  stuIdRef.current = stuId
+  studentIdRef.current = studentId
 
   useEffect(() => {
     if (!experimentId) return
@@ -60,7 +60,7 @@ export function useReportRoom({
         { experimentId },
         (res: { peers?: ReportPeer[]; error?: string }) => {
           if (res?.peers) applyPresence(res.peers)
-          socket.emit('report:focus', { experimentId, stuId: stuIdRef.current })
+          socket.emit('report:focus', { experimentId, studentId: studentIdRef.current })
         },
       )
     }
@@ -81,6 +81,6 @@ export function useReportRoom({
 
   useEffect(() => {
     if (!experimentId) return
-    connectScoreSocket().emit('report:focus', { experimentId, stuId })
-  }, [experimentId, stuId])
+    connectScoreSocket().emit('report:focus', { experimentId, studentId })
+  }, [experimentId, studentId])
 }

@@ -22,22 +22,22 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(401).send({ error: 'INVALID_TOKEN', message: '链接无效或已损坏' })
     }
 
-    const { stuId, expId } = payload
-    if (typeof stuId !== 'string' || typeof expId !== 'string') {
+    const { userId, experimentId } = payload
+    if (typeof userId !== 'string' || typeof experimentId !== 'string') {
       return reply.code(401).send({ error: 'INVALID_TOKEN', message: '链接无效或已损坏' })
     }
 
     const [experiment, student] = await Promise.all([
       prisma.experiment.findUnique({
-        where: { id: expId },
+        where: { id: experimentId },
         include: {
           klass: { select: { id: true, name: true } },
           questionBank: { select: { name: true } },
         },
       }),
-      prisma.student.findUnique({
-        where: { stuId },
-        select: { stuId: true, name: true, studentNo: true, classId: true },
+      prisma.user.findFirst({
+        where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+        select: { id: true, name: true, studentId: true, classId: true },
       }),
     ])
     if (!experiment || !student || student.classId !== experiment.classId) {
@@ -47,17 +47,17 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
     const [klass, scoreRows, reportReview, remarkRows] = await Promise.all([
       prisma.class.findUnique({ where: { id: experiment.classId }, select: { settings: true } }),
       prisma.score.findMany({
-        where: { stuId, indId: experiment.id, type: { in: [0, 1, 2] } },
+        where: { userId, indId: experiment.id, type: { in: [0, 1, 2] } },
         include: { grader: { select: { name: true } } },
         orderBy: { type: 'asc' },
       }),
       prisma.reportReview.findUnique({
-        where: { stuId_experimentId: { stuId, experimentId: experiment.id } },
+        where: { userId_experimentId: { userId, experimentId: experiment.id } },
         select: { ruleId: true, ruleContent: true },
       }),
       // 附言按类型分开存储（0=验收，1=实验报告），学生页两类都展示
       prisma.remark.findMany({
-        where: { stuId, experimentId: experiment.id, text: { not: '' } },
+        where: { userId, experimentId: experiment.id, text: { not: '' } },
         orderBy: { type: 'asc' },
         select: { type: true, text: true },
       }),
@@ -97,7 +97,7 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
         checkoffDeadline: experiment.checkoffDeadline,
         reportDeadline: experiment.reportDeadline,
       },
-      student: { name: student.name, studentNo: student.studentNo },
+      student: { userId: student.id, name: student.name, studentId: student.studentId ?? '' },
       ratio,
       total,
       scores: scoreRows.map((row) => ({

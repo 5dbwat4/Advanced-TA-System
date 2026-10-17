@@ -125,7 +125,7 @@ function rowsFromTable(table: string[][]): { rows: DevBoardImportRow[]; errors: 
       dbId,
       boardId: (cells[1] ?? '').trim() || null,
       phone: (cells[2] ?? '').trim() || null,
-      studentNos: splitStudentNos(cells[3] ?? ''),
+      studentIds: splitStudentNos(cells[3] ?? ''),
       borrowed: parseBorrowed(cells[4] ?? ''),
     })
   }
@@ -359,7 +359,7 @@ export function BulkImportModal({ classId, state, onImported }: BulkImportModalP
                       >
                         <span className="tabular font-semibold">{row.dbId}</span>
                         <span className="truncate text-fg-subtle">
-                          {row.boardId || '—'} · {row.studentNos?.length ?? 0} 人
+                          {row.boardId || '—'} · {row.studentIds?.length ?? 0} 人
                           {row.borrowed ? ' · 已借出' : ''}
                         </span>
                       </div>

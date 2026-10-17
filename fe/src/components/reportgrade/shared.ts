@@ -7,10 +7,10 @@ import type { Score } from '@/lib/api'
 export type GradeStudent = {
   /** 学在浙大 person id */
   personId: number
-  /** 本地 Student.stuId；未按学号匹配到为 null */
-  stuId: string | null
+  /** 本地 Student.userId；未按学号匹配到为 null */
+  userId: string | null
   name: string
-  studentNo: string
+  studentId: string
   /** 本地报告分（Score type=2） */
   score: Score | null
 }
@@ -24,8 +24,8 @@ export function formatScore(value: number): string {
 export type ReportSync = {
   /** 递增令牌，变化即触发一次覆盖 */
   nonce: number
-  /** 该内容所属学生（stuId），与当前学生不符时忽略 */
-  stuId: string
+  /** 该内容所属学生（userId），与当前学生不符时忽略 */
+  userId: string
   ruleId: string | null
   ruleContent: unknown
   remark: string

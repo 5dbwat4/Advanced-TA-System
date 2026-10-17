@@ -7,7 +7,7 @@ export type ScoreChangeEvent =
       action: 'upsert'
       classId: string
       score: {
-        stuId: string
+        userId: string
         type: number
         indId: string
         labId: string | null
@@ -18,7 +18,7 @@ export type ScoreChangeEvent =
         updatedAt: string
       }
     }
-  | { action: 'delete'; classId: string; stuId: string; type: number; indId: string }
+  | { action: 'delete'; classId: string; userId: string; type: number; indId: string }
 
 let socket: Socket | null = null
 

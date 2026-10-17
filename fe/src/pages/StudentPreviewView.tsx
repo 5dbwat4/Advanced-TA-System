@@ -1,6 +1,7 @@
 import { Button, Spinner } from '@heroui/react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import CalendarClock from '~icons/lucide/calendar-clock'
 import CalendarPlus from '~icons/lucide/calendar-plus'
@@ -26,6 +27,7 @@ import {
   type StudentPreviewData,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
+import { useAuth } from '@/lib/auth'
 import { formatDateTime } from '@/lib/format'
 import { ratioPercentages } from '@/lib/scoring'
 import { SCORE_TYPES } from '@/lib/scores'
@@ -34,10 +36,12 @@ import { cn } from '@/lib/utils'
 export default function StudentPreviewView() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const { user, exchangeStudentPreview } = useAuth()
   const token = params.get('token')
   const [data, setData] = useState<StudentPreviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [entering, setEntering] = useState(false)
 
   useEffect(() => {
     if (!token) {
@@ -86,7 +90,12 @@ export default function StudentPreviewView() {
           <>
             <StudentPreviewContent data={data} />
             <div className="mt-4">
-              <Button variant="secondary" fullWidth onPress={() => navigate('/console')}>
+              <Button
+                variant="secondary"
+                fullWidth
+                isDisabled={entering}
+                onPress={() => void enterHome()}
+              >
                 <House width={15} height={15} className="shrink-0" />
                 进入我的主页
               </Button>
@@ -152,7 +161,7 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
               <GraduationCap width={18} height={18} className="shrink-0 text-brand-600 dark:text-brand-300" />
               {student.name}
             </div>
-            <div className="tabular mt-0.5 text-xs text-fg-subtle">{student.studentNo}</div>
+            <div className="tabular mt-0.5 text-xs text-fg-subtle">{student.studentId}</div>
           </div>
           <div className="text-right">
             <div className="text-xs text-fg-subtle">总评</div>
@@ -174,7 +183,29 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
           <tbody>
             {SCORE_TYPES.map(({ value, label }) => {
               const row = data.scores.find((item) => item.type === value)
-              return (
+  const enterHome = async () => {
+    if (!data) return
+    if (user?.id === data.student.userId) {
+      navigate('/home')
+      return
+    }
+    if (!token) {
+      navigate('/login')
+      return
+    }
+    setEntering(true)
+    try {
+      await exchangeStudentPreview(token)
+      toast.success('已进入学生主页')
+      navigate('/home')
+    } catch (err) {
+      toast.error(getErrorMessage(err, '进入学生主页失败'))
+    } finally {
+      setEntering(false)
+    }
+  }
+
+  return (
                 <tr key={value}>
                   <td className="border-b border-line py-3">
                     {label}

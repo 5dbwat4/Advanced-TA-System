@@ -102,7 +102,7 @@ export function ImpactPreview({
         <div className="text-sm font-semibold text-fg">
           {item.name}
           <span className="tabular ml-2 text-[11px] font-normal text-fg-subtle">
-            {item.studentNo}
+            {item.studentId}
           </span>
         </div>
         <div className="text-xs text-fg-muted">

@@ -1,3 +1,4 @@
+import type { User } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
@@ -7,6 +8,22 @@ import { prisma } from '../lib/prisma'
 const studentsQuerySchema = z.object({
   classId: z.string().trim().min(1).optional(),
 })
+
+type StudentRow = User & {
+  klass: { id: string; name: string; type: string; xzzdClassId: string | null } | null
+}
+
+/** 名单对外结构 */
+function toStudent(user: StudentRow) {
+  return {
+    userId: user.id,
+    name: user.name,
+    studentId: user.studentId ?? '',
+    classId: user.classId,
+    status: user.status,
+    klass: user.klass,
+  }
+}
 
 export const rosterRoutes: FastifyPluginAsync = async (fastify) => {
   /** 班级列表 */
@@ -32,23 +49,23 @@ export const rosterRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
       }
 
-      const students = await prisma.student.findMany({
-        where: { classId: filterClassId },
+      const students = await prisma.user.findMany({
+        where: { classId: filterClassId, role: 'STUDENT', status: 'ACTIVE' },
         include: { klass: { select: { id: true, name: true, type: true, xzzdClassId: true } } },
-        orderBy: [{ studentNo: 'asc' }, { classId: 'asc' }],
+        orderBy: [{ studentId: 'asc' }, { classId: 'asc' }],
       })
-      return { students }
+      return { students: students.map(toStudent) }
     }
 
     if (classIds.length === 0) {
       return { students: [] }
     }
 
-    const students = await prisma.student.findMany({
-      where: { classId: { in: classIds } },
+    const students = await prisma.user.findMany({
+      where: { classId: { in: classIds }, role: 'STUDENT', status: 'ACTIVE' },
       include: { klass: { select: { id: true, name: true, type: true, xzzdClassId: true } } },
-      orderBy: [{ studentNo: 'asc' }, { classId: 'asc' }],
+      orderBy: [{ studentId: 'asc' }, { classId: 'asc' }],
     })
-    return { students }
+    return { students: students.map(toStudent) }
   })
 }

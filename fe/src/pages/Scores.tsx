@@ -46,7 +46,7 @@ import { resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 
 function toScoreMap(scores: Score[]): Map<string, Score> {
-  return new Map(scores.map((item) => [scoreKey(item.stuId, item.type, item.indId), item]))
+  return new Map(scores.map((item) => [scoreKey(item.userId, item.type, item.indId), item]))
 }
 
 type SortDir = 'asc' | 'desc'
@@ -113,10 +113,10 @@ function sortStudents(
   const compare = (a: Student, b: Student): number => {
     if (!indId || type === undefined) {
       const cmp = byName(a, b)
-      return cmp !== 0 ? cmp * factor : a.studentNo.localeCompare(b.studentNo)
+      return cmp !== 0 ? cmp * factor : a.studentId.localeCompare(b.studentId)
     }
-    const va = scores.get(scoreKey(a.stuId, type, indId))?.score ?? null
-    const vb = scores.get(scoreKey(b.stuId, type, indId))?.score ?? null
+    const va = scores.get(scoreKey(a.userId, type, indId))?.score ?? null
+    const vb = scores.get(scoreKey(b.userId, type, indId))?.score ?? null
     if (va === null || vb === null) {
       if (va === null && vb === null) return byName(a, b)
       return va === null ? 1 : -1
@@ -251,10 +251,10 @@ export default function Scores() {
       setScores((prev) => {
         const map = new Map(prev)
         if (event.action === 'upsert') {
-          const { stuId, type, indId } = event.score
-          map.set(scoreKey(stuId, type, indId), event.score)
+          const { userId, type, indId } = event.score
+          map.set(scoreKey(userId, type, indId), event.score)
         } else {
-          map.delete(scoreKey(event.stuId, event.type, event.indId))
+          map.delete(scoreKey(event.userId, event.type, event.indId))
         }
         return map
       })
@@ -272,12 +272,12 @@ export default function Scores() {
 
   const commitScore = useCallback(
     async (student: Student, type: number, indId: string, next: number | null) => {
-      const key = scoreKey(student.stuId, type, indId)
+      const key = scoreKey(student.userId, type, indId)
       try {
         if (next === null) {
           await apiFetch<{ ok: true }>('/api/scores', {
             method: 'DELETE',
-            body: JSON.stringify({ stuId: student.stuId, type, indId }),
+            body: JSON.stringify({ userId: student.userId, type, indId }),
           })
           setScores((prev) => {
             const map = new Map(prev)
@@ -287,7 +287,7 @@ export default function Scores() {
         } else {
           const res = await apiFetch<{ score: Score }>('/api/scores', {
             method: 'PUT',
-            body: JSON.stringify({ stuId: student.stuId, type, indId, score: next }),
+            body: JSON.stringify({ userId: student.userId, type, indId, score: next }),
           })
           setScores((prev) => {
             const map = new Map(prev)
@@ -343,7 +343,7 @@ export default function Scores() {
   const experimentTotal = (student: Student, experiment: Experiment) =>
     weightedTotal(
       SCORE_TYPES.map(
-        (type) => scores.get(scoreKey(student.stuId, type.value, experiment.id))?.score ?? null,
+        (type) => scores.get(scoreKey(student.userId, type.value, experiment.id))?.score ?? null,
       ),
       resolveScoreRatio(classSettings, experiment.id),
     )
@@ -360,7 +360,7 @@ export default function Scores() {
       if (visibleStudents.length === 0) {
         await applyRoster(currentClass.id, {
           added: diff.added,
-          removed: diff.removed.map((item) => item.studentNo),
+          removed: diff.removed.map((item) => item.studentId),
         })
         toast.success('名单已导入')
         await refresh()
@@ -382,7 +382,7 @@ export default function Scores() {
     try {
       await applyRoster(currentClass.id, {
         added: pendingDiff.added,
-        removed: pendingDiff.removed.map((item) => item.studentNo),
+        removed: pendingDiff.removed.map((item) => item.studentId),
         expectedSyncAt: currentClass.lastRosterSyncAt ?? undefined,
       })
       toast.success('名单已更新')
@@ -472,14 +472,14 @@ export default function Scores() {
                         <div className="flex max-h-40 flex-col gap-1 overflow-auto">
                           {pendingDiff.added.map((entry) => (
                             <div
-                              key={entry.studentNo}
+                              key={entry.studentId}
                               className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
                             >
                               <div className="min-w-0 flex-1 truncate text-sm font-semibold">
                                 {entry.name}
                               </div>
                               <span className="tabular shrink-0 text-xs text-fg-subtle">
-                                {entry.studentNo}
+                                {entry.studentId}
                               </span>
                             </div>
                           ))}
@@ -500,20 +500,20 @@ export default function Scores() {
                           <div className="flex max-h-40 flex-col gap-1 overflow-auto">
                             {pendingDiff.removed.map((entry) => (
                               <div
-                                key={entry.studentNo}
+                                key={entry.studentId}
                                 className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
                               >
                                 <div className="min-w-0 flex-1 truncate text-sm font-semibold">
                                   {entry.name}
                                 </div>
                                 <span className="tabular shrink-0 text-xs text-fg-subtle">
-                                  {entry.studentNo}
+                                  {entry.studentId}
                                 </span>
                               </div>
                             ))}
                           </div>
                           <p className="text-xs text-danger">
-                            移除将删除这些学生及其全部分数，操作不可撤销。
+                            移除后学生将无法登录，历史成绩保留；重新加入名单后可恢复。
                           </p>
                         </>
                       )}
@@ -650,16 +650,16 @@ export default function Scores() {
                 </thead>
                 <tbody>
                   {sortedStudents.map((student) => (
-                    <tr key={student.stuId} className="transition-colors hover:bg-sunken/40">
+                    <tr key={student.userId} className="transition-colors hover:bg-sunken/40">
                       <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
                         <div className="font-bold">{student.name}</div>
-                        <div className="tabular text-xs text-fg-muted">{student.studentNo}</div>
+                        <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
                       </td>
                       {classExperiments.flatMap((exp) => {
                         const total = experimentTotal(student, exp)
                         return [
                           ...SCORE_TYPES.map((type) => {
-                            const key = scoreKey(student.stuId, type.value, exp.id)
+                            const key = scoreKey(student.userId, type.value, exp.id)
                             return (
                               <td
                                 key={key}
@@ -694,7 +694,7 @@ export default function Scores() {
                         ]
                       })}
                       {extraProjects.map((name) => {
-                        const key = scoreKey(student.stuId, SCORE_TYPE_EXTRA, name)
+                        const key = scoreKey(student.userId, SCORE_TYPE_EXTRA, name)
                         return (
                           <td
                             key={`extra:${name}`}

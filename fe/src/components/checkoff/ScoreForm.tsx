@@ -52,7 +52,7 @@ export function ScoreForm({
       if (found) next[type.value] = found.score
     }
     setValues(next)
-  }, [student.stuId, existingScores])
+  }, [student.userId, existingScores])
 
   // 仅取功能测试 / 验收问答的权重；两者都为 0 时退化为等权，避免总分为空
   const rawWeights = SCORED_TYPES.map((type) => ratio[type.value] ?? 0)
@@ -72,7 +72,7 @@ export function ScoreForm({
     const scores = SCORED_TYPES.map((type) => ({ type: type.value, score: values[type.value] }))
     setSaving(true)
     try {
-      await submitCheckoff({ experimentId, stuId: student.stuId, scores })
+      await submitCheckoff({ experimentId, userId: student.userId, scores })
       toast.success(`已保存 · ${student.name}`)
       onSaved()
     } catch (error) {
@@ -101,7 +101,7 @@ export function ScoreForm({
         </div>
         <div className="min-w-0 flex-1">
           <span className="font-semibold text-fg">{student.name}</span>
-          <span className="tabular ml-2 text-xs text-fg-muted">{student.studentNo}</span>
+          <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
         <span className="text-xs text-fg-subtle">默认 100，可按需下调</span>
       </div>
@@ -178,7 +178,7 @@ export function ScoreForm({
 
       <div className="mt-4 rounded-2xl border border-line bg-elevated p-5">
         <RemarkField
-          stuId={student.stuId}
+          userId={student.userId}
           experimentId={experimentId}
           type={REMARK_TYPE_CHECKOFF}
         />

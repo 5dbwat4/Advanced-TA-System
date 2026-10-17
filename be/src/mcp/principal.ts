@@ -47,7 +47,7 @@ export async function resolveMcpPrincipal(
 
   const record = await prisma.personalAccessToken.findUnique({
     where: { tokenHash: hashToken(parsed.secret) },
-    include: { user: { include: { classes: { select: { id: true } } } } },
+    include: { user: { select: { name: true, role: true, classId: true, status: true } } },
   })
   if (!record || record.prefix !== parsed.prefix) {
     unauthorized(reply, '访问令牌无效')
@@ -61,7 +61,7 @@ export async function resolveMcpPrincipal(
     unauthorized(reply, '访问令牌已过期')
     return null
   }
-  if (!isStaff(record.user.role)) {
+  if (!isStaff(record.user.role) || record.user.status !== 'ACTIVE') {
     reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问 MCP' })
     return null
   }
@@ -76,7 +76,7 @@ export async function resolveMcpPrincipal(
     role: record.user.role,
     tokenId: record.id,
     scopes: new Set(parseScopes(record.scopes)),
-    classIds: record.user.classes.map((c) => c.id),
+    classIds: record.user.classId ? [record.user.classId] : [],
   }
 }
 

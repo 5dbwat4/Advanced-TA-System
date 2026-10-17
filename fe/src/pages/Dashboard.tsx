@@ -86,8 +86,8 @@ export default function Dashboard() {
           for (const score of classTables.scores) {
             if (score.graderId !== myUserId) continue
             if (new Date(score.updatedAt).getTime() < todayStart) continue
-            if (score.type === 2) reportKeys.add(`${score.indId}:${score.stuId}`)
-            else if (score.type === 0) checkoffKeys.add(`${score.indId}:${score.stuId}`)
+            if (score.type === 2) reportKeys.add(`${score.indId}:${score.userId}`)
+            else if (score.type === 0) checkoffKeys.add(`${score.indId}:${score.userId}`)
           }
           setMyReports(reportKeys.size)
           setMyCheckoffs(checkoffKeys.size)
@@ -120,7 +120,7 @@ export default function Dashboard() {
     const ids = new Set(
       tables.scores
         .filter((score) => score.indId === selectedId && (score.type === 0 || score.type === 1))
-        .map((score) => score.stuId),
+        .map((score) => score.userId),
     )
     return ids.size
   }, [tables, selectedId])
@@ -139,14 +139,14 @@ export default function Dashboard() {
       try {
         const preview = await fetchXzzdPushPreview(selectedId, 'report')
         if (cancelled) return
-        const stuIdByNo = new Map(
-          tables.students.map((student) => [student.studentNo, student.stuId]),
+        const userIdByNo = new Map(
+          tables.students.map((student) => [student.studentId, student.userId]),
         )
-        const noByPerson = new Map(preview.students.map((student) => [student.id, student.studentNo]))
+        const noByPerson = new Map(preview.students.map((student) => [student.id, student.studentId]))
         const gradedStuIds = new Set(
           tables.scores
             .filter((score) => score.type === 2 && score.indId === selectedId)
-            .map((score) => score.stuId),
+            .map((score) => score.userId),
         )
         const personIds = new Set<number>()
         let graded = 0
@@ -154,9 +154,9 @@ export default function Dashboard() {
           const personId = row.created_by?.id
           if (personId == null) continue
           personIds.add(personId)
-          const studentNo = noByPerson.get(personId)
-          const stuId = studentNo ? stuIdByNo.get(studentNo) : undefined
-          if (stuId && gradedStuIds.has(stuId)) graded += 1
+          const studentId = noByPerson.get(personId)
+          const userId = studentId ? userIdByNo.get(studentId) : undefined
+          if (userId && gradedStuIds.has(userId)) graded += 1
         }
         setSubmitted(personIds.size)
         setUngraded(personIds.size - graded)

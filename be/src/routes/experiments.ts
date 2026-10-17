@@ -240,14 +240,14 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     const local = await runStep('collect-local', '读取实验配置与学生成绩', async () => {
       const [klass, localStudents, scoreRows, remarkRows] = await Promise.all([
         prisma.class.findUnique({ where: { id: classId }, select: { settings: true } }),
-        prisma.student.findMany({
-          where: { classId },
-          select: { stuId: true, name: true, studentNo: true },
+        prisma.user.findMany({
+          where: { classId, role: 'STUDENT', status: 'ACTIVE' },
+          select: { id: true, name: true, studentId: true },
         }),
         prisma.score.findMany({
           where: { labId: id, type: { in: [0, 1, 2] } },
           select: {
-            stuId: true,
+            userId: true,
             type: true,
             score: true,
             updatedAt: true,
@@ -259,21 +259,25 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
             experimentId: id,
             type: kind === 'report' ? REMARK_TYPE_REPORT : REMARK_TYPE_CHECKOFF,
           },
-          select: { stuId: true, text: true },
+          select: { userId: true, text: true },
         }),
       ])
 
       return {
         settings: parseClassSettings(klass?.settings ?? null),
-        students: localStudents,
+        students: localStudents.map((user) => ({
+          userId: user.id,
+          name: user.name,
+          studentId: user.studentId ?? '',
+        })),
         scores: scoreRows.map((row) => ({
-          stuId: row.stuId,
+          userId: row.userId,
           type: row.type,
           score: row.score,
           graderName: row.grader?.name ?? null,
           updatedAt: row.updatedAt,
         })),
-        remarks: new Map(remarkRows.map((row) => [row.stuId, row.text])),
+        remarks: new Map(remarkRows.map((row) => [row.userId, row.text])),
       }
     })
     if (isDisconnected()) return null
@@ -290,7 +294,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
           kind,
           template: typeof templateRaw === 'string' ? templateRaw : '',
           ratio: resolveScoreRatio(local.settings, id),
-          studentViewUrl: (stuId) => buildStudentViewUrl(fastify, stuId, id),
+          studentViewUrl: (userId) => buildStudentViewUrl(fastify, userId, id),
           students: local.students,
           upstreamStudents: students,
           scores: local.scores,
@@ -571,7 +575,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
           '推送成绩与评语',
           async () => {
             const records: Array<{
-              stuId: string
+              userId: string
               personId: number
               submissionId: number | null
               score: number
@@ -585,7 +589,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
               const upstream = upstreamScoreByStudent.get(target.personId) ?? null
               if (isSameAsUpstream({ pushScore: target.pushScore, comment: target.comment }, upstream)) {
                 unchangedCount += 1
-                send('push', { stuId: target.stuId, status: 'unchanged' })
+                send('push', { userId: target.userId, status: 'unchanged' })
                 send('step', {
                   id: 'push-scores',
                   label: '推送成绩与评语',
@@ -596,7 +600,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
               }
 
               const submission = latestSubmissionOf(submissions, target.personId)
-              send('push', { stuId: target.stuId, status: 'pushing' })
+              send('push', { userId: target.userId, status: 'pushing' })
               try {
                 await pushSubmissionScore(account, password, activityId, {
                   submissionId: submission?.id ?? null,
@@ -606,20 +610,20 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
                 })
               } catch (error) {
                 send('push', {
-                  stuId: target.stuId,
+                  userId: target.userId,
                   status: 'failed',
                   message: error instanceof Error ? error.message : '推送失败',
                 })
                 throw error
               }
               records.push({
-                stuId: target.stuId,
+                userId: target.userId,
                 personId: target.personId,
                 submissionId: submission?.id ?? null,
                 score: target.pushScore,
                 comment: target.comment,
               })
-              send('push', { stuId: target.stuId, status: 'pushed' })
+              send('push', { userId: target.userId, status: 'pushed' })
               send('step', {
                 id: 'push-scores',
                 label: '推送成绩与评语',

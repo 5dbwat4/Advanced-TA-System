@@ -96,7 +96,7 @@ interface EnrollmentsResponse {
   enrollments?: ZjuamEnrollmentEntry[]
 }
 
-export type ZjuamEnrollment = { studentNo: string; name: string }
+export type ZjuamEnrollment = { studentId: string; name: string }
 
 /** 学在浙大作业（activity type = "homework"）摘要 */
 export type ZjuamHomeworkActivity = {
@@ -163,7 +163,7 @@ export type ZjuamCourseStudent = {
   id: number
   name: string
   /** 学号 */
-  studentNo: string
+  studentId: string
 }
 
 /** 推送流程第一步（只读）拉取到的作业数据 */
@@ -421,10 +421,10 @@ export async function listEnrollments(
     return enrollments
       .filter((entry) => Array.isArray(entry.roles) && entry.roles.includes('student'))
       .map((entry) => ({
-        studentNo: String(entry.user?.user_no ?? '').trim(),
+        studentId: String(entry.user?.user_no ?? '').trim(),
         name: String(entry.user?.name ?? '').trim(),
       }))
-      .filter((entry) => entry.studentNo.length > 0 && entry.name.length > 0)
+      .filter((entry) => entry.studentId.length > 0 && entry.name.length > 0)
   })
 }
 
@@ -628,7 +628,7 @@ export async function fetchCourseStudents(
       .map((item) => ({
         id: Number(item.id),
         name: String(item.name ?? '').trim(),
-        studentNo: String(item.user_no ?? '').trim(),
+        studentId: String(item.user_no ?? '').trim(),
       }))
       .filter((item) => Number.isFinite(item.id) && item.name.length > 0)
   })

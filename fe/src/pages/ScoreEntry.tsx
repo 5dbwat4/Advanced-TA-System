@@ -43,7 +43,7 @@ import { extraProjectNames, SCORE_LIMIT, SCORE_MAX, SCORE_TYPE_EXTRA, scoreKey }
 import { useCurrentClass } from '@/lib/store'
 
 function toScoreMap(scores: Score[]): Map<string, Score> {
-  return new Map(scores.map((item) => [scoreKey(item.stuId, item.type, item.indId), item]))
+  return new Map(scores.map((item) => [scoreKey(item.userId, item.type, item.indId), item]))
 }
 
 /** 独立计分项目（type=3）的分数录入页：左侧全部学生 + 搜索，右侧「将分数应用于…」 */
@@ -144,10 +144,10 @@ export default function ScoreEntry() {
       setScores((prev) => {
         const map = new Map(prev)
         if (event.action === 'upsert') {
-          const { stuId, type, indId } = event.score
-          map.set(scoreKey(stuId, type, indId), event.score)
+          const { userId, type, indId } = event.score
+          map.set(scoreKey(userId, type, indId), event.score)
         } else {
-          map.delete(scoreKey(event.stuId, event.type, event.indId))
+          map.delete(scoreKey(event.userId, event.type, event.indId))
         }
         return map
       })
@@ -165,12 +165,12 @@ export default function ScoreEntry() {
 
   const commitScore = useCallback(
     async (student: Student, name: string, next: number | null) => {
-      const key = scoreKey(student.stuId, SCORE_TYPE_EXTRA, name)
+      const key = scoreKey(student.userId, SCORE_TYPE_EXTRA, name)
       try {
         if (next === null) {
           await apiFetch<{ ok: true }>('/api/scores', {
             method: 'DELETE',
-            body: JSON.stringify({ stuId: student.stuId, type: SCORE_TYPE_EXTRA, indId: name }),
+            body: JSON.stringify({ userId: student.userId, type: SCORE_TYPE_EXTRA, indId: name }),
           })
           setScores((prev) => {
             const map = new Map(prev)
@@ -181,7 +181,7 @@ export default function ScoreEntry() {
           const res = await apiFetch<{ score: Score }>('/api/scores', {
             method: 'PUT',
             body: JSON.stringify({
-              stuId: student.stuId,
+              userId: student.userId,
               type: SCORE_TYPE_EXTRA,
               indId: name,
               score: next,
@@ -226,7 +226,7 @@ export default function ScoreEntry() {
 
   const recorded = selected
     ? visibleStudents.filter((student) =>
-        scores.has(scoreKey(student.stuId, SCORE_TYPE_EXTRA, selected)),
+        scores.has(scoreKey(student.userId, SCORE_TYPE_EXTRA, selected)),
       ).length
     : 0
 
@@ -283,7 +283,7 @@ export default function ScoreEntry() {
     if (!selected) return []
     if (bulkScope === 'all') return visibleStudents
     return visibleStudents.filter(
-      (student) => !scores.has(scoreKey(student.stuId, SCORE_TYPE_EXTRA, selected)),
+      (student) => !scores.has(scoreKey(student.userId, SCORE_TYPE_EXTRA, selected)),
     )
   }, [selected, bulkScope, visibleStudents, scores])
 
@@ -424,15 +424,15 @@ export default function ScoreEntry() {
 
             <div className="max-h-[70vh] overflow-auto rounded-2xl border border-line">
               {filteredStudents.map((student) => {
-                const key = scoreKey(student.stuId, SCORE_TYPE_EXTRA, selected)
+                const key = scoreKey(student.userId, SCORE_TYPE_EXTRA, selected)
                 return (
                   <div
-                    key={student.stuId}
+                    key={student.userId}
                     className="flex items-center gap-3 border-b border-line px-4 py-2 transition-colors last:border-b-0 hover:bg-sunken/40"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-bold">{student.name}</div>
-                      <div className="tabular text-xs text-fg-muted">{student.studentNo}</div>
+                      <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
                     </div>
                     <ScoreCell
                       score={scores.get(key) ?? null}
@@ -543,11 +543,11 @@ export default function ScoreEntry() {
               <div className="flex flex-col gap-1">
                 {targetMatches.map((student) => {
                   const current = scores.get(
-                    scoreKey(student.stuId, SCORE_TYPE_EXTRA, selected),
+                    scoreKey(student.userId, SCORE_TYPE_EXTRA, selected),
                   )?.score
                   return (
                     <button
-                      key={student.stuId}
+                      key={student.userId}
                       type="button"
                       disabled={applying}
                       onClick={() => void applyTo(student)}
@@ -555,7 +555,7 @@ export default function ScoreEntry() {
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-fg">{student.name}</div>
-                        <div className="tabular text-xs text-fg-muted">{student.studentNo}</div>
+                        <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
                       </div>
                       {current != null && (
                         <span className="tabular shrink-0 text-xs text-fg-subtle">{current}</span>

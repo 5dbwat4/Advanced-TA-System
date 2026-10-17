@@ -5,7 +5,7 @@ export type ScoreWithGrader = Score & { grader: Pick<User, 'id' | 'name'> | null
 
 /** 分数对外结构（附提交人姓名） */
 export type ScoreDto = {
-  stuId: string
+  userId: string
   type: number
   indId: string
   labId: string | null
@@ -19,7 +19,7 @@ export type ScoreDto = {
 /** 将分数记录序列化为对外结构（含最后提交人姓名） */
 export function toScoreDto(score: ScoreWithGrader): ScoreDto {
   return {
-    stuId: score.stuId,
+    userId: score.userId,
     type: score.type,
     indId: score.indId,
     labId: score.labId,

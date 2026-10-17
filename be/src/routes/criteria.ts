@@ -196,18 +196,18 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
     const reviews = await prisma.reportReview.findMany({
       where: { ruleId: key },
       include: {
-        student: { select: { name: true, studentNo: true } },
+        student: { select: { name: true, studentId: true } },
         experiment: { select: { mark: true, title: true } },
       },
-      orderBy: [{ experimentId: 'asc' }, { stuId: 'asc' }],
+      orderBy: [{ experimentId: 'asc' }, { userId: 'asc' }],
     })
 
     return reply.send({
       oldItems,
       reviews: reviews.map((review) => ({
-        stuId: review.stuId,
+        userId: review.userId,
         name: review.student.name,
-        studentNo: review.student.studentNo,
+        studentId: review.student.studentId,
         experimentId: review.experimentId,
         experimentMark: review.experiment.mark,
         experimentTitle: review.experiment.title,

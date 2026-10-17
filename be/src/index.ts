@@ -60,13 +60,36 @@ fastify.setErrorHandler((error: unknown, request, reply) => {
 
 fastify.decorate('authenticate', async (request, reply) => {
   try {
-    await request.jwtVerify()
+    const payload = await request.jwtVerify<{ sub?: string; role?: string; purpose?: string }>()
+    if (!payload.sub || !payload.role || payload.purpose) {
+      throw new Error('invalid access token')
+    }
   } catch {
     return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
   }
 })
 
 createRealtime(fastify)
+
+/** 学生可访问的接口白名单（其余 staff 接口一律拒绝） */
+const STUDENT_ALLOWED_ROUTES = new Set([
+  '/api/auth/me',
+  '/api/auth/setup',
+  '/api/auth/logout',
+  '/api/auth/passkey/registration-options',
+  '/api/auth/passkey/registration-verify',
+  '/api/settings',
+  '/api/settings/preferences',
+])
+
+fastify.addHook('preHandler', async (request, reply) => {
+  const user = request.user as { role?: string } | undefined
+  if (!user || user.role !== 'STUDENT') return
+  const url = request.routeOptions.url ?? ''
+  if (!STUDENT_ALLOWED_ROUTES.has(url)) {
+    return reply.code(403).send({ error: 'FORBIDDEN', message: '学生账号无权访问该接口' })
+  }
+})
 
 /**
  * 登录类公开接口限流（按 IP）：/api/auth/login*、/api/auth/zjuam/login、
@@ -80,6 +103,8 @@ function registerPublicLoginRoutes(app: FastifyInstance): void {
     '/api/auth/login/teacher',
     '/api/auth/login/student',
     '/api/auth/zjuam/login',
+    '/api/auth/select',
+    '/api/auth/student/exchange',
     '/api/auth/passkey/authentication-verify',
   ])
 
