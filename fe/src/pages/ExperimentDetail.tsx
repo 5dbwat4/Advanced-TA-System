@@ -13,7 +13,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import ArrowDown from '~icons/lucide/arrow-down'
 import ArrowLeft from '~icons/lucide/arrow-left'
 import ArrowUp from '~icons/lucide/arrow-up'
 import CalendarClock from '~icons/lucide/calendar-clock'
@@ -98,7 +97,6 @@ export default function ExperimentDetail() {
   const [editingTimeline, setEditingTimeline] = useState(false)
 
   const bindState = useOverlayState()
-  const syncDownState = useOverlayState()
   const preferencesState = useOverlayState()
   const banksState = useOverlayState()
   const [bankQuery, setBankQuery] = useState('')
@@ -556,32 +554,22 @@ export default function ExperimentDetail() {
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-line p-4">
-            <p className="mb-3 text-xs font-semibold text-fg-muted">上次同步时间</p>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-line p-4">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-semibold text-fg-muted">上次同步时间</p>
               <SyncStat
                 icon={<ArrowUp width={14} height={14} className="shrink-0" />}
                 tooltip="向上游推送成绩时间"
                 time={formatLocaleDateTime(experiment.lastXzzdUpSyncAt, '—')}
               />
-              <SyncStat
-                icon={<ArrowDown width={14} height={14} className="shrink-0" />}
-                tooltip="从上游同步提交情况时间"
-                time={formatLocaleDateTime(experiment.lastXzzdDownSyncAt, '—')}
-              />
             </div>
-            <div className="mt-3 flex items-stretch gap-2">
-              <div className="grid flex-1 gap-2 sm:grid-cols-2">
-                <Button
-                  variant="secondary"
-                  onPress={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
-                >
-                  向上游推送成绩
-                </Button>
-                <Button variant="secondary" onPress={syncDownState.open}>
-                  从上游同步提交情况
-                </Button>
-              </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onPress={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
+              >
+                向上游推送成绩
+              </Button>
               <IconAction
                 label="偏好设置"
                 variant="secondary"
@@ -738,30 +726,6 @@ export default function ExperimentDetail() {
                       保存
                     </>
                   )}
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-
-      <Modal state={syncDownState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <ArrowDown width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>从上游同步提交情况</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <p className="text-sm text-fg-muted">功能开发中。</p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">
-                  关闭
                 </Button>
               </Modal.Footer>
             </Modal.Dialog>

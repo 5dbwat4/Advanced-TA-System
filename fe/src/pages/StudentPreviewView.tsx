@@ -1,6 +1,6 @@
-import { Spinner } from '@heroui/react'
+import { Button, Spinner } from '@heroui/react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import CalendarClock from '~icons/lucide/calendar-clock'
 import CalendarPlus from '~icons/lucide/calendar-plus'
@@ -8,8 +8,10 @@ import ClipboardList from '~icons/lucide/clipboard-list'
 import Cpu from '~icons/lucide/cpu'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import FlaskConical from '~icons/lucide/flask-conical'
+import House from '~icons/lucide/house'
 import MessageSquareText from '~icons/lucide/message-square-text'
 import Rows3 from '~icons/lucide/rows-3'
+import { CreditsSection } from '@/components/settings/CreditsSection'
 import {
   collectReportGroups,
   decodeReviewContent,
@@ -31,6 +33,7 @@ import { cn } from '@/lib/utils'
 
 export default function StudentPreviewView() {
   const [params] = useSearchParams()
+  const navigate = useNavigate()
   const token = params.get('token')
   const [data, setData] = useState<StudentPreviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -80,7 +83,19 @@ export default function StudentPreviewView() {
             <div className="mt-2 text-sm text-fg-subtle">{error}</div>
           </div>
         ) : data ? (
-          <StudentPreviewContent data={data} />
+          <>
+            <StudentPreviewContent data={data} />
+            <div className="mt-4">
+              <Button variant="secondary" fullWidth onPress={() => navigate('/console')}>
+                <House width={15} height={15} className="shrink-0" />
+                进入我的主页
+              </Button>
+            </div>
+            <div className="my-4 h-px bg-line" />
+            <div>
+              <CreditsSection />
+            </div>
+          </>
         ) : null}
       </div>
     </div>

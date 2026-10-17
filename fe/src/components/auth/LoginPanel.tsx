@@ -1,7 +1,9 @@
+import HCaptcha from '@hcaptcha/react-hcaptcha'
 import { Button, Input } from '@heroui/react'
 import { startAuthentication } from '@simplewebauthn/browser'
 import { AnimatePresence, motion } from 'motion/react'
-import { useState } from 'react'
+import { useTheme } from 'next-themes'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -28,20 +30,19 @@ import { cn } from '@/lib/utils'
 type Role = 'TA' | 'TEACHER'
 type Method = 'password' | 'zjuam'
 
-const ROLES: { key: Role; icon: IconComponent; label: string }[] = [
-  { key: 'TA', icon: ShieldCheck, label: '助教' },
-  { key: 'TEACHER', icon: BookOpenCheck, label: '教师' },
-]
-
 const METHODS: { key: Method; icon: IconComponent; label: string }[] = [
   { key: 'password', icon: KeyRound, label: '账号密码' },
   { key: 'zjuam', icon: University, label: '统一身份认证' },
 ]
 
+const HCAPTCHA_SITEKEY = import.meta.env.VITE_HCAPTCHA_SITEKEY
+
 export function LoginPanel() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
   const [lastUser, setLastUser] = useState<LastUser | null>(() => getLastUser())
   const [showFull, setShowFull] = useState(false)
   const [role, setRole] = useState<Role>('TA')
@@ -52,22 +53,22 @@ export function LoginPanel() {
   const [loading, setLoading] = useState(false)
   const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaTheme, setCaptchaTheme] = useState<'light' | 'dark'>('light')
+  const captchaRef = useRef<HCaptcha>(null)
+
+  useEffect(() => {
+    // 已验证时保持组件不变，避免重绘清空勾选；重置后再同步当前主题
+    if (!captchaToken) setCaptchaTheme(isDark ? 'dark' : 'light')
+  }, [isDark, captchaToken])
 
   const showLastCard = Boolean(lastUser) && !showFull
   const lastIdentifier = lastUser ? lastUserIdentifier(lastUser) : ''
 
-  const switchRole = (next: Role) => {
-    if (next === role) return
-    setRole(next)
-    setMethod('password')
-    setIdentifier('')
-    setAccount('')
-    setPassword('')
-  }
-
   const switchMethod = (next: Method) => {
     if (next === method) return
     setMethod(next)
+    setCaptchaToken(null)
     setIdentifier('')
     setAccount('')
     setPassword('')
@@ -77,6 +78,7 @@ export function LoginPanel() {
     if (!lastUser) return
     setRole(lastUser.role)
     setMethod('password')
+    setCaptchaToken(null)
     setIdentifier(lastIdentifier)
     setAccount('')
     setPassword('')
@@ -91,6 +93,7 @@ export function LoginPanel() {
     setPrefilled(false)
     setRole('TA')
     setMethod('password')
+    setCaptchaToken(null)
     setIdentifier('')
     setAccount('')
     setPassword('')
@@ -99,6 +102,13 @@ export function LoginPanel() {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
 
+    if (HCAPTCHA_SITEKEY && !captchaToken) {
+      toast.error('请先完成人机验证')
+      return
+    }
+
+    setLoading(true)
+
     const isZjuam = role === 'TA' && method === 'zjuam'
     const endpoint = isZjuam
       ? '/api/auth/zjuam/login'
@@ -106,17 +116,20 @@ export function LoginPanel() {
         ? '/api/auth/login/teacher'
         : '/api/auth/login/ta'
     const body = isZjuam
-      ? { account: account.trim(), password }
-      : { identifier: identifier.trim(), password }
+      ? { account: account.trim(), password, captchaToken: captchaToken ?? undefined }
+      : { identifier: identifier.trim(), password, captchaToken: captchaToken ?? undefined }
 
     const from = (location.state as { from?: string } | null)?.from
-    setLoading(true)
     try {
       const user = await login(endpoint, body)
       toast.success(`欢迎回来，${user.name}`)
       const dest = user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
+      if (HCAPTCHA_SITEKEY) {
+        captchaRef.current?.resetCaptcha()
+        setCaptchaToken(null)
+      }
       toast.error(getErrorMessage(error, '登录失败'))
     } finally {
       setLoading(false)
@@ -174,7 +187,6 @@ export function LoginPanel() {
 
         <div className="hidden lg:block">
           <h2 className="text-2xl font-bold tracking-tight">欢迎回来</h2>
-          <p className="mt-1 text-sm text-fg-muted">使用助教或教师账号登录</p>
         </div>
 
         {showLastCard && lastUser ? (
@@ -228,41 +240,9 @@ export function LoginPanel() {
           </motion.div>
         ) : (
           <>
-            {/* role selector */}
-            <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl border border-line bg-sunken p-1.5">
-              {ROLES.map((item) => {
-                const active = role === item.key
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => switchRole(item.key)}
-                    className={cn(
-                      'relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition-colors',
-                      active ? 'text-fg' : 'text-fg-subtle hover:text-fg-muted',
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="login-role-pill"
-                        className="absolute inset-0 rounded-xl bg-elevated shadow-sm ring-1 ring-line"
-                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                      />
-                    )}
-                    <item.icon
-                      width={18}
-                      height={18}
-                      className={cn('shrink-0', 'relative', active && 'text-brand-600 dark:text-brand-300')}
-                    />
-                    <span className="relative">{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-
             {/* login method selector (TA only) */}
             {role === 'TA' && (
-              <div className="mt-4">
+              <div className="mt-6">
                 <div className="mb-1.5 text-xs font-semibold text-fg-muted">登录方式</div>
                 <div className="grid grid-cols-2 gap-1 rounded-2xl border border-line bg-sunken p-1.5">
                   {METHODS.map((item) => {
@@ -354,6 +334,20 @@ export function LoginPanel() {
                 {isZjuam && (
                   <p className="text-xs text-fg-subtle">使用学校统一身份认证登录，无需本地账号</p>
                 )}
+                {HCAPTCHA_SITEKEY && (
+                  <div className="flex justify-center">
+                    <HCaptcha
+                      key={captchaTheme}
+                      ref={captchaRef}
+                      sitekey={HCAPTCHA_SITEKEY}
+                      theme={captchaTheme}
+                      onVerify={(token) => setCaptchaToken(token)}
+                      onExpire={() => setCaptchaToken(null)}
+                      onError={() => setCaptchaToken(null)}
+                      languageOverride="zh"
+                    />
+                  </div>
+                )}
                 <PendingButton
                   type="submit"
                   fullWidth
@@ -391,10 +385,6 @@ export function LoginPanel() {
             )}
           </>
         )}
-
-        <p className="mt-6 text-center text-xs text-fg-subtle">
-          学生登录暂未开放，敬请期待
-        </p>
 
         <Button
           variant="secondary"

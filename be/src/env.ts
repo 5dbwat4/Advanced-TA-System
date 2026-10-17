@@ -31,4 +31,6 @@ export const env = {
   passkeyRpName: process.env.PASSKEY_RP_NAME ?? '计算机系统课程助教系统',
   passkeyRpId: process.env.PASSKEY_RP_ID ?? 'localhost',
   passkeyOrigin: process.env.PASSKEY_ORIGIN ?? 'http://localhost:5173',
+  // hCaptcha 服务端密钥；未配置时跳过人机验证
+  hcaptchaSecret: process.env.HCAPTCHA_SECRET ?? '',
 }

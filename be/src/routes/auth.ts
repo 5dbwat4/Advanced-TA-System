@@ -2,6 +2,7 @@ import type { Class, User } from '@prisma/client'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
+import { verifyCaptcha } from '../lib/hcaptcha'
 import { prisma } from '../lib/prisma'
 import { hashPassword, verifyPassword } from '../lib/password'
 import { isStaff, type Role } from '../lib/roles'
@@ -92,7 +93,27 @@ async function bindClassOnFirstLogin(
   }
 }
 
+/** 需要人机验证的登录入口（完整路径） */
+const CAPTCHA_LOGIN_ROUTES = new Set([
+  '/api/auth/login',
+  '/api/auth/login/ta',
+  '/api/auth/login/teacher',
+  '/api/auth/zjuam/login',
+])
+
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
+  /** 登录前校验 hCaptcha；未配置 HCAPTCHA_SECRET 时自动跳过 */
+  fastify.addHook('preHandler', async (request, reply) => {
+    if (request.method !== 'POST') return
+    if (!CAPTCHA_LOGIN_ROUTES.has(request.routeOptions.url ?? '')) return
+
+    const raw = (request.body as { captchaToken?: unknown } | null)?.captchaToken
+    const token = typeof raw === 'string' ? raw : undefined
+    if (!(await verifyCaptcha(token))) {
+      return reply.code(400).send({ error: 'CAPTCHA_FAILED', message: '人机验证失败，请重试' })
+    }
+  })
+
   /** 助教 / 老师：用户名 或 学号 + 密码 登录 */
   fastify.post('/login', async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body)

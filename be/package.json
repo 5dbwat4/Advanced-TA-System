@@ -20,6 +20,7 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "fastify": "^5.1.0",
+    "hcaptcha": "^0.2.0",
     "login-zju": "^1.0.9",
     "socket.io": "^4.8.3",
     "zod": "^3.23.8"

@@ -44,6 +44,9 @@ importers:
       fastify:
         specifier: ^5.1.0
         version: 5.12.5
+      hcaptcha:
+        specifier: ^0.2.0
+        version: 0.2.0
       login-zju:
         specifier: ^1.0.9
         version: 1.0.9
@@ -75,6 +78,9 @@ importers:
       '@codemirror/language-data':
         specifier: ^6.5.2
         version: 6.5.2
+      '@hcaptcha/react-hcaptcha':
+        specifier: ^2.2.0
+        version: 2.2.0
       '@heroui/react':
         specifier: ^3.2.6
         version: 3.2.6(@internationalized/date@3.12.4)(@react-aria/ssr@3.10.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@react-aria/utils@3.34.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@react-spectrum/provider@3.11.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-aria-components@1.21.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-aria@3.52.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwind-merge@3.7.0)(tailwindcss@4.3.3)
@@ -647,6 +653,9 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@hcaptcha/react-hcaptcha@2.2.0':
+    resolution: {integrity: sha512-/HrPgNLRrJziLrh2s+qFRO33ubBSuHn9sdNsQcP0wQElpORxlpR6wnq3X9j/bZGd+uQtYIvPl4QSU2la+Jl9Hg==}
 
   '@heroui/react@3.2.6':
     resolution: {integrity: sha512-KBhUUUdX4571SSjwpuBPEFZTYAw/tmGezTIsTnjIOlXDZkjWACfhFe6ibtReO+xTkUcfxCV1r3cF00/3OPlhhw==}
@@ -3088,6 +3097,9 @@ packages:
   hastscript@9.0.1:
     resolution: {integrity: sha512-g7df9rMFX/SPi34tyGCyUBREQoKkapwdY/T04Qn9TDWfHhAYt4/I0gMVirzK5wEzeUqIjEB+LXC/ypb7Aqno5w==}
 
+  hcaptcha@0.2.0:
+    resolution: {integrity: sha512-x25z3RoEa9oqfyuQsgk2olc+LCNVDAJaGKUP1qFhpAybB6qjqOf4qB2y1E3LJpXDvM229JWEywc6iWnzWvGjNw==}
+
   highlight.js@11.12.0:
     resolution: {integrity: sha512-nbfWpyRMcMrPMmDwJB+dhX/eiaPKtc2RB+0QZskqJ3WjRA/FDS0e9hZrx8EC/lbEv8gXy98FcDbNa/dspAaJMg==}
     engines: {node: '>=12.0.0'}
@@ -5511,6 +5523,8 @@ snapshots:
       tabbable: 6.5.0
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@hcaptcha/react-hcaptcha@2.2.0': {}
 
   '@heroui/react@3.2.6(@internationalized/date@3.12.4)(@react-aria/ssr@3.10.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@react-aria/utils@3.34.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@react-spectrum/provider@3.11.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-aria-components@1.21.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-aria@3.52.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(tailwind-merge@3.7.0)(tailwindcss@4.3.3)':
     dependencies:
@@ -8151,6 +8165,8 @@ snapshots:
       hast-util-parse-selector: 4.0.0
       property-information: 7.2.0
       space-separated-tokens: 2.0.2
+
+  hcaptcha@0.2.0: {}
 
   highlight.js@11.12.0: {}
 
