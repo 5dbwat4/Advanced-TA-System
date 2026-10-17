@@ -46,10 +46,7 @@ export function LoginBrandPanel() {
         >
           Computer
           <br />
-          Systems{' '}
-          <span className="bg-gradient-to-r from-amber-300 to-amber-500 bg-clip-text text-transparent">
-            II
-          </span>
+          Systems
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: 24 }}
@@ -57,7 +54,7 @@ export function LoginBrandPanel() {
           transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="mt-4 max-w-md text-sm leading-relaxed text-white/60"
         >
-          计算机系统 II 助教综合管理系统
+          计算机系统助教综合管理系统
         </motion.p>
       </div>
 
@@ -67,7 +64,7 @@ export function LoginBrandPanel() {
         transition={{ delay: 0.8, duration: 0.8 }}
         className="relative text-xs text-white/40"
       >
-        2025–2026 · 计算机系统 II 助教综合管理系统
+        2025–2026 · 计算机系统助教综合管理系统
       </motion.div>
     </div>
   )

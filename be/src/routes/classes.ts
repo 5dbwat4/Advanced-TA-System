@@ -8,6 +8,7 @@ import { verifyCourseBindToken } from '../lib/course-bind'
 import { hashPassword } from '../lib/password'
 import { prisma } from '../lib/prisma'
 import { publicUser } from '../lib/user'
+import { isUsernameTaken } from '../lib/username'
 import type { ZjuamEnrollment } from '../lib/zjuam'
 import { listEnrollments } from '../lib/zjuam'
 import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
@@ -285,12 +286,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
             throw classAccountError(409, 'ACCOUNT_EXISTS', '该班级已存在当前助教的账号')
           }
 
-          const usernameTaken = await tx.user.findFirst({
-            where: { classId: klass.id, username },
-            select: { id: true },
-          })
-          if (usernameTaken) {
-            throw classAccountError(409, 'USERNAME_TAKEN', '该用户名在本班已存在')
+          if (await isUsernameTaken(tx, username, current)) {
+            throw classAccountError(409, 'USERNAME_TAKEN', '该用户名已被占用')
           }
 
           const created = await tx.user.create({

@@ -9,7 +9,7 @@ import {
 import * as echarts from 'echarts/core'
 import type { EChartsCoreOption } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import ReactEChartsCore from 'echarts-for-react/lib/core'
+import ReactEChartsCore from 'echarts-for-react/esm/core'
 
 echarts.use([
   CustomChart,

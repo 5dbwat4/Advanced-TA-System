@@ -13,7 +13,7 @@ import { requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
 
 const questionInclude = {
-  user: { select: { id: true, username: true, name: true } },
+  user: { select: { id: true, username: true, name: true, avatar: true } },
 } satisfies Prisma.QuestionInclude
 
 const nameSchema = z.object({

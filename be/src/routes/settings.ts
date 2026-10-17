@@ -11,6 +11,7 @@ import {
   publicUser,
   type UserPreferences,
 } from '../lib/user'
+import { isUsernameTaken } from '../lib/username'
 import { parseCredentials, serializeCredentials } from '../lib/webauthn'
 
 const settingsSchema = z.discriminatedUnion('action', [
@@ -59,12 +60,8 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (parsed.data.action === 'set_username') {
       const { username } = parsed.data
-      const taken = await prisma.user.findFirst({
-        where: { username, classId: user.classId, NOT: { id: user.id } },
-        select: { id: true },
-      })
-      if (taken) {
-        return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名已被使用' })
+      if (await isUsernameTaken(prisma, username, user)) {
+        return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名已被占用' })
       }
       const updatedUser = await prisma.user.update({
         where: { id: user.id },

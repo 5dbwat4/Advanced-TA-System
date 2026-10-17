@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma'
 import { hashPassword, verifyPassword } from '../lib/password'
 import { isRole, isStaff, type Role } from '../lib/roles'
 import type { StudentViewPayload } from '../lib/student-view'
+import { isUsernameTaken } from '../lib/username'
 import { publicUser } from '../lib/user'
 import { loginToCourses, ZjuamError } from '../lib/zjuam'
 
@@ -519,16 +520,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { username, password } = parsed.data
 
-    const clash = await prisma.user.findFirst({
-      where: {
-        username,
-        classId: current.classId,
-        NOT: { id: current.id },
-      },
-      select: { id: true },
-    })
-    if (clash) {
-      return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名在本班已存在' })
+    if (await isUsernameTaken(prisma, username, current)) {
+      return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名已被占用' })
     }
 
     const passwordHash = password ? await hashPassword(password) : undefined
@@ -574,16 +567,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const { username, password } = parsed.data
-      const clash = await prisma.user.findFirst({
-        where: {
-          username,
-          classId: current.classId,
-          NOT: { id: current.id },
-        },
-        select: { id: true },
-      })
-      if (clash) {
-        return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名在本班已存在' })
+      if (await isUsernameTaken(prisma, username, current)) {
+        return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名已被占用' })
       }
 
       const passwordHash = password ? await hashPassword(password) : undefined

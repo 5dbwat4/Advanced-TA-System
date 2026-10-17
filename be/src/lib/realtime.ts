@@ -41,7 +41,8 @@ function watchRoom(classId: string): string {
 export type CheckoffPeer = {
   userId: string
   name: string
-  /** 当前正在验收的学生姓名；null 表示空闲 */
+  avatar: number | null
+  /** 当前正在验收的学生姓名，null 表示空闲 */
   studentName: string | null
   at: number
 }
@@ -111,23 +112,32 @@ async function loadClassIds(userId: string): Promise<string[]> {
   return me?.classId ? [me.classId] : []
 }
 
-/** 读取验收广播所需的用户信息（姓名 / 角色 / 所属班级） */
+/** 读取验收广播所需的用户信息（姓名 / 角色 / 头像 / 所属班级） */
 async function loadBroadcastContext(
   userId: string,
-): Promise<{ name: string; role: string; classIds: string[] } | null> {
+): Promise<{ name: string; role: string; avatar: number | null; classIds: string[] } | null> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, role: true, classId: true },
+    select: { name: true, role: true, avatar: true, classId: true },
   })
   if (!me) return null
-  return { name: me.name, role: me.role, classIds: me.classId ? [me.classId] : [] }
+  return { name: me.name, role: me.role, avatar: me.avatar, classIds: me.classId ? [me.classId] : [] }
 }
 
 export type SlaveCardState =
   | { kind: 'idle'; experimentMark: string; experimentTitle: string }
   | { kind: 'ask_name' }
   | { kind: 'ask_demo' }
-  | { kind: 'ask_question'; studentName: string; index: number; total: number; content: string }
+  | {
+      kind: 'ask_question'
+      studentName: string
+      studentAvatar: number | null
+      questionAuthor: string
+      questionAuthorAvatar: number | null
+      index: number
+      total: number
+      content: string
+    }
   | { kind: 'thank'; studentName?: string }
 
 /** master 的展示偏好，随状态一起透传到 slave */
@@ -377,7 +387,13 @@ export function createRealtime(fastify: FastifyInstance): Server {
         socket.data.checkoffWatchClassId = classId
         const room = checkoffPresences.get(classId) ?? new Map<string, CheckoffPeer>()
         checkoffPresences.set(classId, room)
-        room.set(socket.id, { userId: user.sub, name: ctx.name, studentName: null, at: Date.now() })
+        room.set(socket.id, {
+          userId: user.sub,
+          name: ctx.name,
+          avatar: ctx.avatar,
+          studentName: null,
+          at: Date.now(),
+        })
         ack?.({ peers: checkoffPeers(classId) })
         broadcastCheckoffPresence(classId)
       },
@@ -516,9 +532,12 @@ export function createRealtime(fastify: FastifyInstance): Server {
     socket.on(
       'switch_question',
       (
-        { token, studentName, index, total, content } = {} as {
+        { token, studentName, studentAvatar, questionAuthor, questionAuthorAvatar, index, total, content } = {} as {
           token?: string
           studentName?: string
+          studentAvatar?: number | null
+          questionAuthor?: string
+          questionAuthorAvatar?: number | null
           index?: number
           total?: number
           content?: string
@@ -530,6 +549,10 @@ export function createRealtime(fastify: FastifyInstance): Server {
         session.state = {
           kind: 'ask_question',
           studentName: String(studentName ?? ''),
+          studentAvatar: typeof studentAvatar === 'number' ? studentAvatar : null,
+          questionAuthor: String(questionAuthor ?? ''),
+          questionAuthorAvatar:
+            typeof questionAuthorAvatar === 'number' ? questionAuthorAvatar : null,
           index: Number(index) || 0,
           total: Number(total) || 0,
           content: String(content ?? ''),

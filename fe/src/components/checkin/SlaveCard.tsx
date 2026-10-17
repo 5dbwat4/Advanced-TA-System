@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 
 import Cpu from '~icons/lucide/cpu'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { Markdown } from '@/components/ui/Markdown'
 import type { MarkdownStyleId } from '@/lib/api'
 import type { SlaveCardState } from '@/lib/checkoff-socket'
@@ -51,12 +52,18 @@ function HintCard({ title, hint }: { title: string; hint: string }) {
 
 function QuestionCard({
   studentName,
+  studentAvatar,
+  questionAuthor,
+  questionAuthorAvatar,
   index,
   total,
   content,
   markdownStyle,
 }: {
   studentName: string
+  studentAvatar: number | null
+  questionAuthor: string
+  questionAuthorAvatar: number | null
   index: number
   total: number
   content: string
@@ -66,14 +73,26 @@ function QuestionCard({
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600/15 text-sm font-bold text-brand-600 dark:text-brand-300">
-            {studentName.charAt(0)}
-          </div>
+          <AvatarImage
+            id={studentAvatar}
+            size={36}
+            fallback={studentName.slice(0, 1)}
+          />
           <span className="text-sm font-semibold text-fg">{studentName}</span>
         </div>
-        <span className="tabular text-[11px] uppercase tracking-widest text-fg-subtle">
-          问题 {index} / {total}
-        </span>
+        <div className="text-right">
+          <div className="tabular text-[11px] uppercase tracking-widest text-fg-subtle">
+            问题 {index} / {total}
+          </div>
+          <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-fg-subtle">
+            <AvatarImage
+              id={questionAuthorAvatar}
+              size={18}
+              fallback={(questionAuthor || '未知').slice(0, 1)}
+            />
+            <span>命题人：{questionAuthor || '未知'}</span>
+          </div>
+        </div>
       </div>
       <Markdown source={content} style={markdownStyle} />
     </div>
@@ -92,6 +111,9 @@ function CardBody({ state, markdownStyle }: { state: SlaveCardState; markdownSty
       return (
         <QuestionCard
           studentName={state.studentName}
+          studentAvatar={state.studentAvatar}
+          questionAuthor={state.questionAuthor}
+          questionAuthorAvatar={state.questionAuthorAvatar}
           index={state.index}
           total={state.total}
           content={state.content}

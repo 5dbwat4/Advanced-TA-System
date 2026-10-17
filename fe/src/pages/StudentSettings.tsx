@@ -165,7 +165,6 @@ export default function StudentSettings() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-semibold text-fg-muted">用户名</div>
-                    <div className="text-[11px] text-fg-subtle">可用于登录，本班内唯一</div>
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-2">

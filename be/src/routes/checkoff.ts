@@ -54,12 +54,13 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     const studentRows = await prisma.user.findMany({
       where: { classId, role: 'STUDENT', status: 'ACTIVE' },
       orderBy: { studentId: 'asc' },
-      select: { id: true, name: true, studentId: true },
+      select: { id: true, name: true, studentId: true, avatar: true },
     })
     const students = studentRows.map((user) => ({
       userId: user.id,
       name: user.name,
       studentId: user.studentId ?? '',
+      avatar: user.avatar,
     }))
 
     const scores =
@@ -74,7 +75,14 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
           })
         : []
 
-    let questions: { id: string; question: string; answer: string }[] | undefined
+    let questions:
+      | {
+          id: string
+          question: string
+          answer: string
+          user: { id: string; username: string | null; name: string; avatar: number | null }
+        }[]
+      | undefined
     if (includeQuestions && experimentId) {
       const experiment = await prisma.experiment.findUnique({
         where: { id: experimentId },
@@ -92,7 +100,12 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         ids.length > 0
           ? await prisma.question.findMany({
               where: { id: { in: ids } },
-              select: { id: true, question: true, answer: true },
+              select: {
+                id: true,
+                question: true,
+                answer: true,
+                user: { select: { id: true, username: true, name: true, avatar: true } },
+              },
             })
           : []
       const byId = new Map(questionRows.map((row) => [row.id, row]))
@@ -138,11 +151,16 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       ids.length > 0
         ? await prisma.question.findMany({
             where: { id: { in: ids } },
-            select: { id: true, question: true, answer: true },
+            select: {
+              id: true,
+              question: true,
+              answer: true,
+              user: { select: { id: true, username: true, name: true, avatar: true } },
+            },
           })
         : []
     const byId = new Map(rows.map((row) => [row.id, row]))
-    const questions: { id: string; question: string; answer: string }[] = []
+    const questions: (typeof rows)[number][] = []
     for (const id of ids) {
       const row = byId.get(id)
       if (row) questions.push(row)

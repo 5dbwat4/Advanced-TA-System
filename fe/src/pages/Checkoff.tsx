@@ -29,6 +29,7 @@ import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
 import Users from '~icons/lucide/users'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -152,6 +153,7 @@ export default function Checkoff() {
             id: question.id,
             question: question.question,
             answer: question.answer,
+            user: question.user,
           })),
         )
         setQuestionsLoaded(true)
@@ -279,6 +281,9 @@ export default function Checkoff() {
       if (isMulti && student && drawn[index]) {
         master.switchQuestion({
           studentName: student.name,
+          studentAvatar: student.avatar,
+          questionAuthor: drawn[index].user?.name ?? '',
+          questionAuthorAvatar: drawn[index].user?.avatar ?? null,
           index,
           total: drawn.length,
           content: drawn[index].question,
@@ -312,6 +317,11 @@ export default function Checkoff() {
         state = {
           kind: 'ask_question',
           studentName: student.name,
+          studentAvatar: student.avatar,
+          questionAuthor:
+            drawn[Math.min(questionIndex, drawn.length - 1)]?.user?.name ?? '',
+          questionAuthorAvatar:
+            drawn[Math.min(questionIndex, drawn.length - 1)]?.user?.avatar ?? null,
           index: questionIndex,
           total: drawn.length,
           content: drawn[Math.min(questionIndex, drawn.length - 1)]?.question ?? '',
@@ -581,9 +591,11 @@ export default function Checkoff() {
                         key={peer.userId}
                         className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
                       >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600/15 text-xs font-bold text-brand-600 dark:text-brand-300">
-                          {peer.name.slice(0, 1)}
-                        </div>
+                        <AvatarImage
+                          id={peer.avatar}
+                          size={32}
+                          fallback={peer.name.slice(0, 1)}
+                        />
                         <div className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
                           {peer.name}
                           {peer.userId === user?.id && (

@@ -115,6 +115,7 @@ export type QuestionUser = {
   id: string
   username: string | null
   name: string
+  avatar?: number | null
 }
 
 export type Course = {
@@ -157,6 +158,7 @@ export type CheckoffStudent = {
   userId: string
   name: string
   studentId: string
+  avatar: number | null
 }
 
 export type LoginCandidate = {
@@ -197,6 +199,7 @@ export type CheckoffQuestion = {
   id: string
   question: string
   answer: string
+  user: QuestionUser
 }
 
 export function getToken(): string | null {

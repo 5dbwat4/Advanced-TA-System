@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import ChevronRight from '~icons/lucide/chevron-right'
 import ScanSearch from '~icons/lucide/scan-search'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { fetchCheckoff, type CheckoffQuestion, type CheckoffStudent, type Score } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { matchStudent } from '@/lib/pinyin'
@@ -147,9 +148,17 @@ export function StudentFinder({
                 onClick={() => onSelect(student, studentScores)}
                 className="flex w-full items-center gap-4 rounded-2xl border border-line bg-elevated p-4 text-left transition-all hover:border-brand-500/40 hover:shadow-lg hover:shadow-brand-500/5"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500/15 to-amber-500/10 text-sm font-bold text-brand-600 dark:text-brand-300">
-                  {student.name.slice(0, 1)}
-                </div>
+                {student.avatar != null ? (
+                  <AvatarImage
+                    id={student.avatar}
+                    size={44}
+                    fallback={student.name.slice(0, 1)}
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500/15 to-amber-500/10 text-sm font-bold text-brand-600 dark:text-brand-300">
+                    {student.name.slice(0, 1)}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-fg">{student.name}</div>
                   <div className="tabular mt-0.5 text-xs text-fg-muted">{student.studentId}</div>

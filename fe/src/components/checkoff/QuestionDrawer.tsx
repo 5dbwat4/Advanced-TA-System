@@ -15,13 +15,24 @@ import Minus from '~icons/lucide/minus'
 import Shuffle from '~icons/lucide/shuffle'
 import SkipForward from '~icons/lucide/skip-forward'
 import X from '~icons/lucide/x'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Markdown } from '@/components/ui/Markdown'
-import type { CheckoffQuestion, CheckoffStudent } from '@/lib/api'
+import type { CheckoffQuestion, CheckoffStudent, QuestionUser } from '@/lib/api'
 import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
 export type QuestionMark = 'correct' | 'partial' | 'wrong'
+
+function QuestionAuthor({ user, className }: { user?: QuestionUser; className?: string }) {
+  const name = user?.name || '未知'
+  return (
+    <div className={cn('flex items-center gap-1.5 text-[11px] font-normal text-fg-subtle', className)}>
+      <AvatarImage id={user?.avatar ?? null} size={18} fallback={name.slice(0, 1)} />
+      <span>命题人：{name}</span>
+    </div>
+  )
+}
 
 const MARK_META: Record<
   QuestionMark,
@@ -254,9 +265,11 @@ export function QuestionDrawer({
   return (
     <div>
       <div className="mb-4 flex items-center gap-3 rounded-2xl border border-line bg-elevated px-4 py-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-sm font-bold text-brand-600 dark:text-brand-300">
-          {student.name.slice(0, 1)}
-        </div>
+        <AvatarImage
+          id={student.avatar}
+          size={36}
+          fallback={student.name.slice(0, 1)}
+        />
         <div className="min-w-0 flex-1">
           <span className="font-semibold text-fg">{student.name}</span>
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
@@ -328,6 +341,7 @@ export function QuestionDrawer({
                       </span>
                       <div className="min-w-0 flex-1 text-sm leading-relaxed text-fg">
                         <Markdown source={question.question} />
+                        <QuestionAuthor user={question.user} className="mt-1.5" />
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2 pl-9">
@@ -394,6 +408,8 @@ export function QuestionDrawer({
                       </span>
                     )}
                   </button>
+
+                  <QuestionAuthor user={question.user} className="mt-2 pl-8" />
 
                   {selected && (
                     <div className="mt-3 pl-8">

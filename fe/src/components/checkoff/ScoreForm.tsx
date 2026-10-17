@@ -8,6 +8,7 @@ import Info from '~icons/lucide/info'
 import MessageCircleQuestion from '~icons/lucide/message-circle-question'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { RemarkField } from '@/components/remarks/RemarkField'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { PendingButton } from '@/components/ui/PendingButton'
 import {
   REMARK_TYPE_CHECKOFF,
@@ -96,9 +97,11 @@ export function ScoreForm({
   return (
     <div>
       <div className="mb-4 flex items-center gap-3 rounded-2xl border border-line bg-elevated px-4 py-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-sm font-bold text-brand-600 dark:text-brand-300">
-          {student.name.slice(0, 1)}
-        </div>
+        <AvatarImage
+          id={student.avatar}
+          size={36}
+          fallback={student.name.slice(0, 1)}
+        />
         <div className="min-w-0 flex-1">
           <span className="font-semibold text-fg">{student.name}</span>
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>

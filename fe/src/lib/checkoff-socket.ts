@@ -8,7 +8,16 @@ export type SlaveCardState =
   | { kind: 'idle'; experimentMark: string; experimentTitle: string }
   | { kind: 'ask_name' }
   | { kind: 'ask_demo' }
-  | { kind: 'ask_question'; studentName: string; index: number; total: number; content: string }
+  | {
+      kind: 'ask_question'
+      studentName: string
+      studentAvatar: number | null
+      questionAuthor: string
+      questionAuthorAvatar: number | null
+      index: number
+      total: number
+      content: string
+    }
   | { kind: 'thank'; studentName?: string }
 
 /** master 透传到 slave 的展示偏好（Markdown 样式 / 亮暗模式） */
@@ -130,7 +139,15 @@ export function useCheckoffMaster(enabled: boolean, masterUserId: string | undef
   }, [])
 
   const switchQuestion = useCallback(
-    (payload: { studentName: string; index: number; total: number; content: string }) => {
+    (payload: {
+      studentName: string
+      studentAvatar: number | null
+      questionAuthor: string
+      questionAuthorAvatar: number | null
+      index: number
+      total: number
+      content: string
+    }) => {
       const token = tokenRef.current
       if (token) getCheckoffSocket().emit('switch_question', { token, ...payload })
     },
@@ -154,6 +171,7 @@ export type CheckoffStartedEvent = {
 export type CheckoffPeer = {
   userId: string
   name: string
+  avatar: number | null
   /** 当前正在验收的学生姓名；null 表示空闲 */
   studentName: string | null
   at: number
