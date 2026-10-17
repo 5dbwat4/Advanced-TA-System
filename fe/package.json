@@ -21,6 +21,7 @@
     "@uiw/react-md-editor": "^4.1.2",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
+    "avatars": "workspace:*",
     "clsx": "^2.1.1",
     "copy-to-clipboard": "^4.0.2",
     "exceljs": "^4.4.0",

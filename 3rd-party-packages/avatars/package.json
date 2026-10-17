@@ -1,0 +1,30 @@
+{
+  "name": "avatars",
+  "version": "1.0.0",
+  "description": "tasaas 内置头像集：每个分组拼成一张精灵图（atlas），由 JS 以 ESM 资源 import 引用（不落 public/、不内联）。",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "manifest.json",
+    "atlas/**/*",
+    "scripts/**/*"
+  ],
+  "scripts": {
+    "build:atlas": "node scripts/build-atlas.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.5"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}

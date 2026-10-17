@@ -26,6 +26,11 @@ const settingsSchema = z.discriminatedUnion('action', [
     action: z.literal('remove_passkey'),
     passkeyId: z.string().min(1),
   }),
+  z.object({
+    action: z.literal('set_avatar'),
+    /** 头像 id（前端内置头像目录）；null 表示恢复默认（首字母） */
+    avatar: z.number().int().min(0).max(9999).nullable(),
+  }),
 ])
 
 export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -64,6 +69,15 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: { username, name: username },
+        include: { classes: true },
+      })
+      return reply.send({ user: publicUser(updatedUser) })
+    }
+
+    if (parsed.data.action === 'set_avatar') {
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { avatar: parsed.data.avatar },
         include: { classes: true },
       })
       return reply.send({ user: publicUser(updatedUser) })

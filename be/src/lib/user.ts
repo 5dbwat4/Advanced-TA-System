@@ -64,6 +64,7 @@ export function publicUser(user: User & { classes?: Class[] }) {
     id: user.id,
     name: user.name,
     role: user.role,
+    avatar: user.avatar,
     studentId: user.studentId,
     username: user.username,
     classes: (user.classes ?? []).map((c) => ({

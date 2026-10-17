@@ -76,6 +76,7 @@ export type User = {
   id: string
   name: string
   role: Role
+  avatar: number | null
   studentId: string | null
   username: string | null
   classes: ClassInfo[]

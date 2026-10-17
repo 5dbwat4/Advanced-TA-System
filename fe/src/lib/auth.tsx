@@ -16,6 +16,7 @@ type AuthContextValue = {
     body:
       | { action: 'set_password'; newPassword: string }
       | { action: 'set_username'; username: string }
+      | { action: 'set_avatar'; avatar: number | null }
       | { action: 'remove_passkey'; passkeyId: string },
   ) => Promise<User>
   updatePreferences: (prefs: UserPreferences) => Promise<User>

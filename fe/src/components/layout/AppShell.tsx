@@ -10,6 +10,7 @@ import LogOut from '~icons/lucide/log-out'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
@@ -143,9 +144,11 @@ export function AppShell() {
             <div className="flex flex-col items-center gap-1">
               <Tooltip delay={0}>
                 <Tooltip.Trigger>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/15 text-sm font-bold text-amber-600 dark:text-amber-400">
-                    {user?.username?.slice(0, 1) ?? '·'}
-                  </div>
+                  <AvatarImage
+                    id={user?.avatar ?? null}
+                    size={36}
+                    fallback={user?.username?.slice(0, 1) ?? '·'}
+                  />
                 </Tooltip.Trigger>
                 <Tooltip.Content showArrow placement="right">
                   {user?.username ?? '未登录'}
@@ -157,9 +160,11 @@ export function AppShell() {
             </div>
           ) : (
             <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/15 text-sm font-bold text-amber-600 dark:text-amber-400">
-                {user?.username?.slice(0, 1) ?? '·'}
-              </div>
+              <AvatarImage
+                id={user?.avatar ?? null}
+                size={36}
+                fallback={user?.username?.slice(0, 1) ?? '·'}
+              />
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="truncate text-sm font-semibold">{user?.username ?? '未登录'}</div>
                 <div className="truncate text-xs tabular text-fg-subtle">

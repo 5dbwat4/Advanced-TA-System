@@ -17,6 +17,9 @@ model User {
   studentId String? @unique
   username  String?
 
+  /// 头像 id（对应前端内置头像目录；null 时回退首字母）
+  avatar Int?
+
   /// bcrypt 哈希后的登录密码
   password String?
 

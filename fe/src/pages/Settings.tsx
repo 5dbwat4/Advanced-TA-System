@@ -12,6 +12,7 @@ import Pencil from '~icons/lucide/pencil'
 import Plus from '~icons/lucide/plus'
 import Smartphone from '~icons/lucide/smartphone'
 import Trash2 from '~icons/lucide/trash-2'
+import { AvatarPicker } from '@/components/settings/AvatarPicker'
 import { CacheSection } from '@/components/settings/CacheSection'
 import { CreditsSection } from '@/components/settings/CreditsSection'
 import { PreferenceSection } from '@/components/settings/PreferenceSection'
@@ -173,6 +174,8 @@ export default function Settings() {
               </div>
             </div>
           </div>
+
+          <AvatarPicker />
 
           <div className="rounded-xl border border-line p-4">
             <div className="flex items-center gap-3">

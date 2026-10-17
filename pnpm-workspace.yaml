@@ -1,6 +1,7 @@
 packages:
   - be
   - fe
+  - 3rd-party-packages/avatars
 
 onlyBuiltDependencies:
   - '@prisma/client'
