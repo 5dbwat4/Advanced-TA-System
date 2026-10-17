@@ -1,12 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 
-import { prisma } from '../lib/prisma'
+import { buildStudentReport } from '../lib/student-report'
 import type { StudentViewPayload } from '../lib/student-view'
-import { parseClassSettings, resolveScoreRatio, weightedTotal } from '../lib/xzzd-push'
 
 /**
  * 学生成绩查看（公开页面数据源）：凭链接中的签名 token 查看
- * 指定学生在指定实验下的成绩；token 载荷仅包含学生 uuid 与实验 uuid。
+ * 指定学生在指定实验下的成绩；token 载荷仅包含 uid / eid。
  */
 export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/view', async (request, reply) => {
@@ -22,117 +21,16 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(401).send({ error: 'INVALID_TOKEN', message: '链接无效或已损坏' })
     }
 
-    const { userId, experimentId } = payload
-    if (typeof userId !== 'string' || typeof experimentId !== 'string') {
+    const { uid, eid } = payload
+    if (typeof uid !== 'string' || typeof eid !== 'string') {
       return reply.code(401).send({ error: 'INVALID_TOKEN', message: '链接无效或已损坏' })
     }
 
-    const [experiment, student] = await Promise.all([
-      prisma.experiment.findUnique({
-        where: { id: experimentId },
-        include: {
-          klass: { select: { id: true, name: true } },
-          questionBank: { select: { name: true } },
-        },
-      }),
-      prisma.user.findFirst({
-        where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
-        select: { id: true, name: true, studentId: true, classId: true },
-      }),
-    ])
-    if (!experiment || !student || student.classId !== experiment.classId) {
+    const report = await buildStudentReport(uid, eid)
+    if (!report) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: '链接无效或内容不存在' })
     }
 
-    const [klass, scoreRows, reportReview, remarkRows] = await Promise.all([
-      prisma.class.findUnique({ where: { id: experiment.classId }, select: { settings: true } }),
-      prisma.score.findMany({
-        where: { userId, indId: experiment.id, type: { in: [0, 1, 2] } },
-        include: { grader: { select: { name: true } } },
-        orderBy: { type: 'asc' },
-      }),
-      prisma.reportReview.findUnique({
-        where: { userId_experimentId: { userId, experimentId: experiment.id } },
-        select: { ruleId: true, ruleContent: true },
-      }),
-      // 附言按类型分开存储（0=验收，1=实验报告），学生页两类都展示
-      prisma.remark.findMany({
-        where: { userId, experimentId: experiment.id, text: { not: '' } },
-        orderBy: { type: 'asc' },
-        select: { type: true, text: true },
-      }),
-    ])
-
-    const settings = parseClassSettings(klass?.settings ?? null)
-    const ratio = resolveScoreRatio(settings, experiment.id)
-    const scoreByType = new Map(scoreRows.map((row) => [row.type, row]))
-    const total = weightedTotal(
-      [0, 1, 2].map((type) => scoreByType.get(type)?.score ?? null),
-      ratio,
-    )
-
-    // 报告得分详情：批阅记录 + 对应的评分标准（含规则文本）
-    let report: { ruleId: string; ruleContent: unknown; items: unknown } | null = null
-    if (reportReview) {
-      const criteria = await prisma.criteria.findUnique({
-        where: { key: reportReview.ruleId },
-        select: { payload: true },
-      })
-      const payload = parseJson(criteria?.payload ?? null) as { items?: unknown } | null
-      report = {
-        ruleId: reportReview.ruleId,
-        ruleContent: stripCardDetail(parseJson(reportReview.ruleContent)),
-        items: Array.isArray(payload?.items) ? stripCardDetail(payload.items) : [],
-      }
-    }
-
-    return {
-      experiment: {
-        id: experiment.id,
-        mark: experiment.mark,
-        title: experiment.title,
-        className: experiment.klass?.name ?? null,
-        questionBankName: experiment.questionBank?.name ?? null,
-        publishTime: experiment.publishTime,
-        checkoffDeadline: experiment.checkoffDeadline,
-        reportDeadline: experiment.reportDeadline,
-      },
-      student: { userId: student.id, name: student.name, studentId: student.studentId ?? '' },
-      ratio,
-      total,
-      scores: scoreRows.map((row) => ({
-        type: row.type,
-        score: row.score,
-        graderName: row.grader?.name ?? null,
-        updatedAt: row.updatedAt,
-      })),
-      /** 附言（0=验收，1=实验报告），仅返回非空项 */
-      remarks: remarkRows.map((row) => ({ type: row.type, text: row.text })),
-      report,
-    }
+    return report
   })
-}
-
-function parseJson(value: string | null): unknown {
-  if (value == null) return null
-  try {
-    return JSON.parse(value)
-  } catch {
-    return null
-  }
-}
-
-/**
- * 递归剔除卡片（含小节 children、ruleContent.extras 等）中的 detail 字段。
- * detail 为「详细评分标准」，仅助教 / 教师可见；学生公开查看页不得下发。
- */
-function stripCardDetail(raw: unknown): unknown {
-  if (Array.isArray(raw)) return raw.map(stripCardDetail)
-  if (raw == null || typeof raw !== 'object') return raw
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (key === 'detail') continue
-    out[key] = stripCardDetail(value)
-  }
-  return out
 }

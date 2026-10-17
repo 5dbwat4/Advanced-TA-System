@@ -921,7 +921,7 @@
 		]
 	},
 	{
-		"name": "Honkai: Star Rail, Rewards and Nameless",
+		"name": "Honkai: Star Rail Rewards and Nameless Honor",
 		"description": "Game graphic of Honkai: Star Rail, an RPG game copyrighted (©) by COGNOSPHERE PTE. LTD. Though this media is subject to copyright, it is believed that its use qualifies as fair use under U.S. fair use laws. \n © miHoYo. All rights reserved. \"COGNOSPHERE\" and \"Honkai: Star Rail\" are trademarks, services marks, or registered trademarks of miHoYo.",
 		"avatars": [
 			{
@@ -1493,6 +1493,508 @@
 				"name": "Yunli: Emberblaze",
 				"id": 5113,
 				"file": "Profile_Picture_Yunli_-_Emberblaze.png"
+			}
+		]
+	},
+	{
+		"name": "Honkai: Star Rail Character",
+		"description": "Game graphic of Honkai: Star Rail, an RPG game copyrighted (©) by COGNOSPHERE PTE. LTD. Though this media is subject to copyright, it is believed that its use qualifies as fair use under U.S. fair use laws. \n © miHoYo. All rights reserved. \"COGNOSPHERE\" and \"Honkai: Star Rail\" are trademarks, services marks, or registered trademarks of miHoYo.",
+		"avatars": [
+			{
+				"name": "Acheron",
+				"id": 7000,
+				"file": "Character_Acheron_Icon.png"
+			},
+			{
+				"name": "Aglaea",
+				"id": 7001,
+				"file": "Character_Aglaea_Icon.png"
+			},
+			{
+				"name": "Anaxa",
+				"id": 7002,
+				"file": "Character_Anaxa_Icon.png"
+			},
+			{
+				"name": "Archer",
+				"id": 7003,
+				"file": "Character_Archer_Icon.png"
+			},
+			{
+				"name": "Argenti",
+				"id": 7004,
+				"file": "Character_Argenti_Icon.png"
+			},
+			{
+				"name": "Arlan",
+				"id": 7005,
+				"file": "Character_Arlan_Icon.png"
+			},
+			{
+				"name": "Ashveil",
+				"id": 7006,
+				"file": "Character_Ashveil_Icon.png"
+			},
+			{
+				"name": "Asta",
+				"id": 7007,
+				"file": "Character_Asta_Icon.png"
+			},
+			{
+				"name": "Aventurine • Waveflair",
+				"id": 7008,
+				"file": "Character_Aventurine_•_Waveflair_Icon.png"
+			},
+			{
+				"name": "Aventurine",
+				"id": 7009,
+				"file": "Character_Aventurine_Icon.png"
+			},
+			{
+				"name": "Bailu",
+				"id": 7010,
+				"file": "Character_Bailu_Icon.png"
+			},
+			{
+				"name": "Black Swan",
+				"id": 7011,
+				"file": "Character_Black_Swan_Icon.png"
+			},
+			{
+				"name": "Blade",
+				"id": 7012,
+				"file": "Character_Blade_Icon.png"
+			},
+			{
+				"name": "Boothill",
+				"id": 7013,
+				"file": "Character_Boothill_Icon.png"
+			},
+			{
+				"name": "Bronya",
+				"id": 7014,
+				"file": "Character_Bronya_Icon.png"
+			},
+			{
+				"name": "Caelus: Destruction",
+				"id": 7015,
+				"file": "Character_Caelus_(Destruction)_Icon.png"
+			},
+			{
+				"name": "Caelus: Harmony",
+				"id": 7016,
+				"file": "Character_Caelus_(Harmony)_Icon.png"
+			},
+			{
+				"name": "Caelus: Preservation",
+				"id": 7017,
+				"file": "Character_Caelus_(Preservation)_Icon.png"
+			},
+			{
+				"name": "Caelus: Remembrance",
+				"id": 7018,
+				"file": "Character_Caelus_(Remembrance)_Icon.png"
+			},
+			{
+				"name": "Castorice",
+				"id": 7019,
+				"file": "Character_Castorice_Icon.png"
+			},
+			{
+				"name": "Cerydra",
+				"id": 7020,
+				"file": "Character_Cerydra_Icon.png"
+			},
+			{
+				"name": "Cipher",
+				"id": 7021,
+				"file": "Character_Cipher_Icon.png"
+			},
+			{
+				"name": "Clara",
+				"id": 7022,
+				"file": "Character_Clara_Icon.png"
+			},
+			{
+				"name": "Cyrene",
+				"id": 7023,
+				"file": "Character_Cyrene_Icon.png"
+			},
+			{
+				"name": "Dan Heng • Imbibitor Lunae",
+				"id": 7024,
+				"file": "Character_Dan_Heng_•_Imbibitor_Lunae_Icon.png"
+			},
+			{
+				"name": "Dan Heng • Permansor Terrae",
+				"id": 7025,
+				"file": "Character_Dan_Heng_•_Permansor_Terrae_Icon.png"
+			},
+			{
+				"name": "Dan Heng",
+				"id": 7026,
+				"file": "Character_Dan_Heng_Icon.png"
+			},
+			{
+				"name": "Dr. Ratio",
+				"id": 7027,
+				"file": "Character_Dr._Ratio_Icon.png"
+			},
+			{
+				"name": "Evanescia",
+				"id": 7028,
+				"file": "Character_Evanescia_Icon.png"
+			},
+			{
+				"name": "Evernight",
+				"id": 7029,
+				"file": "Character_Evernight_Icon.png"
+			},
+			{
+				"name": "Feixiao",
+				"id": 7030,
+				"file": "Character_Feixiao_Icon.png"
+			},
+			{
+				"name": "Firefly",
+				"id": 7031,
+				"file": "Character_Firefly_Icon.png"
+			},
+			{
+				"name": "Fu Xuan",
+				"id": 7032,
+				"file": "Character_Fu_Xuan_Icon.png"
+			},
+			{
+				"name": "Fugue",
+				"id": 7033,
+				"file": "Character_Fugue_Icon.png"
+			},
+			{
+				"name": "Gallagher",
+				"id": 7034,
+				"file": "Character_Gallagher_Icon.png"
+			},
+			{
+				"name": "Gepard",
+				"id": 7035,
+				"file": "Character_Gepard_Icon.png"
+			},
+			{
+				"name": "Gilgamesh",
+				"id": 7036,
+				"file": "Character_Gilgamesh_Icon.png"
+			},
+			{
+				"name": "Guinaifen",
+				"id": 7037,
+				"file": "Character_Guinaifen_Icon.png"
+			},
+			{
+				"name": "Hanya",
+				"id": 7038,
+				"file": "Character_Hanya_Icon.png"
+			},
+			{
+				"name": "Herta",
+				"id": 7039,
+				"file": "Character_Herta_Icon.png"
+			},
+			{
+				"name": "Himeko • Nova",
+				"id": 7040,
+				"file": "Character_Himeko_•_Nova_Icon.png"
+			},
+			{
+				"name": "Himeko",
+				"id": 7041,
+				"file": "Character_Himeko_Icon.png"
+			},
+			{
+				"name": "Hook",
+				"id": 7042,
+				"file": "Character_Hook_Icon.png"
+			},
+			{
+				"name": "Huohuo",
+				"id": 7043,
+				"file": "Character_Huohuo_Icon.png"
+			},
+			{
+				"name": "Hyacine",
+				"id": 7044,
+				"file": "Character_Hyacine_Icon.png"
+			},
+			{
+				"name": "Hysilens",
+				"id": 7045,
+				"file": "Character_Hysilens_Icon.png"
+			},
+			{
+				"name": "Jade",
+				"id": 7046,
+				"file": "Character_Jade_Icon.png"
+			},
+			{
+				"name": "Jiaoqiu",
+				"id": 7047,
+				"file": "Character_Jiaoqiu_Icon.png"
+			},
+			{
+				"name": "Jing Yuan",
+				"id": 7048,
+				"file": "Character_Jing_Yuan_Icon.png"
+			},
+			{
+				"name": "Jingliu",
+				"id": 7049,
+				"file": "Character_Jingliu_Icon.png"
+			},
+			{
+				"name": "Kafka",
+				"id": 7050,
+				"file": "Character_Kafka_Icon.png"
+			},
+			{
+				"name": "Lingsha",
+				"id": 7051,
+				"file": "Character_Lingsha_Icon.png"
+			},
+			{
+				"name": "Luka",
+				"id": 7052,
+				"file": "Character_Luka_Icon.png"
+			},
+			{
+				"name": "Luocha",
+				"id": 7053,
+				"file": "Character_Luocha_Icon.png"
+			},
+			{
+				"name": "Lynx",
+				"id": 7054,
+				"file": "Character_Lynx_Icon.png"
+			},
+			{
+				"name": "March 7th: The Hunt",
+				"id": 7055,
+				"file": "Character_March_7th_(The_Hunt)_Icon.png"
+			},
+			{
+				"name": "March 7th: Preservation",
+				"id": 7056,
+				"file": "Character_March_7th_Icon.png"
+			},
+			{
+				"name": "Misha",
+				"id": 7057,
+				"file": "Character_Misha_Icon.png"
+			},
+			{
+				"name": "Mortenax Blade",
+				"id": 7058,
+				"file": "Character_Mortenax_Blade_Icon.png"
+			},
+			{
+				"name": "Moze",
+				"id": 7059,
+				"file": "Character_Moze_Icon.png"
+			},
+			{
+				"name": "Mydei",
+				"id": 7060,
+				"file": "Character_Mydei_Icon.png"
+			},
+			{
+				"name": "Natasha",
+				"id": 7061,
+				"file": "Character_Natasha_Icon.png"
+			},
+			{
+				"name": "Pearl",
+				"id": 7062,
+				"file": "Character_Pearl_Icon.png"
+			},
+			{
+				"name": "Pela",
+				"id": 7063,
+				"file": "Character_Pela_Icon.png"
+			},
+			{
+				"name": "Phainon",
+				"id": 7064,
+				"file": "Character_Phainon_Icon.png"
+			},
+			{
+				"name": "Qingque",
+				"id": 7065,
+				"file": "Character_Qingque_Icon.png"
+			},
+			{
+				"name": "Rappa",
+				"id": 7066,
+				"file": "Character_Rappa_Icon.png"
+			},
+			{
+				"name": "Rin Tohsaka",
+				"id": 7067,
+				"file": "Character_Rin_Tohsaka_Icon.png"
+			},
+			{
+				"name": "Robin • Summeretto",
+				"id": 7068,
+				"file": "Character_Robin_•_Summeretto_Icon.png"
+			},
+			{
+				"name": "Robin",
+				"id": 7069,
+				"file": "Character_Robin_Icon.png"
+			},
+			{
+				"name": "Ruan Mei",
+				"id": 7070,
+				"file": "Character_Ruan_Mei_Icon.png"
+			},
+			{
+				"name": "Saber",
+				"id": 7071,
+				"file": "Character_Saber_Icon.png"
+			},
+			{
+				"name": "Sampo",
+				"id": 7072,
+				"file": "Character_Sampo_Icon.png"
+			},
+			{
+				"name": "Seele",
+				"id": 7073,
+				"file": "Character_Seele_Icon.png"
+			},
+			{
+				"name": "Serval",
+				"id": 7074,
+				"file": "Character_Serval_Icon.png"
+			},
+			{
+				"name": "Silver Wolf",
+				"id": 7075,
+				"file": "Character_Silver_Wolf_Icon.png"
+			},
+			{
+				"name": "Silver Wolf LV.999",
+				"id": 7076,
+				"file": "Character_Silver_Wolf_LV.999_Icon.png"
+			},
+			{
+				"name": "Sparkle",
+				"id": 7077,
+				"file": "Character_Sparkle_Icon.png"
+			},
+			{
+				"name": "Sparxie",
+				"id": 7078,
+				"file": "Character_Sparxie_Icon.png"
+			},
+			{
+				"name": "Stelle: Destruction",
+				"id": 7079,
+				"file": "Character_Stelle_(Destruction)_Icon.png"
+			},
+			{
+				"name": "Stelle: Harmony",
+				"id": 7080,
+				"file": "Character_Stelle_(Harmony)_Icon.png"
+			},
+			{
+				"name": "Stelle: Preservation",
+				"id": 7081,
+				"file": "Character_Stelle_(Preservation)_Icon.png"
+			},
+			{
+				"name": "Stelle: Remembrance",
+				"id": 7082,
+				"file": "Character_Stelle_(Remembrance)_Icon.png"
+			},
+			{
+				"name": "Sunday",
+				"id": 7083,
+				"file": "Character_Sunday_Icon.png"
+			},
+			{
+				"name": "Sushang",
+				"id": 7084,
+				"file": "Character_Sushang_Icon.png"
+			},
+			{
+				"name": "The Dahlia",
+				"id": 7085,
+				"file": "Character_The_Dahlia_Icon.png"
+			},
+			{
+				"name": "The Herta",
+				"id": 7086,
+				"file": "Character_The_Herta_Icon.png"
+			},
+			{
+				"name": "Tingyun",
+				"id": 7087,
+				"file": "Character_Tingyun_Icon.png"
+			},
+			{
+				"name": "Topaz & Numby",
+				"id": 7088,
+				"file": "Character_Topaz_&_Numby_Icon.png"
+			},
+			{
+				"name": "Tribbie",
+				"id": 7089,
+				"file": "Character_Tribbie_Icon.png"
+			},
+			{
+				"name": "Welt",
+				"id": 7090,
+				"file": "Character_Welt_Icon.png"
+			},
+			{
+				"name": "Xueyi",
+				"id": 7091,
+				"file": "Character_Xueyi_Icon.png"
+			},
+			{
+				"name": "Yanqing",
+				"id": 7092,
+				"file": "Character_Yanqing_Icon.png"
+			},
+			{
+				"name": "Yao Guang",
+				"id": 7093,
+				"file": "Character_Yao_Guang_Icon.png"
+			},
+			{
+				"name": "Yukong",
+				"id": 7094,
+				"file": "Character_Yukong_Icon.png"
+			},
+			{
+				"name": "Yunli",
+				"id": 7095,
+				"file": "Character_Yunli_Icon.png"
+			}
+		]
+	},
+	{
+		"name": "CC98 Default Avatars",
+		"description": "Default avatar set from the CC98 forum (cc98.org).",
+		"avatars": [
+			{
+				"name": "Default Avatar Boy",
+				"id": 10000,
+				"file": "default_avatar_boy.png"
+			},
+			{
+				"name": "Default Avatar Girl",
+				"id": 10001,
+				"file": "default_avatar_girl.png"
 			}
 		]
 	}

@@ -25,6 +25,8 @@
     "avatars": "workspace:*",
     "clsx": "^2.1.1",
     "copy-to-clipboard": "^4.0.2",
+    "echarts": "^6.1.0",
+    "echarts-for-react": "^3.0.6",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",
     "github-markdown-css": "^5.9.0",

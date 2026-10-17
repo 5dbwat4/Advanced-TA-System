@@ -27,6 +27,7 @@ import { scoresRoutes } from './routes/scores'
 import { settingsRoutes } from './routes/settings'
 import { staffRoutes } from './routes/staff'
 import { studentPreviewRoutes } from './routes/student-preview'
+import { studentRoutes } from './routes/student'
 import { tokensRoutes } from './routes/tokens'
 import { zjuamRoutes } from './routes/zjuam'
 
@@ -75,9 +76,12 @@ createRealtime(fastify)
 const STUDENT_ALLOWED_ROUTES = new Set([
   '/api/auth/me',
   '/api/auth/setup',
+  '/api/auth/student/unlock',
   '/api/auth/logout',
   '/api/auth/passkey/registration-options',
   '/api/auth/passkey/registration-verify',
+  '/api/student/overview',
+  '/api/student/experiments/:id',
   '/api/settings',
   '/api/settings/preferences',
 ])
@@ -148,6 +152,7 @@ await fastify.register(scoresRoutes, { prefix: '/api/scores' })
 await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
 await fastify.register(devboardsRoutes, { prefix: '/api/devboards' })
 await fastify.register(studentPreviewRoutes, { prefix: '/api/student-preview' })
+await fastify.register(studentRoutes, { prefix: '/api/student' })
 await fastify.register(mcpRoutes)
 
 fastify.get('/api/health', async () => ({ ok: true }))

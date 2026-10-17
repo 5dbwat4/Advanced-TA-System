@@ -9,6 +9,7 @@ import { Logo } from '@/components/ui/Logo'
 import type { LoginCandidate } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
+import { homePathFor } from '@/lib/student-route'
 
 type SelectState = {
   selectionToken: string
@@ -40,7 +41,7 @@ export default function LoginSelect() {
     try {
       const user = await selectAccount(selectionToken, candidate.userId)
       toast.success(`欢迎回来，${user.name}`)
-      const dest = user.role === 'STUDENT' ? '/home' : (from ?? '/console')
+      const dest = user.role === 'STUDENT' ? homePathFor(user) : (from ?? '/console')
       navigate(dest, { replace: true })
     } catch (error) {
       toast.error(getErrorMessage(error, '登录失败，请重新登录'))

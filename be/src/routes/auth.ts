@@ -39,6 +39,18 @@ const exchangeSchema = z.object({
   token: z.string().min(1),
 })
 
+const switchAccountSchema = z.object({
+  userId: z.string().min(1),
+})
+
+const studentUnlockSchema = z.object({
+  username: z.string().trim().min(1).max(32),
+  password: z
+    .union([z.literal(''), z.string().min(8).max(128)])
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+})
+
 /** 选择页候选 */
 type LoginCandidate = {
   userId: string
@@ -390,8 +402,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(401).send({ error: 'INVALID_TOKEN', message: '链接无效或已过期' })
     }
 
+    const { uid, eid } = payload
+    if (typeof uid !== 'string' || typeof eid !== 'string') {
+      return reply.code(401).send({ error: 'INVALID_TOKEN', message: '链接无效或已过期' })
+    }
+
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
+      where: { id: uid },
       include: { klass: true },
     })
     if (!user || user.role !== 'STUDENT' || user.status !== 'ACTIVE') {
@@ -399,7 +416,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const experiment = await prisma.experiment.findUnique({
-      where: { id: payload.experimentId },
+      where: { id: eid },
       select: { classId: true },
     })
     if (!experiment || experiment.classId !== user.classId) {
@@ -424,6 +441,65 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
     return reply.send({ user: publicUser(user) })
   })
+
+  /** 当前学号已绑定的全部课程账号（含助教 / 学生身份） */
+  fastify.get('/accounts', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const payload = request.user as { sub: string }
+    const current = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, studentId: true },
+    })
+    if (!current) {
+      return reply.code(401).send({ error: 'UNAUTHORIZED', message: '用户不存在' })
+    }
+
+    const users = await prisma.user.findMany({
+      where: current.studentId
+        ? { studentId: current.studentId, status: 'ACTIVE' }
+        : { id: current.id, status: 'ACTIVE' },
+      include: { klass: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    return reply.send({ accounts: users.map(toCandidate) })
+  })
+
+  /** 在同学号的多个课程账号之间切换 */
+  fastify.post(
+    '/accounts/switch',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const parsed = switchAccountSchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const payload = request.user as { sub: string }
+      const current = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { studentId: true, role: true, status: true },
+      })
+      if (!current || current.status !== 'ACTIVE') {
+        return reply.code(401).send({ error: 'UNAUTHORIZED', message: '用户不存在' })
+      }
+
+      const target = await prisma.user.findUnique({
+        where: { id: parsed.data.userId },
+        include: { klass: true },
+      })
+      if (!target || target.status !== 'ACTIVE') {
+        return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: '账号不存在' })
+      }
+      if (!current.studentId || target.studentId !== current.studentId) {
+        return reply.code(403).send({ error: 'ACCOUNT_MISMATCH', message: '只能切换到同学号的账号' })
+      }
+      if (current.role === 'STUDENT' && target.role !== 'STUDENT') {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '学生账号不能切换到助教账号' })
+      }
+
+      return reply.send(await issueLogin(fastify, target))
+    },
+  )
 
   /** 完善信息：统一身份认证自动开通的账号设置用户名 / 可选密码 */
   fastify.post('/setup', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -465,6 +541,61 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.send({ user: publicUser(updatedUser) })
   })
+
+  /** 学生首次进入：设置用户名，可选设置密码（WebAuthn 由前端直接绑定） */
+  fastify.post(
+    '/student/unlock',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const parsed = studentUnlockSchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'INVALID_BODY',
+          message: '用户名长度需为 1-32 个字符（密码若填写至少 8 位）',
+        })
+      }
+
+      const { sub } = request.user as { sub: string }
+      const current = await prisma.user.findUnique({
+        where: { id: sub },
+        include: { klass: true },
+      })
+      if (!current) {
+        return reply.code(401).send({ error: 'UNAUTHORIZED', message: '用户不存在' })
+      }
+      if (current.role !== 'STUDENT') {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '仅学生账号可解封' })
+      }
+      if (current.status !== 'ACTIVE') {
+        return reply.code(403).send({ error: 'ACCOUNT_DISABLED', message: '该账号已被移出名单' })
+      }
+      if (current.username) {
+        return reply.code(409).send({ error: 'ALREADY_UNLOCKED', message: '账号已解封' })
+      }
+
+      const { username, password } = parsed.data
+      const clash = await prisma.user.findFirst({
+        where: {
+          username,
+          classId: current.classId,
+          NOT: { id: current.id },
+        },
+        select: { id: true },
+      })
+      if (clash) {
+        return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名在本班已存在' })
+      }
+
+      const passwordHash = password ? await hashPassword(password) : undefined
+      const updated = await prisma.user.update({
+        where: { id: current.id },
+        data: { username, ...(passwordHash ? { password: passwordHash } : {}) },
+        include: { klass: true },
+      })
+
+      return reply.send({ user: publicUser(updated) })
+    },
+  )
 
   /** 退出登录（JWT 无状态，由客户端丢弃 token） */
   fastify.post('/logout', async (_request, reply) => {

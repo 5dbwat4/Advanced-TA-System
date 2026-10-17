@@ -5,8 +5,10 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { RedirectIfAuthed } from '@/components/auth/RedirectIfAuthed'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { RequireStaff } from '@/components/auth/RequireStaff'
+import { RequireStudent } from '@/components/auth/RequireStudent'
 import { AppShell } from '@/components/layout/AppShell'
 import { PublicLayout } from '@/components/layout/PublicLayout'
+import { StudentShell } from '@/components/layout/StudentShell'
 
 const BankDetail = lazy(() => import('@/pages/BankDetail'))
 const BankManage = lazy(() => import('@/pages/BankManage'))
@@ -32,6 +34,7 @@ const LoginSelect = lazy(() => import('@/pages/LoginSelect'))
 const More = lazy(() => import('@/pages/More'))
 const NewBank = lazy(() => import('@/pages/NewBank'))
 const NewClassAccount = lazy(() => import('@/pages/NewClassAccount'))
+const NewCourse = lazy(() => import('@/pages/NewCourse'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 const Questions = lazy(() => import('@/pages/Questions'))
 const ReportCriteria = lazy(() => import('@/pages/ReportCriteria'))
@@ -41,7 +44,11 @@ const ScoreEntry = lazy(() => import('@/pages/ScoreEntry'))
 const Scores = lazy(() => import('@/pages/Scores'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const Setup = lazy(() => import('@/pages/Setup'))
-const StudentHome = lazy(() => import('@/pages/StudentHome'))
+const StudentExperiment = lazy(() => import('@/pages/StudentExperiment'))
+const StudentOverview = lazy(() => import('@/pages/StudentOverview'))
+const StudentScores = lazy(() => import('@/pages/StudentScores'))
+const StudentSettings = lazy(() => import('@/pages/StudentSettings'))
+const StudentUnlock = lazy(() => import('@/pages/StudentUnlock'))
 const StudentPreviewView = lazy(() => import('@/pages/StudentPreviewView'))
 const Terms = lazy(() => import('@/pages/Terms'))
 const XzzdPush = lazy(() => import('@/pages/XzzdPush'))
@@ -64,9 +71,18 @@ export default function App() {
         </Route>
         <Route path="/login/select" element={<LoginSelect />} />
         <Route element={<RequireAuth />}>
-          <Route path="/home" element={<StudentHome />} />
+          <Route path="/home" element={<Navigate to="/student-console" replace />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/student/unlock" element={<StudentUnlock />} />
+          <Route element={<RequireStudent />}>
+            <Route path="/student-console" element={<StudentShell />}>
+              <Route index element={<StudentOverview />} />
+              <Route path="scores" element={<StudentScores />} />
+              <Route path="experiments/:id" element={<StudentExperiment />} />
+              <Route path="settings" element={<StudentSettings />} />
+            </Route>
+          </Route>
           <Route element={<RequireStaff />}>
             <Route path="/console/reports/:id" element={<ReportGrade />} />
             <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
@@ -92,6 +108,7 @@ export default function App() {
             <Route path="scores" element={<Scores />} />
             <Route path="scores/standalone" element={<ScoreEntry />} />
             <Route path="courses/settings" element={<CourseSettings />} />
+            <Route path="courses/new" element={<NewCourse />} />
             <Route path="courses/checkpoints" element={<Checkpoints />} />
             <Route path="courses/focus-students" element={<FocusStudents />} />
             <Route path="settings" element={<Settings />} />

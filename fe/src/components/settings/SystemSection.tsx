@@ -89,12 +89,15 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       toast.error('没有该课程的绑定授权，请确认你是任课教师')
       return
     }
-    navigate('/console/courses/new-account', {
-      state: {
-        bindToken,
-        classId: existingClass?.id,
-        className: existingClass?.name ?? course.displayName ?? course.name,
-      },
+    const className = existingClass?.name ?? course.displayName ?? course.name
+    if (existingClass) {
+      navigate('/console/courses/new-account', {
+        state: { bindToken, classId: existingClass.id, className },
+      })
+      return
+    }
+    navigate('/console/courses/new', {
+      state: { bindToken, courseId: String(course.id), courseName: className },
     })
   }
 

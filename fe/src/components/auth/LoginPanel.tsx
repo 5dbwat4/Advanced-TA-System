@@ -26,6 +26,7 @@ import { getErrorMessage } from '@/lib/error'
 import type { IconComponent } from '@/lib/icon'
 import { clearLastUser, getLastUser, lastUserIdentifier, type LastUser } from '@/lib/last-user'
 import { getAuthenticationOptions } from '@/lib/passkey'
+import { homePathFor } from '@/lib/student-route'
 import { cn } from '@/lib/utils'
 
 type Method = 'password' | 'zjuam'
@@ -129,7 +130,7 @@ export function LoginPanel() {
       const user = result
       toast.success(`欢迎回来，${user.name}`)
       const dest =
-        user.role === 'STUDENT' ? '/home' : user.username ? (from ?? '/console') : '/setup'
+        user.role === 'STUDENT' ? homePathFor(user) : user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
       if (HCAPTCHA_SITEKEY) {
@@ -158,7 +159,7 @@ export function LoginPanel() {
       toast.success(`欢迎回来，${user.name}`)
       const from = (location.state as { from?: string } | null)?.from
       const dest =
-        user.role === 'STUDENT' ? '/home' : user.username ? (from ?? '/console') : '/setup'
+        user.role === 'STUDENT' ? homePathFor(user) : user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
       if ((error as Error).name === 'NotAllowedError') return

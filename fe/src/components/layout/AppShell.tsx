@@ -1,6 +1,6 @@
 import { Button, Dropdown, Label, Tooltip } from '@heroui/react'
 import { motion } from 'motion/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -14,14 +14,22 @@ import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { fetchMyAccounts, switchMyAccount, type LoginCandidate } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/error'
 import { MOBILE_NAV_ITEMS, MORE_PATH, NAV_ITEMS, isMoreSection } from '@/lib/nav'
 import { useAppStore, useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { getZjuamCredential } from '@/lib/zjuam'
 
+const ROLE_LABELS: Record<LoginCandidate['role'], string> = {
+  TA: '助教',
+  TEACHER: '教师',
+  STUDENT: '学生',
+}
+
 export function AppShell() {
-  const { user, logout } = useAuth()
+  const { user, logout, adoptSession } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const moreActive = isMoreSection(pathname)
@@ -34,6 +42,59 @@ export function AppShell() {
   const syncLocalCredential = useAppStore((state) => state.syncLocalCredential)
   const loadZjuamCourses = useAppStore((state) => state.loadZjuamCourses)
   const hasZjuamPassword = user?.hasZjuamPassword
+  const [accounts, setAccounts] = useState<LoginCandidate[]>([])
+  const [switching, setSwitching] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchMyAccounts()
+      .then((res) => {
+        if (!cancelled) setAccounts(res.accounts)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
+  const accountOptions: LoginCandidate[] =
+    accounts.length > 0
+      ? accounts
+      : user
+        ? [
+            {
+              userId: user.id,
+              name: user.name,
+              studentId: user.studentId,
+              classId: user.classId,
+              className: currentClass?.name ?? null,
+              role: user.role,
+            },
+          ]
+        : []
+
+  const switchCourse = async (account: LoginCandidate) => {
+    if (account.userId === user?.id) {
+      if (account.classId) setCurrentClassId(account.classId)
+      return
+    }
+
+    setSwitching(true)
+    try {
+      const result = await switchMyAccount(account.userId)
+      adoptSession(result)
+      if (result.user.classId) setCurrentClassId(result.user.classId)
+      if (result.user.role === 'STUDENT') {
+        navigate('/home', { replace: true })
+      } else {
+        toast.success(`已切换到 ${account.className ?? '新课程'}`)
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, '切换课程失败'))
+    } finally {
+      setSwitching(false)
+    }
+  }
 
   useEffect(() => {
     if (classes.length === 0) {
@@ -212,7 +273,7 @@ export function AppShell() {
                 className="shrink-0 text-brand-600 dark:text-brand-300"
               />
             )}
-            {classes.length === 0 ? (
+            {accountOptions.length === 0 ? (
               <Button aria-label="选择班级" size="sm" variant="secondary" isDisabled>
                 未绑定班级
               </Button>
@@ -222,6 +283,7 @@ export function AppShell() {
                   aria-label="选择班级"
                   size="sm"
                   variant="secondary"
+                  isDisabled={switching}
                   className="max-w-[10rem] md:max-w-[14rem]"
                 >
                   <span className="truncate">{currentClass?.name ?? '选择班级'}</span>
@@ -230,16 +292,27 @@ export function AppShell() {
                 <Dropdown.Popover>
                   <Dropdown.Menu
                     selectionMode="single"
-                    selectedKeys={currentClass ? [currentClass.id] : []}
+                    selectedKeys={user ? [user.id] : []}
                     onSelectionChange={(keys) => {
                       const id = Array.from(keys)[0]
-                      if (typeof id === 'string') setCurrentClassId(id)
+                      if (typeof id !== 'string') return
+                      const account = accountOptions.find((item) => item.userId === id)
+                      if (account) void switchCourse(account)
                     }}
                   >
-                    {classes.map((item) => (
-                      <Dropdown.Item key={item.id} id={item.id} textValue={item.name}>
+                    {accountOptions.map((item) => (
+                      <Dropdown.Item
+                        key={item.userId}
+                        id={item.userId}
+                        textValue={`${item.className ?? '未绑定班级'} ${ROLE_LABELS[item.role]}`}
+                      >
                         <Dropdown.ItemIndicator />
-                        <Label>{item.name}</Label>
+                        <Label className="flex w-full items-center justify-between gap-2">
+                          <span className="truncate">{item.className ?? '未绑定班级'}</span>
+                          <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10px] font-medium text-fg-subtle">
+                            {ROLE_LABELS[item.role]}
+                          </span>
+                        </Label>
                       </Dropdown.Item>
                     ))}
                   </Dropdown.Menu>

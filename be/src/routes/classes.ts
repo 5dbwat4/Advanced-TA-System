@@ -16,14 +16,22 @@ const classParamsSchema = z.object({
   id: z.string().min(1),
 })
 
+/** 录入新班级：绑定授权由“获取课程”时签发 */
+const createClassSchema = z.object({
+  bindToken: z.string().min(1),
+  name: z.string().trim().min(1).max(64),
+  type: z.enum(['2026-sys1', '2026-sys2', '2026-sys3']),
+})
+
 /** 为新班级创建账号：绑定授权由“获取课程”时签发，服务端不再信任客户端课程 id */
 const newClassAccountSchema = z.object({
   bindToken: z.string().min(1),
-  classId: z.string().trim().min(1).optional(),
-  type: z.enum(['2026-sys1', '2026-sys2', '2026-sys3']).optional(),
+  classId: z.string().trim().min(1),
   name: z.string().trim().min(1).max(32),
   username: z.string().trim().min(1).max(32),
-  password: z.string().min(8).max(128),
+  password: z.string().max(128).optional(),
+  syncLogin: z.boolean().optional().default(true),
+  syncPreferences: z.boolean().optional().default(true),
 })
 
 /** 带 HTTP 状态码的业务异常（由全局错误处理器输出） */
@@ -40,10 +48,6 @@ class ClassAccountError extends Error {
 function classAccountError(statusCode: number, code: string, message: string): ClassAccountError {
   return new ClassAccountError(statusCode, code, message)
 }
-
-const classParamsSchema = z.object({
-  id: z.string().min(1),
-})
 
 const rosterBodySchema = z.object({
   account: z.string().trim().min(1).max(64).optional(),
@@ -147,6 +151,72 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     return klass
   }
 
+  /** 录入新班级：仅持有该课程绑定授权的任课教师可创建 */
+  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const parsed = createClassSchema.safeParse(request.body ?? {})
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const { sub } = request.user as { sub: string }
+    const bind = verifyCourseBindToken(fastify, parsed.data.bindToken, sub)
+    if (!bind) {
+      return reply.code(401).send({
+        error: 'BIND_TOKEN_INVALID',
+        message: '课程绑定授权已失效，请重新获取课程',
+      })
+    }
+
+    const existing = await prisma.class.findUnique({ where: { xzzdClassId: bind.courseId } })
+    if (existing) {
+      return reply.send({
+        class: {
+          id: existing.id,
+          name: existing.name,
+          type: existing.type,
+          xzzdClassId: existing.xzzdClassId,
+        },
+      })
+    }
+
+    let klass: Class
+    try {
+      klass = await prisma.class.create({
+        data: {
+          xzzdClassId: bind.courseId,
+          name: parsed.data.name,
+          type: parsed.data.type,
+        },
+      })
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await prisma.class.findUnique({ where: { xzzdClassId: bind.courseId } })
+        if (raced) {
+          return reply.send({
+            class: {
+              id: raced.id,
+              name: raced.name,
+              type: raced.type,
+              xzzdClassId: raced.xzzdClassId,
+            },
+          })
+        }
+      }
+      throw error
+    }
+
+    return reply.code(201).send({
+      class: {
+        id: klass.id,
+        name: klass.name,
+        type: klass.type,
+        xzzdClassId: klass.xzzdClassId,
+      },
+    })
+  })
+
   /**
    * 为新班级创建助教 / 教师账号。
    * 单班模型下，绑定新课程不再移动当前账号，而是复制身份信息到新账号。
@@ -171,7 +241,15 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         })
       }
 
-      const { bindToken, classId, type, name, username, password } = parsed.data
+      const {
+        bindToken,
+        classId,
+        name,
+        username,
+        password,
+        syncLogin,
+        syncPreferences,
+      } = parsed.data
       const bind = verifyCourseBindToken(fastify, bindToken, sub)
       if (!bind) {
         return reply.code(401).send({
@@ -180,33 +258,23 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         })
       }
 
-      const passwordHash = await hashPassword(password)
+      if (password && password.length < 8) {
+        return reply.code(400).send({ error: 'INVALID_PASSWORD', message: '密码至少 8 位' })
+      }
+      const passwordHash = password
+        ? await hashPassword(password)
+        : syncLogin
+          ? current.password
+          : null
 
       try {
         const result = await prisma.$transaction(async (tx) => {
-          let klass: Class | null = null
-          if (classId) {
-            klass = await tx.class.findUnique({ where: { id: classId } })
-            if (!klass) {
-              throw classAccountError(404, 'CLASS_NOT_FOUND', '课程不存在')
-            }
-            if (klass.xzzdClassId !== bind.courseId) {
-              throw classAccountError(403, 'CLASS_MISMATCH', '该班级不属于授权课程')
-            }
-          } else {
-            klass = await tx.class.findUnique({ where: { xzzdClassId: bind.courseId } })
-            if (!klass) {
-              klass = await tx.class.create({
-                data: {
-                  xzzdClassId: bind.courseId,
-                  name: bind.courseName,
-                  type: type ?? '2026-sys2',
-                },
-              })
-            }
-          }
+          const klass = await tx.class.findUnique({ where: { id: classId } })
           if (!klass) {
-            throw classAccountError(400, 'INVALID_BODY', '缺少课程信息')
+            throw classAccountError(404, 'CLASS_NOT_FOUND', '课程不存在')
+          }
+          if (klass.xzzdClassId !== bind.courseId) {
+            throw classAccountError(403, 'CLASS_MISMATCH', '该班级不属于授权课程')
           }
 
           const existing = await tx.user.findFirst({
@@ -232,12 +300,12 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
               studentId: current.studentId,
               username,
               password: passwordHash,
-              avatar: current.avatar,
+              avatar: syncPreferences ? current.avatar : null,
               zjuamAccount: current.zjuamAccount,
               zjuamPassword: current.zjuamPassword,
               zjuPersonId: current.zjuPersonId,
               zjuSyncedAt: current.zjuSyncedAt,
-              preferences: current.preferences,
+              preferences: syncPreferences ? current.preferences : null,
               classId: klass.id,
               status: 'ACTIVE',
             },

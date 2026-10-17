@@ -180,6 +180,19 @@ export function isLoginSelection(result: LoginResult): result is LoginSelection 
   return 'requiresSelection' in result && result.requiresSelection === true
 }
 
+/** 当前学号已绑定的全部课程账号（含助教 / 学生身份） */
+export function fetchMyAccounts(): Promise<{ accounts: LoginCandidate[] }> {
+  return apiFetch<{ accounts: LoginCandidate[] }>('/api/auth/accounts')
+}
+
+/** 在同学号的多个课程账号之间切换 */
+export function switchMyAccount(userId: string): Promise<{ token: string; user: User }> {
+  return apiFetch<{ token: string; user: User }>('/api/auth/accounts/switch', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  })
+}
+
 export type CheckoffQuestion = {
   id: string
   question: string
@@ -561,13 +574,65 @@ export function fetchStudentPreview(token: string): Promise<StudentPreviewData> 
   )
 }
 
+export type StudentOverviewExperiment = {
+  id: string
+  mark: string
+  title: string
+  publishTime: string | null
+  checkoffDeadline: string | null
+  reportDeadline: string | null
+  ratio: number[]
+  total: number | null
+  scores: Array<{ type: number; score: number }>
+  hasReport: boolean
+  remarkCount: number
+}
+
+export type StudentOverview = {
+  class: { id: string; name: string; type: string } | null
+  student: { name: string; studentId: string }
+  experiments: StudentOverviewExperiment[]
+}
+
+export function fetchStudentOverview(): Promise<StudentOverview> {
+  return apiFetch<StudentOverview>('/api/student/overview')
+}
+
+export function fetchStudentExperiment(id: string): Promise<StudentPreviewData> {
+  return apiFetch<StudentPreviewData>(`/api/student/experiments/${encodeURIComponent(id)}`)
+}
+
+export function unlockStudent(body: {
+  username: string
+  password?: string
+}): Promise<{ user: User }> {
+  return apiFetch<{ user: User }>('/api/auth/student/unlock', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export type CreateClassInput = {
+  bindToken: string
+  name: string
+  type: '2026-sys1' | '2026-sys2' | '2026-sys3'
+}
+
+export function createClass(body: CreateClassInput): Promise<{ class: ClassInfo }> {
+  return apiFetch<{ class: ClassInfo }>('/api/classes', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export type CreateClassAccountInput = {
   bindToken: string
-  classId?: string
-  type?: '2026-sys1' | '2026-sys2' | '2026-sys3'
+  classId: string
   name: string
   username: string
-  password: string
+  password?: string
+  syncLogin?: boolean
+  syncPreferences?: boolean
 }
 
 export type CreateClassAccountResult = {

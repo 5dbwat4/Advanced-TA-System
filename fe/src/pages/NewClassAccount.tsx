@@ -1,4 +1,4 @@
-import { Button, Input } from '@heroui/react'
+import { Button, Input, Switch } from '@heroui/react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -11,33 +11,11 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { createClassAccount } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
-import { cn } from '@/lib/utils'
-
-type ClassType = '2026-sys1' | '2026-sys2' | '2026-sys3'
 
 type BindState = {
   bindToken: string
   classId?: string
   className?: string
-}
-
-const TYPE_OPTIONS: { value: ClassType; label: string }[] = [
-  { value: '2026-sys1', label: '系统I' },
-  { value: '2026-sys2', label: '系统II' },
-  { value: '2026-sys3', label: '系统III' },
-]
-
-function inferType(name: string): ClassType {
-  if (name.includes('系统III') || name.includes('系统 III') || name.includes('系统Ⅲ')) {
-    return '2026-sys3'
-  }
-  if (name.includes('系统II') || name.includes('系统 II') || name.includes('系统Ⅱ')) {
-    return '2026-sys2'
-  }
-  if (name.includes('系统I') || name.includes('系统 I') || name.includes('系统Ⅰ')) {
-    return '2026-sys1'
-  }
-  return '2026-sys2'
 }
 
 export default function NewClassAccount() {
@@ -49,13 +27,13 @@ export default function NewClassAccount() {
   const bindToken = state?.bindToken ?? ''
   const classId = state?.classId ?? ''
   const className = state?.className ?? ''
-  const isExisting = Boolean(classId)
-  const hasTarget = Boolean(bindToken)
+  const hasTarget = Boolean(bindToken) && Boolean(classId)
 
   const [name, setName] = useState(user?.name ?? '')
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(user?.username ?? '')
   const [password, setPassword] = useState('')
-  const [type, setType] = useState<ClassType>(() => inferType(className))
+  const [syncLogin, setSyncLogin] = useState(true)
+  const [syncPreferences, setSyncPreferences] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const submit = async (event: React.FormEvent) => {
@@ -65,14 +43,14 @@ export default function NewClassAccount() {
       return
     }
     if (!hasTarget) {
-      toast.error('缺少课程绑定授权，请从“助教绑定课程”重新获取课程')
+      toast.error('缺少课程信息，请先添加课程')
       return
     }
-    if (!isExisting && !className) {
-      toast.error('缺少课程名称，请从“助教绑定课程”重新获取课程')
+    if (!className) {
+      toast.error('缺少课程名称，请重新获取课程')
       return
     }
-    if (password.length < 8) {
+    if (!syncLogin && password && password.length < 8) {
       toast.error('密码至少 8 位')
       return
     }
@@ -81,10 +59,12 @@ export default function NewClassAccount() {
     try {
       const result = await createClassAccount({
         bindToken,
-        ...(classId ? { classId } : { type }),
+        classId,
         name: name.trim(),
         username: username.trim(),
-        password,
+        password: syncLogin ? undefined : password,
+        syncLogin,
+        syncPreferences,
       })
       adoptSession(result)
       toast.success(`已创建账号并切换到 ${result.user.name}`)
@@ -123,7 +103,7 @@ export default function NewClassAccount() {
         {!hasTarget ? (
           <div className="mt-6 rounded-2xl border border-dashed border-danger/40 p-6 text-center">
             <p className="text-sm text-danger">
-              缺少课程绑定授权，请从“助教绑定课程”重新获取课程。
+              缺少课程信息，请从“助教绑定课程”重新添加课程。
             </p>
             <Button
               variant="secondary"
@@ -143,9 +123,7 @@ export default function NewClassAccount() {
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-3">
                 <span>目标班级</span>
-                <span className="truncate font-semibold text-fg-muted">
-                  {className || (isExisting ? '已存在班级' : '新班级')}
-                </span>
+                <span className="truncate font-semibold text-fg-muted">{className || '未命名课程'}</span>
               </div>
             </div>
 
@@ -163,35 +141,6 @@ export default function NewClassAccount() {
                 required
               />
             </div>
-
-            {!isExisting && (
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-fg-muted">课程类别</label>
-                <div className="flex flex-wrap gap-2">
-                  {TYPE_OPTIONS.map((option) => (
-                    <label
-                      key={option.value}
-                      className={cn(
-                        'flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors',
-                        type === option.value
-                          ? 'border-brand-500/60 bg-brand-500/10 text-brand-600 dark:text-brand-300'
-                          : 'border-line bg-sunken text-fg-muted hover:border-brand-500/40',
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="type"
-                        value={option.value}
-                        checked={type === option.value}
-                        onChange={() => setType(option.value)}
-                        className="accent-brand-600"
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div className="flex items-center gap-3 py-1">
               <div className="h-px flex-1 bg-line" />
@@ -215,6 +164,24 @@ export default function NewClassAccount() {
               />
             </div>
 
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-fg-muted">从原账号同步登录信息？</div>
+                <div className="text-[11px] text-fg-subtle">同步原账号密码</div>
+              </div>
+              <Switch
+                aria-label="从原账号同步登录信息"
+                isSelected={syncLogin}
+                onChange={setSyncLogin}
+              >
+                <Switch.Content>
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Content>
+              </Switch>
+            </div>
+
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-fg-muted">密码</label>
               <Input
@@ -222,23 +189,40 @@ export default function NewClassAccount() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="至少 8 位"
-                minLength={8}
+                placeholder={syncLogin ? '随原账号同步' : '留空则不设置密码'}
                 autoComplete="new-password"
-                required
+                disabled={syncLogin}
               />
             </div>
 
-            <p className="text-[11px] text-fg-subtle">
-              将复制当前助教的身份信息到新账号；创建成功后会自动切换到新账号。
-            </p>
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-fg-muted">同步我的偏好信息？</div>
+                <div className="text-[11px] text-fg-subtle">复制头像与界面偏好到新账号</div>
+              </div>
+              <Switch
+                aria-label="同步我的偏好信息"
+                isSelected={syncPreferences}
+                onChange={setSyncPreferences}
+              >
+                <Switch.Content>
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Content>
+              </Switch>
+            </div>
 
             <PendingButton
               type="submit"
               fullWidth
               size="lg"
               isPending={saving}
-              isDisabled={!name.trim() || !username.trim() || password.length < 8}
+              isDisabled={
+                !name.trim() ||
+                !username.trim() ||
+                (!syncLogin && password.length > 0 && password.length < 8)
+              }
               className="mt-2 bg-gradient-to-r from-brand-600 to-brand-700 shadow-lg shadow-brand-600/25"
               icon={ArrowRight}
               pendingLabel="创建中"

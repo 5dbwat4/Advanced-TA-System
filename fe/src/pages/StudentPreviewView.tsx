@@ -31,6 +31,7 @@ import { useAuth } from '@/lib/auth'
 import { formatDateTime } from '@/lib/format'
 import { ratioPercentages } from '@/lib/scoring'
 import { SCORE_TYPES } from '@/lib/scores'
+import { studentHomePath } from '@/lib/student-route'
 import { cn } from '@/lib/utils'
 
 export default function StudentPreviewView() {
@@ -68,6 +69,28 @@ export default function StudentPreviewView() {
       cancelled = true
     }
   }, [token])
+
+  const enterHome = async () => {
+    if (!data) return
+    if (user?.role === 'STUDENT' && user.id === data.student.userId) {
+      navigate(studentHomePath(user))
+      return
+    }
+    if (!token) {
+      navigate('/login')
+      return
+    }
+    setEntering(true)
+    try {
+      const next = await exchangeStudentPreview(token)
+      toast.success('已进入学生主页')
+      navigate(studentHomePath(next))
+    } catch (err) {
+      toast.error(getErrorMessage(err, '进入学生主页失败'))
+    } finally {
+      setEntering(false)
+    }
+  }
 
   return (
     <div className="diagonal-bg flex min-h-screen justify-center px-5 py-10">
@@ -111,7 +134,7 @@ export default function StudentPreviewView() {
   )
 }
 
-function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
+export function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
   const { experiment, student } = data
   const percentages = ratioPercentages(data.ratio)
 
@@ -183,29 +206,7 @@ function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
           <tbody>
             {SCORE_TYPES.map(({ value, label }) => {
               const row = data.scores.find((item) => item.type === value)
-  const enterHome = async () => {
-    if (!data) return
-    if (user?.id === data.student.userId) {
-      navigate('/home')
-      return
-    }
-    if (!token) {
-      navigate('/login')
-      return
-    }
-    setEntering(true)
-    try {
-      await exchangeStudentPreview(token)
-      toast.success('已进入学生主页')
-      navigate('/home')
-    } catch (err) {
-      toast.error(getErrorMessage(err, '进入学生主页失败'))
-    } finally {
-      setEntering(false)
-    }
-  }
-
-  return (
+              return (
                 <tr key={value}>
                   <td className="border-b border-line py-3">
                     {label}

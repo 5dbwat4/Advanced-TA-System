@@ -2,6 +2,7 @@ import { Spinner } from '@heroui/react'
 import { Navigate, Outlet } from 'react-router-dom'
 
 import { useAuth } from '@/lib/auth'
+import { homePathFor } from '@/lib/student-route'
 
 export function RedirectIfAuthed() {
   const { user, loading } = useAuth()
@@ -15,12 +16,7 @@ export function RedirectIfAuthed() {
   }
 
   if (user) {
-    return (
-      <Navigate
-        to={user.role === 'STUDENT' ? '/home' : user.username ? '/console' : '/setup'}
-        replace
-      />
-    )
+    return <Navigate to={homePathFor(user)} replace />
   }
 
   return <Outlet />

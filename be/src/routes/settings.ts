@@ -29,7 +29,7 @@ const settingsSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('set_avatar'),
     /** 头像 id（前端内置头像目录）；null 表示恢复默认（首字母） */
-    avatar: z.number().int().min(0).max(9999).nullable(),
+    avatar: z.number().int().min(0).max(100_000).nullable(),
   }),
 ])
 

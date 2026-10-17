@@ -12,7 +12,13 @@ import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import type { MarkdownEditorId, MarkdownStyleId } from '@/lib/api'
 
-export function PreferenceSection({ index = 0 }: { index?: number }) {
+export function PreferenceSection({
+  index = 0,
+  markdownOnly = false,
+}: {
+  index?: number
+  markdownOnly?: boolean
+}) {
   const { user, updatePreferences } = useAuth()
   const saved = user?.preferences
   const [device, setDevice] = useState<'single' | 'multi'>(saved?.device ?? 'single')
@@ -28,16 +34,24 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
 
   const dirty =
     saved == null ||
-    device !== saved.device ||
-    draw !== saved.draw ||
-    markdownEditor !== saved.markdownEditor ||
-    markdownStyle !== saved.markdownStyle ||
-    drawCount !== saved.drawCount
+    (markdownOnly
+      ? markdownStyle !== saved.markdownStyle
+      : device !== saved.device ||
+        draw !== saved.draw ||
+        markdownEditor !== saved.markdownEditor ||
+        markdownStyle !== saved.markdownStyle ||
+        drawCount !== saved.drawCount)
 
   const save = async () => {
     setSaving(true)
     try {
-      await updatePreferences({ device, draw, markdownEditor, markdownStyle, drawCount })
+      await updatePreferences({
+        device: saved?.device ?? device,
+        draw: saved?.draw ?? draw,
+        markdownEditor: saved?.markdownEditor ?? markdownEditor,
+        markdownStyle,
+        drawCount: saved?.drawCount ?? drawCount,
+      })
       toast.success('偏好已保存')
     } catch (error) {
       toast.error(getErrorMessage(error, '保存失败'))
@@ -57,18 +71,22 @@ export function PreferenceSection({ index = 0 }: { index?: number }) {
         偏好设置
       </div>
 
-      <PreferenceFields
-        device={device}
-        draw={draw}
-        drawCount={drawCount}
-        onDeviceChange={setDevice}
-        onDrawChange={setDraw}
-        onDrawCountChange={setDrawCount}
-        showIcon={false}
-        layout="rows"
-      />
+      {!markdownOnly && (
+        <>
+          <PreferenceFields
+            device={device}
+            draw={draw}
+            drawCount={drawCount}
+            onDeviceChange={setDevice}
+            onDrawChange={setDraw}
+            onDrawCountChange={setDrawCount}
+            showIcon={false}
+            layout="rows"
+          />
 
-      <MarkdownEditorChoice value={markdownEditor} onChange={setMarkdownEditor} />
+          <MarkdownEditorChoice value={markdownEditor} onChange={setMarkdownEditor} />
+        </>
+      )}
 
       <MarkdownStyleChoice value={markdownStyle} onChange={setMarkdownStyle} />
 

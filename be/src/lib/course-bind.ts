@@ -13,8 +13,8 @@ export type CourseBindPayload = {
   instructor: true
 }
 
-/** 绑定授权的有效期：足够从课程列表进入创建账号页 */
-export const COURSE_BIND_TTL = '5m'
+/** 绑定授权的有效期：足够完成“创建班级 → 创建账号”两步 */
+export const COURSE_BIND_TTL = '15m'
 
 export function signCourseBindToken(
   fastify: FastifyInstance,
