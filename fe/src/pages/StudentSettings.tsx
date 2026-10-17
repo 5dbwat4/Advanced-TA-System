@@ -14,6 +14,7 @@ import Trash2 from '~icons/lucide/trash-2'
 import { AvatarPicker } from '@/components/settings/AvatarPicker'
 import { CacheSection } from '@/components/settings/CacheSection'
 import { CreditsSection } from '@/components/settings/CreditsSection'
+import { NotificationSection } from '@/components/settings/NotificationSection'
 import { PreferenceSection } from '@/components/settings/PreferenceSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils'
 const SECTIONS: TocItem[] = [
   { id: 'profile', label: '个人信息' },
   { id: 'preferences', label: '偏好设置' },
+  { id: 'notifications', label: 'Notifications' },
   { id: 'cache', label: '缓存' },
   { id: 'credits', label: 'Credits' },
 ]
@@ -285,12 +287,16 @@ export default function StudentSettings() {
             <PreferenceSection index={1} markdownOnly />
           </section>
 
+          <section id="notifications" className={sectionClass('notifications')}>
+            <NotificationSection index={2} />
+          </section>
+
           <section id="cache" className={sectionClass('cache')}>
-            <CacheSection index={2} />
+            <CacheSection index={3} />
           </section>
 
           <section id="credits" className={sectionClass('credits')}>
-            <CreditsSection index={3} />
+            <CreditsSection index={4} />
           </section>
         </div>
 

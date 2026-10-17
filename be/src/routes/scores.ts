@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { myClassIds, requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
+import { describeScoreChange, sendPushToUser } from '../lib/push'
 import { emitReportScore, emitScoreChange } from '../lib/realtime'
 import { toScoreDto } from '../lib/score'
 
@@ -90,16 +91,23 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     let labId: string | null = null
+    let experiment: { mark: string; title: string } | null = null
     if (type !== 3) {
-      const experiment = await prisma.experiment.findUnique({ where: { id: indId } })
-      if (!experiment) {
+      const found = await prisma.experiment.findUnique({ where: { id: indId } })
+      if (!found) {
         return reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
       }
-      if (experiment.classId !== student.classId) {
+      if (found.classId !== student.classId) {
         return reply.code(400).send({ error: 'CLASS_MISMATCH', message: '实验与学生不属于同一班级' })
       }
       labId = indId
+      experiment = { mark: found.mark, title: found.title }
     }
+
+    const previous = await prisma.score.findUnique({
+      where: { userId_type_indId: { userId, type, indId } },
+      select: { score: true },
+    })
 
     const saved = await prisma.score.upsert({
       where: { userId_type_indId: { userId, type, indId } },
@@ -115,6 +123,22 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (type === 2) {
       emitReportScore(indId, userId, toScoreDto(saved), sub, saved.grader?.name ?? '')
+    }
+    if (!previous || previous.score !== saved.score) {
+      void sendPushToUser(userId, {
+        title: '成绩更新',
+        body: describeScoreChange({
+          type,
+          previous: previous?.score ?? null,
+          next: saved.score,
+          experimentMark: experiment?.mark,
+          indId,
+        }),
+        url:
+          type === 3
+            ? '/student-console/scores'
+            : `/student-console/experiments/${encodeURIComponent(indId)}`,
+      })
     }
 
     return reply.send({ score: toScoreDto(saved) })
@@ -159,6 +183,28 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
     if (type === 2) {
       emitReportScore(indId, userId, null, sub, '')
     }
+
+    const experiment =
+      type === 3
+        ? null
+        : await prisma.experiment.findUnique({
+            where: { id: indId },
+            select: { mark: true },
+          })
+    void sendPushToUser(userId, {
+      title: '成绩更新',
+      body: describeScoreChange({
+        type,
+        previous: existing.score,
+        next: null,
+        experimentMark: experiment?.mark,
+        indId,
+      }),
+      url:
+        type === 3
+          ? '/student-console/scores'
+          : `/student-console/experiments/${encodeURIComponent(indId)}`,
+    })
 
     return reply.send({ ok: true })
   })

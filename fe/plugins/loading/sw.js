@@ -29,6 +29,8 @@ const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com'
 const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com'
 const PRECACHE_CONCURRENCY = 6
 
+const GRADE_TAG = 'tasaas-grade-updates'
+
 const isCacheable = (response) => !!response && (response.ok || response.type === 'opaque')
 
 async function runPool(tasks, limit) {
@@ -232,4 +234,56 @@ self.addEventListener('fetch', (event) => {
   if (sameOrigin) {
     event.respondWith(staleWhileRevalidate(request, STATIC_CACHE))
   }
+})
+
+self.addEventListener('push', (event) => {
+  let payload = {}
+  try {
+    payload = event.data ? event.data.json() : {}
+  } catch {
+    payload = {}
+  }
+
+  const title = typeof payload.title === 'string' ? payload.title : '成绩更新'
+  const body = typeof payload.body === 'string' ? payload.body : '你的成绩有更新'
+  const tag = typeof payload.tag === 'string' ? payload.tag : GRADE_TAG
+  const url =
+    typeof payload.url === 'string' && payload.url.length > 0
+      ? payload.url
+      : 'student-console/scores'
+
+  event.waitUntil(
+    self.registration
+      .showNotification(title, {
+        body,
+        icon: new URL('icon-192.png', SCOPE).href,
+        badge: new URL('favicon-32x32.png', SCOPE).href,
+        tag,
+        data: { url },
+      })
+      .catch(() => {}),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const data = event.notification.data || {}
+  const rawUrl =
+    typeof data.url === 'string' && data.url.length > 0 ? data.url : 'student-console/scores'
+  const target = new URL(rawUrl, SCOPE).href
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      const existing = windows.find((client) =>
+        client.url.startsWith(new URL('student-console', SCOPE).href),
+      )
+      if (existing) {
+        if (existing.url !== target && typeof existing.navigate === 'function') {
+          await existing.navigate(target)
+        }
+        return existing.focus()
+      }
+      return self.clients.openWindow(target)
+    })(),
+  )
 })

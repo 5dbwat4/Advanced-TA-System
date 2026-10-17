@@ -7,10 +7,12 @@ import ClipboardList from '~icons/lucide/clipboard-list'
 import LayoutDashboard from '~icons/lucide/layout-dashboard'
 import LogOut from '~icons/lucide/log-out'
 import SettingsIcon from '~icons/lucide/settings'
+import { GradeNotificationWatcher } from '@/components/student/GradeNotificationWatcher'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
+import { disableBackgroundGradeNotifications } from '@/lib/grade-notifications'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -24,7 +26,10 @@ export function StudentShell() {
   const navigate = useNavigate()
   const klass = user?.classes[0]
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (user) {
+      await disableBackgroundGradeNotifications(user.id).catch(() => undefined)
+    }
     logout()
     toast.success('已退出登录')
     navigate('/login', { replace: true })
@@ -32,6 +37,7 @@ export function StudentShell() {
 
   return (
     <div className="flex min-h-screen">
+      <GradeNotificationWatcher />
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-line bg-elevated/60 backdrop-blur-xl md:flex">
         <div className="flex h-16 items-center gap-3 px-5">
           <Logo size={36} />

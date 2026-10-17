@@ -19,6 +19,7 @@ import { devboardsRoutes } from './routes/devboards'
 import { experimentsRoutes } from './routes/experiments'
 import { mcpRoutes } from './routes/mcp'
 import { passkeyRoutes } from './routes/passkey'
+import { pushRoutes } from './routes/push'
 import { questionsRoutes } from './routes/questions'
 import { remarksRoutes } from './routes/remarks'
 import { reportReviewsRoutes } from './routes/report-reviews'
@@ -82,6 +83,9 @@ const STUDENT_ALLOWED_ROUTES = new Set([
   '/api/auth/passkey/registration-verify',
   '/api/student/overview',
   '/api/student/experiments/:id',
+  '/api/push/public-key',
+  '/api/push/subscribe',
+  '/api/push/unsubscribe',
   '/api/settings',
   '/api/settings/preferences',
 ])
@@ -153,6 +157,7 @@ await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
 await fastify.register(devboardsRoutes, { prefix: '/api/devboards' })
 await fastify.register(studentPreviewRoutes, { prefix: '/api/student-preview' })
 await fastify.register(studentRoutes, { prefix: '/api/student' })
+await fastify.register(pushRoutes, { prefix: '/api/push' })
 await fastify.register(mcpRoutes)
 
 fastify.get('/api/health', async () => ({ ok: true }))

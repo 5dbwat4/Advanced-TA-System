@@ -33,4 +33,8 @@ export const env = {
   passkeyOrigin: process.env.PASSKEY_ORIGIN ?? 'http://localhost:5173',
   // hCaptcha 服务端密钥；未配置时跳过人机验证
   hcaptchaSecret: process.env.HCAPTCHA_SECRET ?? '',
+  // Web Push VAPID 配置；未配置时后台推送接口返回不可用
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? '',
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? '',
+  vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:admin@atasaas.5dbwat4.top',
 }

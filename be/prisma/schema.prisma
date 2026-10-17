@@ -52,18 +52,19 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  questions        Question[]
-  banks            QuestionBank[]
-  tokens           PersonalAccessToken[]
-  scoredScores     Score[]               @relation("ScoreStudent")
-  gradedScores     Score[]               @relation("ScoreGrader")
-  criteria         Criteria[]
-  reportReviews    ReportReview[]        @relation("ReportReviewStudent")
-  reviewedReports  ReportReview[]        @relation("ReportReviewRemarkBy")
-  remarks          Remark[]              @relation("RemarkStudent")
-  updatedRemarks   Remark[]              @relation("RemarkUpdatedBy")
-  checkpointClaims CheckpointClaimed[]
-  focusStudents    FocusStudent[]
+  questions         Question[]
+  banks             QuestionBank[]
+  tokens            PersonalAccessToken[]
+  pushSubscriptions PushSubscription[]
+  scoredScores      Score[]               @relation("ScoreStudent")
+  gradedScores      Score[]               @relation("ScoreGrader")
+  criteria          Criteria[]
+  reportReviews     ReportReview[]        @relation("ReportReviewStudent")
+  reviewedReports   ReportReview[]        @relation("ReportReviewRemarkBy")
+  remarks           Remark[]              @relation("RemarkStudent")
+  updatedRemarks    Remark[]              @relation("RemarkUpdatedBy")
+  checkpointClaims  CheckpointClaimed[]
+  focusStudents     FocusStudent[]
 
   @@unique([studentId, classId])
   @@unique([username, classId])
@@ -312,6 +313,21 @@ model PersonalAccessToken {
   revokedAt  DateTime?
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// 浏览器 Web Push 订阅（每个浏览器/设备一条，endpoint 全局唯一）
+model PushSubscription {
+  id        String   @id @default(uuid(4))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }

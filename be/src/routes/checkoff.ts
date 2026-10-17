@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { compareExperimentMark, parseBankQuestions } from '../lib/banks'
 import { myClassIds, requireStaff } from '../lib/class-access'
 import { prisma } from '../lib/prisma'
+import { describeScoreChange, sendPushToUser } from '../lib/push'
 import { emitScoreChange, type ScoreChangeEvent } from '../lib/realtime'
 import { toScoreDto } from '../lib/score'
 
@@ -249,6 +250,16 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
     const events: ScoreChangeEvent[] = []
 
+    const previousScores = await prisma.score.findMany({
+      where: {
+        userId,
+        indId: experimentId,
+        type: { in: scores.map((item) => item.type) },
+      },
+      select: { type: true, score: true },
+    })
+    const previousByType = new Map(previousScores.map((row) => [row.type, row.score]))
+
     await prisma.$transaction(async (tx) => {
       for (const item of scores) {
         if (item.score === null) {
@@ -282,6 +293,43 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
     for (const event of events) {
       emitScoreChange(student.classId, event)
+    }
+
+    const messages: string[] = []
+    for (const item of scores) {
+      const previous = previousByType.get(item.type) ?? null
+      if (item.score === null) {
+        if (previous !== null) {
+          messages.push(
+            describeScoreChange({
+              type: item.type,
+              previous,
+              next: null,
+              experimentMark: experiment.mark,
+              indId: experimentId,
+            }),
+          )
+        }
+        continue
+      }
+      if (previous === null || previous !== item.score) {
+        messages.push(
+          describeScoreChange({
+            type: item.type,
+            previous,
+            next: item.score,
+            experimentMark: experiment.mark,
+            indId: experimentId,
+          }),
+        )
+      }
+    }
+    if (messages.length > 0) {
+      void sendPushToUser(userId, {
+        title: '成绩更新',
+        body: messages.join('；'),
+        url: `/student-console/experiments/${encodeURIComponent(experimentId)}`,
+      })
     }
 
     return reply.send({ ok: true })
