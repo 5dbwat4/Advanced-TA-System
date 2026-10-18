@@ -212,7 +212,8 @@ export function AppShell() {
                   />
                 </Tooltip.Trigger>
                 <Tooltip.Content showArrow placement="right">
-                  {user?.username ?? '未登录'}
+                  <div className="text-xs font-semibold">{user?.name ?? '未登录'}</div>
+                  {user?.username && <div className="text-[10px] opacity-70">@{user.username}</div>}
                 </Tooltip.Content>
               </Tooltip>
               <IconAction label="退出登录" onPress={handleLogout}>
@@ -227,9 +228,9 @@ export function AppShell() {
                 fallback={user?.username?.slice(0, 1) ?? '·'}
               />
               <div className="min-w-0 flex-1 leading-tight">
-                <div className="truncate text-sm font-semibold">{user?.username ?? '未登录'}</div>
-                <div className="truncate text-xs tabular text-fg-subtle">
-                  {user?.studentId ?? '—'}
+                <div className="truncate text-sm font-semibold">{user?.name ?? '未登录'}</div>
+                <div className="truncate text-xs text-fg-subtle">
+                  {user?.username ? `@${user.username}` : '—'}
                 </div>
               </div>
               <IconAction label="退出登录" onPress={handleLogout}>

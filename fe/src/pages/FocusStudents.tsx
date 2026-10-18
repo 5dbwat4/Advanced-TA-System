@@ -425,11 +425,26 @@ export default function FocusStudents() {
                   {focusStudents.length === 0 ? '暂无重点关注学生' : '未找到匹配的学生'}
                 </div>
               ) : (
-                <table className="w-full border-separate border-spacing-0 text-sm">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
+                  <colgroup>
+                    {editing && <col className="w-12" />}
+                    <col className="w-40" />
+                    <col className="w-36" />
+                    <col className="w-72" />
+                    <col className="w-32" />
+                    {hasScoreCols &&
+                      classExperiments.flatMap((experiment) =>
+                        SCORE_TYPES.map((type) => (
+                          <col key={`${experiment.id}:${type.value}`} className="w-20" />
+                        )),
+                      )}
+                    {hasActions && <col className="w-40" />}
+                    <col />
+                  </colgroup>
                   <thead className="sticky top-0 z-20">
                     <tr>
                       {editing && (
-                        <th className={TH_LEFT}>
+                        <th className={`sticky left-0 z-30 ${TH_LEFT}`}>
                           <Checkbox
                             aria-label="全选"
                             isSelected={allSelected}
@@ -444,7 +459,10 @@ export default function FocusStudents() {
                           </Checkbox>
                         </th>
                       )}
-                      <th rowSpan={constantRowSpan} className={`sticky left-0 z-30 ${TH_LEFT}`}>
+                      <th
+                        rowSpan={constantRowSpan}
+                        className={`sticky ${editing ? 'left-12' : 'left-0'} z-30 ${TH_LEFT}`}
+                      >
                         姓名
                       </th>
                       <th rowSpan={constantRowSpan} className={TH_LEFT}>
@@ -471,10 +489,11 @@ export default function FocusStudents() {
                           操作
                         </th>
                       )}
+                      <th rowSpan={constantRowSpan} aria-hidden className={TH} />
                     </tr>
                     {hasScoreCols && (
                       <tr>
-                        {editing && <th className={TH} />}
+                        {editing && <th className={`sticky left-0 z-30 ${TH}`} />}
                         {classExperiments.flatMap((experiment) =>
                           SCORE_TYPES.map((type) => (
                             <th
@@ -496,7 +515,7 @@ export default function FocusStudents() {
                       return (
                         <tr key={item.id} className="transition-colors hover:bg-sunken/40">
                           {editing && (
-                            <td className="border-b border-r border-line px-4 py-2">
+                            <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
                               <Checkbox
                                 aria-label={`选择 ${name}`}
                                 isSelected={selected.has(item.id)}
@@ -510,7 +529,12 @@ export default function FocusStudents() {
                               </Checkbox>
                             </td>
                           )}
-                          <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
+                          <td
+                            className={cn(
+                              'sticky z-10 border-b border-r border-line bg-elevated px-4 py-2',
+                              editing ? 'left-12' : 'left-0',
+                            )}
+                          >
                             <div className="font-bold">{name}</div>
                           </td>
                           <td className="tabular border-b border-r border-line px-4 py-2 text-fg-muted">
@@ -582,6 +606,7 @@ export default function FocusStudents() {
                               </div>
                             </td>
                           )}
+                          <td aria-hidden className="border-b border-line" />
                         </tr>
                       )
                     })}

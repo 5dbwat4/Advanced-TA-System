@@ -5,6 +5,7 @@ import { useTimeoutFn } from 'react-use'
 
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { CommentTemplateSection } from '@/components/settings/CommentTemplateSection'
+import { ConvenienceToolsSection } from '@/components/settings/ConvenienceToolsSection'
 import { DevBoardsSection } from '@/components/settings/DevBoardsSection'
 import { ExperimentScoringSection } from '@/components/settings/ExperimentScoringSection'
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
@@ -24,6 +25,7 @@ const SECTIONS: TocItem[] = [
   { id: 'focus', label: '重点关注学生' },
   { id: 'boards', label: '开发板' },
   { id: 'comment', label: '评语模板' },
+  { id: 'tools', label: '便捷工具' },
   { id: 'basic', label: '基本信息' },
   { id: 'roster', label: '学生名单' },
   { id: 'tas', label: '助教' },
@@ -36,7 +38,8 @@ const PLACEHOLDER_SECTIONS = SECTIONS.filter(
     section.id !== 'scoring' &&
     section.id !== 'focus' &&
     section.id !== 'boards' &&
-    section.id !== 'comment',
+    section.id !== 'comment' &&
+    section.id !== 'tools',
 )
 
 export default function CourseSettings() {
@@ -84,9 +87,13 @@ export default function CourseSettings() {
             <CommentTemplateSection index={4} />
           </section>
 
+          <section id="tools" className={sectionClass('tools')}>
+            <ConvenienceToolsSection index={5} />
+          </section>
+
           {PLACEHOLDER_SECTIONS.map((section, index) => (
             <section key={section.id} id={section.id} className={sectionClass(section.id)}>
-              <Card index={index + 5}>
+              <Card index={index + 6}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>

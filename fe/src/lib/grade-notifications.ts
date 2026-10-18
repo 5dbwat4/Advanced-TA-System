@@ -258,7 +258,7 @@ async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> 
   })
 }
 
-function urlBase64ToUint8Array(value: string): Uint8Array {
+function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (value.length % 4)) % 4)
   const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/')
   const raw = atob(base64)
@@ -271,7 +271,7 @@ function urlBase64ToUint8Array(value: string): Uint8Array {
 
 function sameApplicationServerKey(
   subscription: PushSubscription,
-  applicationServerKey: Uint8Array,
+  applicationServerKey: Uint8Array<ArrayBuffer>,
 ): boolean {
   const current = subscription.options.applicationServerKey
   if (!current) return true
@@ -288,7 +288,7 @@ function pushErrorMessage(error: unknown): string {
   return '无法开启后台推送，请检查浏览器通知权限后重试'
 }
 
-async function readPushPublicKey(): Promise<Uint8Array> {
+async function readPushPublicKey(): Promise<Uint8Array<ArrayBuffer>> {
   const response = await apiFetch<{ publicKey: string }>('/api/push/public-key')
   return urlBase64ToUint8Array(response.publicKey)
 }
@@ -314,7 +314,7 @@ async function savePushSubscription(subscription: PushSubscription): Promise<voi
 
 async function ensurePushSubscription(
   registration: ServiceWorkerRegistration,
-  applicationServerKey: Uint8Array,
+  applicationServerKey: Uint8Array<ArrayBuffer>,
 ): Promise<PushSubscription> {
   const existing = await registration.pushManager.getSubscription()
   if (existing && sameApplicationServerKey(existing, applicationServerKey)) {

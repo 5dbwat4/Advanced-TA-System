@@ -5,7 +5,7 @@ import { Logo } from '@/components/ui/Logo'
 /** Left branding panel of the login page (desktop only). */
 export function LoginBrandPanel() {
   return (
-    <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-950 p-12 text-white lg:flex lg:w-[46%]">
+    <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-950 p-12 text-white lg:flex lg:h-full lg:w-[46%] lg:shrink-0">
       {/* decorative glows */}
       <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-brand-500/30 blur-[100px]" />
       <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-amber-500/20 blur-[100px]" />

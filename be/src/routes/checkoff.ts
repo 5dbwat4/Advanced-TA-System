@@ -236,7 +236,8 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const classIds = await myClassIds(request)
-    if (!classIds.includes(student.classId)) {
+    const classId = student.classId
+    if (!classIds.includes(classId)) {
       return reply.code(403).send({ error: 'FORBIDDEN', message: '无权修改该班级成绩' })
     }
 
@@ -244,7 +245,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     if (!experiment) {
       return reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
     }
-    if (experiment.classId !== student.classId) {
+    if (experiment.classId !== classId) {
       return reply.code(400).send({ error: 'CLASS_MISMATCH', message: '实验与学生不属于同一班级' })
     }
 
@@ -266,7 +267,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
           await tx.score.deleteMany({ where: { userId, type: item.type, indId: experimentId } })
           events.push({
             action: 'delete',
-            classId: student.classId,
+            classId,
             userId,
             type: item.type,
             indId: experimentId,
@@ -287,7 +288,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
           },
           include: { grader: { select: { id: true, name: true } } },
         })
-        events.push({ action: 'upsert', classId: student.classId, score: toScoreDto(saved) })
+        events.push({ action: 'upsert', classId, score: toScoreDto(saved) })
       }
     })
 

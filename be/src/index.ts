@@ -30,6 +30,7 @@ import { staffRoutes } from './routes/staff'
 import { studentPreviewRoutes } from './routes/student-preview'
 import { studentRoutes } from './routes/student'
 import { tokensRoutes } from './routes/tokens'
+import { xzzdSyncRoutes } from './routes/xzzd-sync'
 import { zjuamRoutes } from './routes/zjuam'
 
 const fastify = Fastify({ logger: true })
@@ -147,6 +148,7 @@ await fastify.register(settingsRoutes, { prefix: '/api/settings' })
 await fastify.register(tokensRoutes, { prefix: '/api/tokens' })
 await fastify.register(staffRoutes, { prefix: '/api/staff' })
 await fastify.register(experimentsRoutes, { prefix: '/api/experiments' })
+await fastify.register(xzzdSyncRoutes, { prefix: '/api/experiments' })
 await fastify.register(questionsRoutes, { prefix: '/api/questions' })
 await fastify.register(banksRoutes, { prefix: '/api/banks' })
 await fastify.register(rosterRoutes, { prefix: '/api' })

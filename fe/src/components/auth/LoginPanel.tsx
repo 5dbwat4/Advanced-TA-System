@@ -24,7 +24,7 @@ import { ApiError, isLoginSelection } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import type { IconComponent } from '@/lib/icon'
-import { clearLastUser, getLastUser, lastUserIdentifier, type LastUser } from '@/lib/last-user'
+import { getLastUsers, lastUserIdentifier, type LastUser } from '@/lib/last-user'
 import { getAuthenticationOptions } from '@/lib/passkey'
 import { homePathFor } from '@/lib/student-route'
 import { cn } from '@/lib/utils'
@@ -44,8 +44,9 @@ export function LoginPanel() {
   const { login } = useAuth()
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
-  const [lastUser, setLastUser] = useState<LastUser | null>(() => getLastUser())
+  const [lastUsers] = useState<LastUser[]>(() => getLastUsers())
   const [showFull, setShowFull] = useState(false)
+  const [showUserPicker, setShowUserPicker] = useState(false)
   const [method, setMethod] = useState<Method>('password')
   const [identifier, setIdentifier] = useState('')
   const [account, setAccount] = useState('')
@@ -62,7 +63,9 @@ export function LoginPanel() {
     if (!captchaToken) setCaptchaTheme(isDark ? 'dark' : 'light')
   }, [isDark, captchaToken])
 
-  const showLastCard = Boolean(lastUser) && !showFull
+  const lastUser = lastUsers[0] ?? null
+  const passkeyUsers = lastUsers.filter((item) => item.hasWebauthn)
+  const showLastCard = Boolean(lastUser) && !showFull && !showUserPicker
   const lastIdentifier = lastUser ? lastUserIdentifier(lastUser) : ''
 
   const switchMethod = (next: Method) => {
@@ -74,20 +77,27 @@ export function LoginPanel() {
     setPassword('')
   }
 
-  const continueWithOtherMethod = () => {
+  const continueWithOtherMethod = (value = lastIdentifier) => {
     if (!lastUser) return
+    setShowUserPicker(false)
     setMethod('password')
     setCaptchaToken(null)
-    setIdentifier(lastIdentifier)
+    setIdentifier(value)
     setAccount('')
     setPassword('')
     setPrefilled(true)
     setShowFull(true)
   }
 
-  const switchAccount = () => {
-    clearLastUser()
-    setLastUser(null)
+  const switchUser = () => {
+    if (passkeyUsers.length > 1) {
+      setShowUserPicker(true)
+      setShowFull(false)
+      setCaptchaToken(null)
+      return
+    }
+
+    setShowUserPicker(false)
     setShowFull(true)
     setPrefilled(false)
     setMethod('password')
@@ -127,7 +137,7 @@ export function LoginPanel() {
         })
         return
       }
-      const user = result
+      const user = result.user
       toast.success(`欢迎回来，${user.name}`)
       const dest =
         user.role === 'STUDENT' ? homePathFor(user) : user.username ? (from ?? '/console') : '/setup'
@@ -155,7 +165,7 @@ export function LoginPanel() {
         challengeToken,
       })
       if (isLoginSelection(result)) return
-      const user = result
+      const user = result.user
       toast.success(`欢迎回来，${user.name}`)
       const from = (location.state as { from?: string } | null)?.from
       const dest =
@@ -165,7 +175,7 @@ export function LoginPanel() {
       if ((error as Error).name === 'NotAllowedError') return
       if (error instanceof ApiError && error.code === 'CREDENTIAL_NOT_FOUND') {
         toast.error('该通行密钥不可用，请改用密码登录')
-        if (lastUser && !showFull) continueWithOtherMethod()
+        if (lastUser && !showFull) continueWithOtherMethod(hint ?? lastIdentifier)
         return
       }
       toast.error(getErrorMessage(error, '登录失败'))
@@ -175,7 +185,7 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
+    <div className="relative flex min-h-full flex-col items-center justify-center px-6 py-12">
       <div className="absolute right-4 top-4 flex items-center gap-1">
         <ThemeToggle />
       </div>
@@ -199,7 +209,62 @@ export function LoginPanel() {
           <h2 className="text-2xl font-bold tracking-tight">欢迎回来</h2>
         </div>
 
-        {showLastCard && lastUser ? (
+        {showUserPicker ? (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-6 flex flex-col gap-3"
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold text-fg-muted">
+              <Users width={15} height={15} className="shrink-0" />
+              选择上次登录用户
+            </div>
+            <div className="flex flex-col gap-2">
+              {passkeyUsers.map((item) => {
+                const identifier = lastUserIdentifier(item)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={passkeyLoading}
+                    onClick={() => void passkeyLogin(identifier || undefined)}
+                    className="flex items-center gap-3 rounded-2xl border border-line bg-sunken p-3 text-left transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                      {item.role === 'TEACHER' ? (
+                        <BookOpenCheck width={18} height={18} className="shrink-0" />
+                      ) : item.role === 'STUDENT' ? (
+                        <GraduationCap width={18} height={18} className="shrink-0" />
+                      ) : (
+                        <ShieldCheck width={18} height={18} className="shrink-0" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-fg">{item.name}</div>
+                      <div className="truncate text-xs text-fg-subtle">
+                        {identifier || '—'} · 通行密钥
+                      </div>
+                    </div>
+                    <Fingerprint
+                      width={18}
+                      height={18}
+                      className="shrink-0 text-brand-600 dark:text-brand-300"
+                    />
+                  </button>
+                )
+              })}
+            </div>
+            <Button
+              type="button"
+              fullWidth
+              variant="ghost"
+              onPress={() => setShowUserPicker(false)}
+            >
+              返回
+            </Button>
+          </motion.div>
+        ) : showLastCard && lastUser ? (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -245,14 +310,14 @@ export function LoginPanel() {
               </PendingButton>
             )}
 
-            <Button type="button" fullWidth variant="secondary" onPress={continueWithOtherMethod}>
+            <Button type="button" fullWidth variant="secondary" onPress={() => continueWithOtherMethod()}>
               <Ellipsis width={16} height={16} className="shrink-0" />
               其它登录方式
             </Button>
 
-            <Button type="button" fullWidth variant="secondary" onPress={switchAccount}>
+            <Button type="button" fullWidth variant="secondary" onPress={switchUser}>
               <Users width={16} height={16} className="shrink-0" />
-              切换账号
+              切换用户
             </Button>
           </motion.div>
         ) : (

@@ -52,6 +52,7 @@ const StudentUnlock = lazy(() => import('@/pages/StudentUnlock'))
 const StudentPreviewView = lazy(() => import('@/pages/StudentPreviewView'))
 const Terms = lazy(() => import('@/pages/Terms'))
 const XzzdPush = lazy(() => import('@/pages/XzzdPush'))
+const XzzdScoreSync = lazy(() => import('@/pages/XzzdScoreSync'))
 
 function RouteLoading() {
   return (
@@ -108,6 +109,7 @@ export default function App() {
             <Route path="scores" element={<Scores />} />
             <Route path="scores/standalone" element={<ScoreEntry />} />
             <Route path="courses/settings" element={<CourseSettings />} />
+            <Route path="courses/sync-scores" element={<XzzdScoreSync />} />
             <Route path="courses/new" element={<NewCourse />} />
             <Route path="courses/checkpoints" element={<Checkpoints />} />
             <Route path="courses/focus-students" element={<FocusStudents />} />

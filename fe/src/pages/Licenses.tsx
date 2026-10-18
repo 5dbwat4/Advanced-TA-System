@@ -14,7 +14,6 @@ export default function Licenses() {
     <>
       <PageHeader
         title="Third Party Dependencies"
-        subtitle={`共 ${thirdPartyLicenses.length} 个构建依赖`}
         actions={
           <Button variant="secondary" onPress={() => navigate('/license/full')}>
             <FileText width={16} height={16} className="shrink-0" />

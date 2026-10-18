@@ -83,8 +83,8 @@ export function StudentShell() {
             />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-sm font-semibold">{user?.name ?? '未登录'}</div>
-              <div className="truncate text-xs tabular text-fg-subtle">
-                {user?.studentId ?? '—'}
+              <div className="truncate text-xs text-fg-subtle">
+                {user?.username ? `@${user.username}` : '—'}
               </div>
             </div>
             <Button

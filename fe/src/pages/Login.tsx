@@ -3,9 +3,11 @@ import { LoginPanel } from '@/components/auth/LoginPanel'
 
 export default function Login() {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-dvh overflow-hidden">
       <LoginBrandPanel />
-      <LoginPanel />
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <LoginPanel />
+      </div>
     </div>
   )
 }

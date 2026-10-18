@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(res.user)
         setBootstrapError(null)
         saveLastUser(res.user)
-        return res.user
+        return res
       },
       selectAccount: async (selectionToken, userId) => {
         const res = await apiFetch<{ token: string; user: User }>('/api/auth/select', {

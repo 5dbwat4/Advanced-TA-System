@@ -514,6 +514,87 @@ export function fetchXzzdPushPreview(
   })
 }
 
+export type XzzdSyncMode = 'onlyEmpty' | 'overwrite'
+
+export type XzzdSyncMapping = {
+  sourceMin: number
+  sourceMax: number
+  targetMin: number
+  targetMax: number
+}
+
+export type XzzdSyncRow = {
+  userId: string | null
+  name: string
+  studentId: string
+  personId: number | null
+  rawScore: number | null
+  upstreamScore: number | null
+  upstreamComment: string | null
+  localScore: number | null
+  issue: string | null
+}
+
+export type XzzdSyncPreview = {
+  activity: {
+    id: string
+    title: string
+    endTime: string | null
+    isClosed: boolean
+    hasScoreCount: number
+  }
+  experiment: {
+    id: string
+    mark: string
+    title: string
+    classId: string
+  }
+  type: number
+  lastSyncAt: string | null
+  rows: XzzdSyncRow[]
+}
+
+export type XzzdSyncApplyResult = {
+  create: number
+  update: number
+  unchanged: number
+  skip: number
+  unmatched: number
+  lastSyncAt: string | null
+}
+
+function xzzdSyncCredentialBody() {
+  const local = getZjuamCredential()
+  return local ? { account: local.account, password: local.password } : {}
+}
+
+export function fetchXzzdSyncPreview(
+  experimentId: string,
+  activityId: string,
+  type: number,
+  mapping?: XzzdSyncMapping | null,
+): Promise<XzzdSyncPreview> {
+  return apiFetch<XzzdSyncPreview>(`/api/experiments/${experimentId}/xzzd-sync/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ activityId, type, mapping, ...xzzdSyncCredentialBody() }),
+  })
+}
+
+export function applyXzzdSync(
+  experimentId: string,
+  body: {
+    activityId: string
+    type: number
+    mode: XzzdSyncMode
+    mapping?: XzzdSyncMapping | null
+  },
+): Promise<XzzdSyncApplyResult> {
+  return apiFetch<XzzdSyncApplyResult>(`/api/experiments/${experimentId}/xzzd-sync/apply`, {
+    method: 'POST',
+    body: JSON.stringify({ ...body, ...xzzdSyncCredentialBody() }),
+  })
+}
+
 /** 学在浙大提交附件（submission_list 接口裁剪） */
 export type ZjuamSubmissionAttachment = {
   id: number
