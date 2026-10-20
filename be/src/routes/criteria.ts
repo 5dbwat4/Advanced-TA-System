@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
+import { requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
 
 const criterionCardSchema = z.object({
   id: z.string().min(1),

@@ -1,4 +1,4 @@
-import type { ZjuamCourseStudent, ZjuamHomeworkScore } from './zjuam'
+import type { ZjuamCourseStudent, ZjuamHomeworkScore } from './zjuam.js'
 
 export type XzzdSyncMode = 'onlyEmpty' | 'overwrite'
 

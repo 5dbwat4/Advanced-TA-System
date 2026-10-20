@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 
-import { prisma } from './prisma'
-import { isStaff } from './roles'
-import type { ScoreDto } from './score'
-import { randomSecret, verifyTotp } from './totp'
+import { prisma } from './prisma.js'
+import { isStaff } from './roles.js'
+import type { ScoreDto } from './score.js'
+import { randomSecret, verifyTotp } from './totp.js'
 
 /** 成绩变更事件（按班级广播） */
 export type ScoreChangeEvent =

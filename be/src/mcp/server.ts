@@ -1,9 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-import type { McpPrincipal } from './principal'
-import { registerBankTools } from './tools/banks'
-import { registerExperimentTools } from './tools/experiments'
-import { registerQuestionTools } from './tools/questions'
+import type { McpPrincipal } from './principal.js'
+import { registerBankTools } from './tools/banks.js'
+import { registerExperimentTools } from './tools/experiments.js'
+import { registerQuestionTools } from './tools/questions.js'
 
 /** 为单次请求构建 MCP 服务器（无状态：每次请求独立，工具闭包持有调用主体） */
 export function buildMcpServer(principal: McpPrincipal): McpServer {

@@ -1,6 +1,6 @@
 import { verify } from 'hcaptcha'
 
-import { env } from '../env'
+import { env } from '../env.js'
 
 /**
  * 校验 hCaptcha token。

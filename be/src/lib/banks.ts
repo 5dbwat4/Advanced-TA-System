@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 
-import { prisma } from './prisma'
+import { prisma } from './prisma.js'
 
 /** 题库查询的关联加载（含 owner 与绑定实验数） */
 export const bankInclude = {

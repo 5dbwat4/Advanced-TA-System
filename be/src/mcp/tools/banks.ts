@@ -7,10 +7,10 @@ import {
   normalizeQuestionIds,
   parseBankQuestions,
   serializeBank,
-} from '../../lib/banks'
-import { prisma } from '../../lib/prisma'
-import { jsonResult, runTool } from '../helpers'
-import type { McpPrincipal } from '../principal'
+} from '../../lib/banks.js'
+import { prisma } from '../../lib/prisma.js'
+import { jsonResult, runTool } from '../helpers.js'
+import type { McpPrincipal } from '../principal.js'
 
 async function loadQuestionsInOrder(ids: string[]) {
   if (ids.length === 0) return []

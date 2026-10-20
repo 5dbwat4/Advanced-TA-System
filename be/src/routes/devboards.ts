@@ -2,13 +2,13 @@ import { Prisma, type DevBoard } from '@prisma/client'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access'
+import { myClassIds, requireStaff } from '../lib/class-access.js'
 import {
   loadBoardUsers,
   resolveBoardUserIds,
   serializeBoard,
-} from '../lib/devboards'
-import { prisma } from '../lib/prisma'
+} from '../lib/devboards.js'
+import { prisma } from '../lib/prisma.js'
 
 const listQuerySchema = z.object({
   classId: z.string().trim().min(1),

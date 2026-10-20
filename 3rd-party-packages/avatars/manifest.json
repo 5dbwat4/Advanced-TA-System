@@ -1997,5 +1997,426 @@
 				"file": "default_avatar_girl.png"
 			}
 		]
+	},
+	{
+		"name": "Wuthering Waves Profile Avatar",
+		"description": "Game graphic of Wuthering Waves, an RPG game copyrighted (©) by Kuro Games. Though this media is subject to copyright, it is believed that its use qualifies as fair use under U.S. fair use laws.\n© Kuro Games. All rights reserved. Wuthering Waves is a trademark of Kuro Games.",
+		"avatars": [
+			{
+				"name": "Suoming",
+				"id": 12000,
+				"file": "resonator/Suoming.png"
+			},
+			{
+				"name": "Hsin",
+				"id": 12001,
+				"file": "resonator/Hsin.png"
+			},
+			{
+				"name": "Jingran",
+				"id": 12002,
+				"file": "resonator/Jingran.png"
+			},
+			{
+				"name": "Qingxiao",
+				"id": 12003,
+				"file": "resonator/Qingxiao.png"
+			},
+			{
+				"name": "Lucy",
+				"id": 12004,
+				"file": "resonator/Lucy.png"
+			},
+			{
+				"name": "Suisui",
+				"id": 12005,
+				"file": "resonator/Suisui.png"
+			},
+			{
+				"name": "Rebecca",
+				"id": 12006,
+				"file": "resonator/Rebecca.png"
+			},
+			{
+				"name": "Yangyang Xuanling",
+				"id": 12007,
+				"file": "resonator/Yangyang Xuanling.png"
+			},
+			{
+				"name": "Lucilla",
+				"id": 12008,
+				"file": "resonator/Lucilla.png"
+			},
+			{
+				"name": "Hiyuki",
+				"id": 12009,
+				"file": "resonator/Hiyuki.png"
+			},
+			{
+				"name": "Denia",
+				"id": 12010,
+				"file": "resonator/Denia.png"
+			},
+			{
+				"name": "Sigrika",
+				"id": 12011,
+				"file": "resonator/Sigrika.png"
+			},
+			{
+				"name": "Luuk Herssen",
+				"id": 12012,
+				"file": "resonator/Luuk Herssen.png"
+			},
+			{
+				"name": "Lynae",
+				"id": 12013,
+				"file": "resonator/Lynae.png"
+			},
+			{
+				"name": "Mornye",
+				"id": 12014,
+				"file": "resonator/Mornye.png"
+			},
+			{
+				"name": "Aemeath",
+				"id": 12015,
+				"file": "resonator/Aemeath.png"
+			},
+			{
+				"name": "Buling",
+				"id": 12016,
+				"file": "resonator/Buling.png"
+			},
+			{
+				"name": "Chisa",
+				"id": 12017,
+				"file": "resonator/Chisa.png"
+			},
+			{
+				"name": "Qiuyuan",
+				"id": 12018,
+				"file": "resonator/Qiuyuan.png"
+			},
+			{
+				"name": "Galbrena",
+				"id": 12019,
+				"file": "resonator/Galbrena.png"
+			},
+			{
+				"name": "Iuno",
+				"id": 12020,
+				"file": "resonator/Iuno.png"
+			},
+			{
+				"name": "Augusta",
+				"id": 12021,
+				"file": "resonator/Augusta.png"
+			},
+			{
+				"name": "Phrolova",
+				"id": 12022,
+				"file": "resonator/Phrolova.png"
+			},
+			{
+				"name": "Lupa",
+				"id": 12023,
+				"file": "resonator/Lupa.png"
+			},
+			{
+				"name": "Cartethyia",
+				"id": 12024,
+				"file": "resonator/Cartethyia.png"
+			},
+			{
+				"name": "Ciaccona",
+				"id": 12025,
+				"file": "resonator/Ciaccona.png"
+			},
+			{
+				"name": "Zani",
+				"id": 12026,
+				"file": "resonator/Zani.png"
+			},
+			{
+				"name": "Cantarella",
+				"id": 12027,
+				"file": "resonator/Cantarella.png"
+			},
+			{
+				"name": "Phoebe",
+				"id": 12028,
+				"file": "resonator/Phoebe.png"
+			},
+			{
+				"name": "Brant",
+				"id": 12029,
+				"file": "resonator/Brant.png"
+			},
+			{
+				"name": "Roccia",
+				"id": 12030,
+				"file": "resonator/Roccia.png"
+			},
+			{
+				"name": "Carlotta",
+				"id": 12031,
+				"file": "resonator/Carlotta.png"
+			},
+			{
+				"name": "Camellya",
+				"id": 12032,
+				"file": "resonator/Camellya.png"
+			},
+			{
+				"name": "Shorekeeper",
+				"id": 12033,
+				"file": "resonator/Shorekeeper.png"
+			},
+			{
+				"name": "Xiangli Yao",
+				"id": 12034,
+				"file": "resonator/Xiangli Yao.png"
+			},
+			{
+				"name": "Zhezhi",
+				"id": 12035,
+				"file": "resonator/Zhezhi.png"
+			},
+			{
+				"name": "Changli",
+				"id": 12036,
+				"file": "resonator/Changli.png"
+			},
+			{
+				"name": "Jinhsi",
+				"id": 12037,
+				"file": "resonator/Jinhsi.png"
+			},
+			{
+				"name": "Yinlin",
+				"id": 12038,
+				"file": "resonator/Yinlin.png"
+			},
+			{
+				"name": "Jiyan",
+				"id": 12039,
+				"file": "resonator/Jiyan.png"
+			},
+			{
+				"name": "Verina",
+				"id": 12040,
+				"file": "resonator/Verina.png"
+			},
+			{
+				"name": "Calcharo",
+				"id": 12041,
+				"file": "resonator/Calcharo.png"
+			},
+			{
+				"name": "Lingyang",
+				"id": 12042,
+				"file": "resonator/Lingyang.png"
+			},
+			{
+				"name": "Encore",
+				"id": 12043,
+				"file": "resonator/Encore.png"
+			},
+			{
+				"name": "Jianxin",
+				"id": 12044,
+				"file": "resonator/Jianxin.png"
+			},
+			{
+				"name": "Danjin",
+				"id": 12045,
+				"file": "resonator/Danjin.png"
+			},
+			{
+				"name": "Lumi",
+				"id": 12046,
+				"file": "resonator/Lumi.png"
+			},
+			{
+				"name": "Youhu",
+				"id": 12047,
+				"file": "resonator/Youhu.png"
+			},
+			{
+				"name": "Yuanwu",
+				"id": 12048,
+				"file": "resonator/Yuanwu.png"
+			},
+			{
+				"name": "Rover (Female)",
+				"id": 12049,
+				"file": "resonator/Rover (Female).png"
+			},
+			{
+				"name": "Sanhua",
+				"id": 12050,
+				"file": "resonator/Sanhua.png"
+			},
+			{
+				"name": "Mortefi",
+				"id": 12051,
+				"file": "resonator/Mortefi.png"
+			},
+			{
+				"name": "Taoqi",
+				"id": 12052,
+				"file": "resonator/Taoqi.png"
+			},
+			{
+				"name": "Aalto",
+				"id": 12053,
+				"file": "resonator/Aalto.png"
+			},
+			{
+				"name": "Baizhi",
+				"id": 12054,
+				"file": "resonator/Baizhi.png"
+			},
+			{
+				"name": "Yangyang",
+				"id": 12055,
+				"file": "resonator/Yangyang.png"
+			},
+			{
+				"name": "Chixia",
+				"id": 12056,
+				"file": "resonator/Chixia.png"
+			},
+			{
+				"name": "Rover (Male)",
+				"id": 12057,
+				"file": "resonator/Rover (Male).png"
+			},
+			{
+				"name": "Mornye (Plush Dream)",
+				"id": 12058,
+				"file": "outfit/Mornye (Plush Dream).png"
+			},
+			{
+				"name": "Lynae (Peppermint)",
+				"id": 12059,
+				"file": "outfit/Lynae (Peppermint).png"
+			},
+			{
+				"name": "Chisa (Peach Parfait)",
+				"id": 12060,
+				"file": "outfit/Chisa (Peach Parfait).png"
+			},
+			{
+				"name": "Zani (Downtown Repose)",
+				"id": 12061,
+				"file": "outfit/Zani (Downtown Repose).png"
+			},
+			{
+				"name": "Carlotta (Splashing Summer)",
+				"id": 12062,
+				"file": "outfit/Carlotta (Splashing Summer).png"
+			},
+			{
+				"name": "Changli (Laurel Nymph)",
+				"id": 12063,
+				"file": "outfit/Changli (Laurel Nymph).png"
+			},
+			{
+				"name": "Sanhua (Exorcistic Adjuration)",
+				"id": 12064,
+				"file": "outfit/Sanhua (Exorcistic Adjuration).png"
+			},
+			{
+				"name": "Jinhsi (Peach Blossom)",
+				"id": 12065,
+				"file": "outfit/Jinhsi (Peach Blossom).png"
+			},
+			{
+				"name": "Wooly",
+				"id": 12066,
+				"file": "event/Wooly.png"
+			},
+			{
+				"name": "Space and Blake Bloom",
+				"id": 12067,
+				"file": "event/Space and Blake Bloom.png"
+			},
+			{
+				"name": "Tidesong Once More",
+				"id": 12068,
+				"file": "event/Tidesong Once More.png"
+			},
+			{
+				"name": "Chuluu!",
+				"id": 12069,
+				"file": "event/Chuluu!.png"
+			},
+			{
+				"name": "Come On, Smile",
+				"id": 12070,
+				"file": "event/Come On, Smile.png"
+			},
+			{
+				"name": "Post-Doomsday Coffee",
+				"id": 12071,
+				"file": "event/Post-Doomsday Coffee.png"
+			},
+			{
+				"name": "Dream",
+				"id": 12072,
+				"file": "event/Dream.png"
+			},
+			{
+				"name": "Lighthouse and Blake Bloom",
+				"id": 12073,
+				"file": "event/Lighthouse and Blake Bloom.png"
+			},
+			{
+				"name": "Wax and Wane",
+				"id": 12074,
+				"file": "event/Wax and Wane.png"
+			},
+			{
+				"name": "TD Terminator",
+				"id": 12075,
+				"file": "event/TD Terminator.png"
+			},
+			{
+				"name": "Outstanding Commander",
+				"id": 12076,
+				"file": "event/Outstanding Commander.png"
+			},
+			{
+				"name": "Moment of Resonance",
+				"id": 12077,
+				"file": "event/Moment of Resonance.png"
+			},
+			{
+				"name": "Where Tides Meet Sky (Male Rover)",
+				"id": 12078,
+				"file": "special/Where Tides Meet Sky (Male Rover).png"
+			},
+			{
+				"name": "Where Tides Meet Sky (Female Rover)",
+				"id": 12079,
+				"file": "special/Where Tides Meet Sky (Female Rover).png"
+			},
+			{
+				"name": "Choir of Stars",
+				"id": 12080,
+				"file": "special/Choir of Stars.png"
+			},
+			{
+				"name": "Mellow Hours",
+				"id": 12081,
+				"file": "special/Mellow Hours.png"
+			},
+			{
+				"name": "Fragrance of Tea",
+				"id": 12082,
+				"file": "special/Fragrance of Tea.png"
+			}
+		]
 	}
 ]

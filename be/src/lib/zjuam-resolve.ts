@@ -1,8 +1,8 @@
 import type { FastifyReply } from 'fastify'
 
-import { decryptSecret } from './crypto'
-import { prisma } from './prisma'
-import { ZjuamError } from './zjuam'
+import { decryptSecret } from './crypto.js'
+import { prisma } from './prisma.js'
+import { ZjuamError } from './zjuam.js'
 
 /**
  * 解析学在浙大凭据：优先请求体（"密码保存在本地" 模式），否则回退到已保存的凭据。

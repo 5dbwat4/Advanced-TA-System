@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
+import { requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
 
 const listQuerySchema = z.object({
   userId: z.string().trim().min(1),

@@ -1,11 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { describeScoreChange, sendPushToUser } from '../lib/push'
-import { emitReportScore, emitScoreChange } from '../lib/realtime'
-import { toScoreDto } from '../lib/score'
+import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { describeScoreChange, sendPushToUser } from '../lib/push.js'
+import { emitReportScore, emitScoreChange } from '../lib/realtime.js'
+import { toScoreDto } from '../lib/score.js'
 
 const putScoreSchema = z.object({
   userId: z.string().trim().min(1),

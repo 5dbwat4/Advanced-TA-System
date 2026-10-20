@@ -2,14 +2,14 @@ import type { Class, User } from '@prisma/client'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { verifyCaptcha } from '../lib/hcaptcha'
-import { prisma } from '../lib/prisma'
-import { hashPassword, verifyPassword } from '../lib/password'
-import { isRole, isStaff, type Role } from '../lib/roles'
-import type { StudentViewPayload } from '../lib/student-view'
-import { isUsernameTaken } from '../lib/username'
-import { publicUser } from '../lib/user'
-import { loginToCourses, ZjuamError } from '../lib/zjuam'
+import { verifyCaptcha } from '../lib/hcaptcha.js'
+import { prisma } from '../lib/prisma.js'
+import { hashPassword, verifyPassword } from '../lib/password.js'
+import { isRole, isStaff, type Role } from '../lib/roles.js'
+import type { StudentViewPayload } from '../lib/student-view.js'
+import { isUsernameTaken } from '../lib/username.js'
+import { publicUser } from '../lib/user.js'
+import { loginToCourses, ZjuamError } from '../lib/zjuam.js'
 
 const loginSchema = z.object({
   /** 用户名 或 学号 */

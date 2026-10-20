@@ -1,7 +1,7 @@
 import webpush from 'web-push'
 
-import { env } from '../env'
-import { prisma } from './prisma'
+import { env } from '../env.js'
+import { prisma } from './prisma.js'
 
 const SCORE_TYPE_LABELS = ['功能测试', '验收问答', '报告']
 const DEFAULT_TAG = 'tasaas-grade-updates'

@@ -2,8 +2,8 @@ import type { User } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
+import { myClassIds } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
 
 const studentsQuerySchema = z.object({
   classId: z.string().trim().min(1).optional(),

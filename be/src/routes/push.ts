@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { env } from '../env'
-import { requireStudent } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { pushConfigured } from '../lib/push'
+import { env } from '../env.js'
+import { requireStudent } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { pushConfigured } from '../lib/push.js'
 
 const subscriptionSchema = z.object({
   endpoint: z.string().url().max(4096),

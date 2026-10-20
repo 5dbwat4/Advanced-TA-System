@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 
-import { buildStudentReport } from '../lib/student-report'
-import type { StudentViewPayload } from '../lib/student-view'
+import { buildStudentReport } from '../lib/student-report.js'
+import type { StudentViewPayload } from '../lib/student-view.js'
 
 /**
  * 学生成绩查看（公开页面数据源）：凭链接中的签名 token 查看

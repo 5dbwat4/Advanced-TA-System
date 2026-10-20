@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { REMARK_TYPE_CHECKOFF, toRemarkDto } from '../lib/remark'
+import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { REMARK_TYPE_CHECKOFF, toRemarkDto } from '../lib/remark.js'
 
 const querySchema = z.object({
   userId: z.string().trim().min(1),

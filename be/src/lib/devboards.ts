@@ -1,6 +1,6 @@
 import type { DevBoard } from '@prisma/client'
 
-import { prisma } from './prisma'
+import { prisma } from './prisma.js'
 
 /** 开发板上的学生信息 */
 export type BoardStudent = {

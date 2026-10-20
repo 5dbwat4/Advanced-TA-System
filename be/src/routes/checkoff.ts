@@ -1,12 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { compareExperimentMark, parseBankQuestions } from '../lib/banks'
-import { myClassIds, requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { describeScoreChange, sendPushToUser } from '../lib/push'
-import { emitScoreChange, type ScoreChangeEvent } from '../lib/realtime'
-import { toScoreDto } from '../lib/score'
+import { compareExperimentMark, parseBankQuestions } from '../lib/banks.js'
+import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { describeScoreChange, sendPushToUser } from '../lib/push.js'
+import { emitScoreChange, type ScoreChangeEvent } from '../lib/realtime.js'
+import { toScoreDto } from '../lib/score.js'
 
 const submitSchema = z.object({
   experimentId: z.string().trim().min(1),

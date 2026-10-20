@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify'
 
-import { requireStudent } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { buildStudentReport } from '../lib/student-report'
-import { parseClassSettings, resolveScoreRatio, weightedTotal } from '../lib/xzzd-push'
+import { requireStudent } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { buildStudentReport } from '../lib/student-report.js'
+import { parseClassSettings, resolveScoreRatio, weightedTotal } from '../lib/xzzd-push.js'
 
 /** 学生控制台：仅返回当前学生本人、当前班级的数据 */
 export const studentRoutes: FastifyPluginAsync = async (fastify) => {

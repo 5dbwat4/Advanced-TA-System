@@ -1,10 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
-import { removeQuestionsFromBanks } from '../../lib/banks'
-import { prisma } from '../../lib/prisma'
-import { jsonResult, runTool } from '../helpers'
-import type { McpPrincipal } from '../principal'
+import { removeQuestionsFromBanks } from '../../lib/banks.js'
+import { prisma } from '../../lib/prisma.js'
+import { jsonResult, runTool } from '../helpers.js'
+import type { McpPrincipal } from '../principal.js'
 
 const questionSelect = {
   id: true,

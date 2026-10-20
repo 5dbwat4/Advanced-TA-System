@@ -1,9 +1,9 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 
-import { resolveMcpPrincipal } from '../mcp/principal'
-import { checkRateLimit } from '../mcp/rate-limit'
-import { buildMcpServer } from '../mcp/server'
+import { resolveMcpPrincipal } from '../mcp/principal.js'
+import { checkRateLimit } from '../mcp/rate-limit.js'
+import { buildMcpServer } from '../mcp/server.js'
 
 /** Origin 校验：防止 DNS rebinding（非浏览器请求放行，同源放行） */
 function originAllowed(request: FastifyRequest): boolean {

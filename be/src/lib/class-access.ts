@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
-import { prisma } from './prisma'
-import { isStaff, isStudent } from './roles'
+import { prisma } from './prisma.js'
+import { isStaff, isStudent } from './roles.js'
 
 declare module 'fastify' {
   interface FastifyRequest {

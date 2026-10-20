@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 
-import { env } from '../env'
+import { env } from '../env.js'
 
 /** 学生成绩查看链接的 JWT 载荷：学号 uid + 实验 eid（不设签发时间与有效期） */
 export type StudentViewPayload = {

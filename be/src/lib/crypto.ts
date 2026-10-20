@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 
-import { env } from '../env'
+import { env } from '../env.js'
 
 /** 由 credentialKey 派生 32 字节 AES-256 密钥 */
 const key = createHash('sha256').update(env.credentialKey).digest()

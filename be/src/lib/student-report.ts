@@ -1,5 +1,5 @@
-import { prisma } from './prisma'
-import { parseClassSettings, resolveScoreRatio, weightedTotal } from './xzzd-push'
+import { prisma } from './prisma.js'
+import { parseClassSettings, resolveScoreRatio, weightedTotal } from './xzzd-push.js'
 
 /** 学生某次实验的成绩、报告批阅与附言（公开预览与学生控制台共用） */
 export async function buildStudentReport(userId: string, experimentId: string) {

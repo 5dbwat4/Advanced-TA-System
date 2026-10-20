@@ -1,6 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
-import { audit, requireScope, type McpPrincipal } from './principal'
+import { audit, requireScope, type McpPrincipal } from './principal.js'
 
 /** 将任意值包装为 MCP 工具文本结果 */
 export function jsonResult(value: unknown): CallToolResult {

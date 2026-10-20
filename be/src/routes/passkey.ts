@@ -8,11 +8,11 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { env } from '../env'
-import { prisma } from '../lib/prisma'
-import { publicUser } from '../lib/user'
-import { findUserByCredentialId, parseCredentials, serializeCredentials } from '../lib/webauthn'
-import type { StoredCredential } from '../lib/webauthn'
+import { env } from '../env.js'
+import { prisma } from '../lib/prisma.js'
+import { publicUser } from '../lib/user.js'
+import { findUserByCredentialId, parseCredentials, serializeCredentials } from '../lib/webauthn.js'
+import type { StoredCredential } from '../lib/webauthn.js'
 
 /** 无状态挑战：签入短期 JWT，验证时原样带回 */
 type ChallengePayload = {

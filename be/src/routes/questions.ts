@@ -2,9 +2,9 @@ import type { Prisma } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { removeQuestionsFromBanks } from '../lib/banks'
-import { requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
+import { removeQuestionsFromBanks } from '../lib/banks.js'
+import { requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
 
 const questionInclude = {
   user: { select: { id: true, username: true, name: true } },

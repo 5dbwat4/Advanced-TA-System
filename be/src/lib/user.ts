@@ -1,6 +1,6 @@
 import type { Class, User } from '@prisma/client'
 
-import { parseCredentials } from './webauthn'
+import { parseCredentials } from './webauthn.js'
 
 /** 倾向使用的 Markdown 编辑器 */
 export type MarkdownEditorId = 'uiw' | 'mdx'

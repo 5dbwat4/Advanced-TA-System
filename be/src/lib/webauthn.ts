@@ -1,6 +1,6 @@
 import type { Class, User } from '@prisma/client'
 
-import { prisma } from './prisma'
+import { prisma } from './prisma.js'
 
 /** 单个已登记的通行密钥凭据（存储于 User.webauthn 的 JSON 数组） */
 export type StoredCredential = {

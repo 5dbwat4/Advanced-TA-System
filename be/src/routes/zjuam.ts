@@ -1,12 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { encryptSecret } from '../lib/crypto'
-import { signCourseBindToken } from '../lib/course-bind'
-import { prisma } from '../lib/prisma'
-import { publicUser } from '../lib/user'
-import { listCourses } from '../lib/zjuam'
-import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
+import { encryptSecret } from '../lib/crypto.js'
+import { signCourseBindToken } from '../lib/course-bind.js'
+import { prisma } from '../lib/prisma.js'
+import { publicUser } from '../lib/user.js'
+import { listCourses } from '../lib/zjuam.js'
+import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve.js'
 
 const credentialSchema = z.object({
   account: z.string().trim().min(1).max(64),

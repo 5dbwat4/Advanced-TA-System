@@ -1,8 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
-import { prisma } from '../lib/prisma'
-import { isStaff } from '../lib/roles'
-import { hashToken, parseScopes, parseToken } from '../lib/tokens'
+import { prisma } from '../lib/prisma.js'
+import { isStaff } from '../lib/roles.js'
+import { hashToken, parseScopes, parseToken } from '../lib/tokens.js'
 
 /** 单次 MCP 请求的调用主体 */
 export type McpPrincipal = {

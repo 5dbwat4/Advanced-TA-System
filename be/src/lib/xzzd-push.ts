@@ -1,4 +1,4 @@
-import type { ZjuamCourseStudent } from './zjuam'
+import type { ZjuamCourseStudent } from './zjuam.js'
 
 /** 默认评分占比：功能测试 : 验收问答 : 报告 = 2 : 5 : 0 */
 export const DEFAULT_SCORE_RATIO = [2, 5, 0]

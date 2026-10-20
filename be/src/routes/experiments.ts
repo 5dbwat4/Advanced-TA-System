@@ -2,18 +2,18 @@ import { Prisma } from '@prisma/client'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { compareExperimentMark } from '../lib/banks'
-import { myClassIds, requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { REMARK_TYPE_CHECKOFF, REMARK_TYPE_REPORT } from '../lib/remark'
-import { studentViewUrl as buildStudentViewUrl } from '../lib/student-view'
+import { compareExperimentMark } from '../lib/banks.js'
+import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { REMARK_TYPE_CHECKOFF, REMARK_TYPE_REPORT } from '../lib/remark.js'
+import { studentViewUrl as buildStudentViewUrl } from '../lib/student-view.js'
 import {
   assemblePushTargets,
   isSameAsUpstream,
   parseClassSettings,
   resolveScoreRatio,
   type XzzdPushTarget,
-} from '../lib/xzzd-push'
+} from '../lib/xzzd-push.js'
 import {
   fetchCourseStudents,
   fetchHomeworkScores,
@@ -26,8 +26,8 @@ import {
   type ZjuamHomeworkScore,
   type ZjuamHomeworkSubmission,
   ZjuamError,
-} from '../lib/zjuam'
-import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
+} from '../lib/zjuam.js'
+import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve.js'
 
 /** 时间线字段（ISO 8601 字符串，null 表示清空） */
 const timelineFields = {

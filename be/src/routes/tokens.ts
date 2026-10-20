@@ -2,9 +2,9 @@ import type { PersonalAccessToken } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { prisma } from '../lib/prisma'
-import { isStaff } from '../lib/roles'
-import { generateToken, MCP_SCOPES, parseScopes } from '../lib/tokens'
+import { prisma } from '../lib/prisma.js'
+import { isStaff } from '../lib/roles.js'
+import { generateToken, MCP_SCOPES, parseScopes } from '../lib/tokens.js'
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(64),

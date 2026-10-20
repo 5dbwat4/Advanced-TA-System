@@ -1,9 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
-import { prisma } from '../../lib/prisma'
-import { jsonResult, runTool } from '../helpers'
-import type { McpPrincipal } from '../principal'
+import { prisma } from '../../lib/prisma.js'
+import { jsonResult, runTool } from '../helpers.js'
+import type { McpPrincipal } from '../principal.js'
 
 export function registerExperimentTools(server: McpServer, principal: McpPrincipal): void {
   server.registerTool(

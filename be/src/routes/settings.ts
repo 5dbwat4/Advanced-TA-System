@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { hashPassword } from '../lib/password'
-import { prisma } from '../lib/prisma'
+import { hashPassword } from '../lib/password.js'
+import { prisma } from '../lib/prisma.js'
 import {
   DRAW_COUNT_DEFAULT,
   DRAW_COUNT_MAX,
@@ -10,9 +10,9 @@ import {
   parsePreferences,
   publicUser,
   type UserPreferences,
-} from '../lib/user'
-import { isUsernameTaken } from '../lib/username'
-import { parseCredentials, serializeCredentials } from '../lib/webauthn'
+} from '../lib/user.js'
+import { isUsernameTaken } from '../lib/username.js'
+import { parseCredentials, serializeCredentials } from '../lib/webauthn.js'
 
 const settingsSchema = z.discriminatedUnion('action', [
   z.object({

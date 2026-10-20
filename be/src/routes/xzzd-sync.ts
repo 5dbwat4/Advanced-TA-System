@@ -1,18 +1,18 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
-import { emitScoreChange } from '../lib/realtime'
-import { toScoreDto } from '../lib/score'
+import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
+import { emitScoreChange } from '../lib/realtime.js'
+import { toScoreDto } from '../lib/score.js'
 import {
   buildXzzdSyncRows,
   summarizeXzzdSyncRows,
   xzzdSyncAction,
   type XzzdSyncMode,
-} from '../lib/xzzd-sync'
-import { fetchHomeworkSyncData, listHomeworkActivities } from '../lib/zjuam'
-import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve'
+} from '../lib/xzzd-sync.js'
+import { fetchHomeworkSyncData, listHomeworkActivities } from '../lib/zjuam.js'
+import { resolveZjuamCredentials, sendZjuamError } from '../lib/zjuam-resolve.js'
 
 const mappingSchema = z
   .object({

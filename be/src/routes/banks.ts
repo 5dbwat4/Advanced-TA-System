@@ -8,9 +8,9 @@ import {
   normalizeQuestionIds,
   parseBankQuestions,
   serializeBank,
-} from '../lib/banks'
-import { requireStaff } from '../lib/class-access'
-import { prisma } from '../lib/prisma'
+} from '../lib/banks.js'
+import { requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
 
 const questionInclude = {
   user: { select: { id: true, username: true, name: true, avatar: true } },

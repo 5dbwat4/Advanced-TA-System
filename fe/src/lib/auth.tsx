@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { ApiError, apiFetch, getToken, isLoginSelection, setToken, type LoginResult, type User, type UserPreferences } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
+import { setSentryUser } from '@/lib/sentry'
 
 type AuthContextValue = {
   user: User | null
@@ -62,6 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!getToken()) return
     return bootstrap()
   }, [bootstrap])
+
+  useEffect(() => {
+    setSentryUser(user)
+  }, [user])
 
   const retryBootstrap = useCallback(() => {
     void bootstrap()
