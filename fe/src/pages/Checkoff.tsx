@@ -12,19 +12,24 @@ import {
 } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import ArrowLeft from '~icons/lucide/arrow-left'
 import { DemoStep } from '@/components/checkoff/DemoStep'
+import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
 import { MasterSlavePanel } from '@/components/checkoff/MasterSlavePanel'
 import { PreferenceOnboarding } from '@/components/checkoff/PreferenceOnboarding'
 import { QuestionDrawer, type QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { ScoreForm } from '@/components/checkoff/ScoreForm'
+import { SpecialDrawIntroModal } from '@/components/checkoff/SpecialDrawIntroModal'
 import { StepIndicator } from '@/components/checkoff/StepIndicator'
 import { StudentFinder } from '@/components/checkoff/StudentFinder'
 import Dices from '~icons/lucide/dices'
+import Eye from '~icons/lucide/eye'
+import EyeOff from '~icons/lucide/eye-off'
 import MoreHorizontal from '~icons/lucide/more-horizontal'
 import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
@@ -33,7 +38,7 @@ import Users from '~icons/lucide/users'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
-import { PageHeader } from '@/components/ui/PageHeader'
+import { Markdown } from '@/components/ui/Markdown'
 import {
   fetchBankQuestions,
   fetchCheckoff,
@@ -56,9 +61,14 @@ import {
   notifyCheckoffStarted,
   useCheckoffMaster,
   useCheckoffWatch,
+  type CheckoffMeta,
   type CheckoffStartedEvent,
   type SlaveCardState,
 } from '@/lib/checkoff-socket'
+import {
+  createDefaultCustomCards,
+  type CustomCard,
+} from '@/lib/custom-cards'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { SCORE_TYPES } from '@/lib/scores'
@@ -82,6 +92,34 @@ const TYPE_LABELS = new Map<number, string>(
 
 /** 「跟随实验设置」在题目集下拉中的哨兵值 */
 const FOLLOW_BANK = '__follow__'
+
+function CheckoffLayout({
+  children,
+  actions,
+}: {
+  children: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-elevated/60 px-4 backdrop-blur-xl">
+        <Link
+          to="/console"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-fg-subtle transition-colors hover:text-fg"
+        >
+          <ArrowLeft width={14} height={14} className="shrink-0" />
+          返回
+        </Link>
+        <div className="h-5 w-px bg-line" />
+        <div className="min-w-0 flex-1 truncate text-sm font-bold">验收</div>
+        {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-4xl px-4 py-6">{children}</div>
+      </div>
+    </div>
+  )
+}
 
 export default function Checkoff() {
   const currentClass = useCurrentClass()
@@ -117,10 +155,17 @@ export default function Checkoff() {
   const [specialBanks, setSpecialBanks] = useState<SpecialDrawBank[]>([])
   const [specialLoading, setSpecialLoading] = useState(specialMachine !== null)
   const [specialError, setSpecialError] = useState<string | null>(null)
+  const [masterPanelVisible, setMasterPanelVisible] = useState(true)
+  const [customCardActive, setCustomCardActive] = useState(false)
+  const [selectedCustomCard, setSelectedCustomCard] = useState<CustomCard | null>(null)
+  const [activeCustomCardSlotId, setActiveCustomCardSlotId] = useState<string | null>(null)
+  const [cardRailOpen, setCardRailOpen] = useState(false)
 
   const prefsState = useOverlayState()
   const presenceState = useOverlayState()
   const bankState = useOverlayState()
+  const specialDrawState = useOverlayState()
+  const customCardState = useOverlayState()
   const { bankId: bankOverrideId, save: saveBankOverride } = useCheckoffBankOverride()
 
   const isMulti = user?.preferences?.device === 'multi'
@@ -129,6 +174,16 @@ export default function Checkoff() {
 
   const markdownStyle = user?.preferences?.markdownStyle ?? 'github'
   const theme: 'light' | 'dark' = resolvedTheme === 'dark' ? 'dark' : 'light'
+
+  const checkoffMeta = useMemo<CheckoffMeta>(
+    () => ({
+      markdownStyle,
+      theme,
+      grader: { name: user?.name ?? '', avatar: user?.avatar ?? null },
+      student: student ? { name: student.name, avatar: student.avatar } : null,
+    }),
+    [markdownStyle, theme, user?.name, user?.avatar, student],
+  )
 
   const scoreRatio: ScoreRatio = useMemo(
     () => (experiment ? resolveScoreRatio(classSettings, experiment.id) : DEFAULT_SCORE_RATIO),
@@ -251,14 +306,49 @@ export default function Checkoff() {
     loadBanks()
   }, [bankState, bankOverrideId, loadBanks])
 
-  const openSpecialDraw = useCallback(() => {
+  const openSpecialDrawIntro = useCallback(() => {
+    specialDrawState.open()
+  }, [specialDrawState])
+
+  const openSpecialDrawEditor = useCallback(() => {
     navigate('/console/checkoff/special')
   }, [navigate])
+
+  const applySpecialDrawMachine = useCallback(
+    (machine: SpecialDrawMachine) => {
+      saveBankOverride(null)
+      setSpecialMachine(machine)
+      setDrawn([])
+      setMarks({})
+      setQuestionIndex(0)
+    },
+    [saveBankOverride],
+  )
+
+  const resetSpecialDraw = useCallback(() => {
+    clearSpecialDrawMachine()
+    setSpecialMachine(null)
+    setSpecialBanks([])
+    setSpecialError(null)
+    setSpecialLoading(false)
+    setDrawn([])
+    setMarks({})
+    setQuestionIndex(0)
+    toast.success('已恢复默认抽题方式')
+  }, [])
+
+  const resetBankOverride = useCallback(() => {
+    saveBankOverride(null)
+    setDraftBank(null)
+    toast.success('已恢复默认题目集')
+  }, [saveBankOverride])
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key === SPECIAL_DRAW_STORAGE_KEY) {
-        setSpecialMachine(loadSpecialDrawMachine())
+        const next = loadSpecialDrawMachine()
+        setSpecialMachine(next)
+        if (next) saveBankOverride(null)
         setDrawn([])
         setMarks({})
         setQuestionIndex(0)
@@ -266,7 +356,7 @@ export default function Checkoff() {
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [])
+  }, [saveBankOverride])
 
   const confirmBankOverride = useCallback(() => {
     saveBankOverride(draftBank)
@@ -380,7 +470,7 @@ export default function Checkoff() {
   const handleQuestionIndex = useCallback(
     (index: number) => {
       setQuestionIndex(index)
-      if (isMulti && student && drawn[index]) {
+      if (isMulti && student && drawn[index] && !customCardActive) {
         master.switchQuestion({
           studentName: student.name,
           studentAvatar: student.avatar,
@@ -392,11 +482,37 @@ export default function Checkoff() {
         })
       }
     },
-    [isMulti, student, drawn, master.switchQuestion],
+    [isMulti, customCardActive, student, drawn, master.switchQuestion],
   )
 
+  const showCustomCard = useCallback(
+    (slotId: string, card: CustomCard) => {
+      setSelectedCustomCard(card)
+      setActiveCustomCardSlotId(slotId)
+      if (!isMulti) {
+        customCardState.open()
+        return
+      }
+      setCustomCardActive(true)
+      master.pushState(
+        { kind: 'custom_card', title: '', content: card.content },
+        checkoffMeta,
+      )
+      toast.success('已切换到自定义 Card')
+    },
+    [isMulti, customCardState, master.pushState, checkoffMeta],
+  )
+
+  const cancelCustomCard = useCallback(() => {
+    setCustomCardActive(false)
+    setSelectedCustomCard(null)
+    setActiveCustomCardSlotId(null)
+    customCardState.close()
+    toast.success('已取消自定义 Card')
+  }, [customCardState])
+
   useEffect(() => {
-    if (!isMulti) return
+    if (!isMulti || customCardActive) return
     let state: SlaveCardState
     if (step === 0) {
       state = {
@@ -434,17 +550,17 @@ export default function Checkoff() {
     } else {
       state = { kind: 'thank', studentName: student?.name }
     }
-    master.pushState(state, { markdownStyle, theme })
+    master.pushState(state, checkoffMeta)
   }, [
     isMulti,
+    customCardActive,
     step,
     searching,
     experiment,
     student,
     drawn,
     questionIndex,
-    markdownStyle,
-    theme,
+    checkoffMeta,
     master.session.token,
     master.pushState,
   ])
@@ -465,18 +581,19 @@ export default function Checkoff() {
 
   if (authLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Spinner size="lg" />
-      </div>
+      <CheckoffLayout>
+        <div className="flex h-64 items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+      </CheckoffLayout>
     )
   }
 
   if (!currentClass) {
     return (
-      <div className="mx-auto max-w-4xl">
-        <PageHeader title="验收" />
+      <CheckoffLayout>
         <EmptyState icon={School} title="尚未绑定班级" hint="请先在设置中绑定班级" />
-      </div>
+      </CheckoffLayout>
     )
   }
 
@@ -484,25 +601,32 @@ export default function Checkoff() {
 
   if (user.preferences == null) {
     return (
-      <div className="mx-auto flex min-h-[70vh] max-w-xl items-center">
-        <div className="w-full">
-          <PreferenceOnboarding initial={null} onSubmit={savePreferences} />
+      <CheckoffLayout>
+        <div className="flex min-h-[70vh] items-center justify-center">
+          <div className="w-full max-w-xl">
+            <PreferenceOnboarding initial={null} onSubmit={savePreferences} />
+          </div>
         </div>
-      </div>
+      </CheckoffLayout>
     )
   }
 
   const preferences = user.preferences
+  const bankOverrideName = banks.find((bank) => bank.id === bankOverrideId)?.name
+  const customCards = preferences.customCards ?? createDefaultCustomCards()
+  const customCardById = new Map(customCards.cards.map((card) => [card.id, card]))
+  const activeCustomCardSlots = customCards.slots.flatMap((slot) => {
+    const card = slot.cardId ? customCardById.get(slot.cardId) : null
+    return card ? [{ slot, card }] : []
+  })
   const activeQuestions = specialMachine ? specialQuestionList : questions
   const activeQuestionsLoading = specialMachine ? specialLoading : !questionsLoaded
   const activeQuestionsError = specialMachine ? specialError : questionsError
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader
-        title="验收"
-        actions={
-          <>
+    <CheckoffLayout
+      actions={
+        <>
             <IconAction label="偏好" onPress={prefsState.open}>
               <Settings2 width={15} height={15} className="shrink-0" />
             </IconAction>
@@ -518,7 +642,8 @@ export default function Checkoff() {
                   onAction={(key) => {
                     if (key === 'presence') openPresence()
                     else if (key === 'bank') openBankPicker()
-                    else if (key === 'special') openSpecialDraw()
+                    else if (key === 'special') openSpecialDrawIntro()
+                    else if (key === 'master-panel') setMasterPanelVisible((visible) => !visible)
                   }}
                 >
                   <Dropdown.Item id="presence" textValue="现在谁正在验收">
@@ -533,16 +658,36 @@ export default function Checkoff() {
                     <Dices width={15} height={15} className="shrink-0 text-fg-muted" />
                     <Label>特殊的抽题方式</Label>
                   </Dropdown.Item>
+                  {isMulti && (
+                    <Dropdown.Item
+                      id="master-panel"
+                      textValue={
+                        masterPanelVisible ? '隐藏从机配对信息' : '显示从机配对信息'
+                      }
+                    >
+                      {masterPanelVisible ? (
+                        <EyeOff width={15} height={15} className="shrink-0 text-fg-muted" />
+                      ) : (
+                        <Eye width={15} height={15} className="shrink-0 text-fg-muted" />
+                      )}
+                      <Label>
+                        {masterPanelVisible ? '隐藏从机配对信息' : '显示从机配对信息'}
+                      </Label>
+                    </Dropdown.Item>
+                  )}
                 </Dropdown.Menu>
               </Dropdown.Popover>
             </Dropdown>
           </>
-        }
-      />
+      }
+    >
 
-      {isMulti && (
+      {isMulti && masterPanelVisible && (
         <div className="mb-4">
-          <MasterSlavePanel session={master.session} />
+          <MasterSlavePanel
+            session={master.session}
+            onHide={() => setMasterPanelVisible(false)}
+          />
         </div>
       )}
 
@@ -550,24 +695,58 @@ export default function Checkoff() {
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/25 bg-brand-500/5 px-3 py-2 text-xs">
           <Dices width={15} height={15} className="shrink-0 text-brand-600 dark:text-brand-300" />
           <span className="font-semibold text-fg">特殊的抽题方式已启用</span>
-          <span className="text-fg-muted">状态机 · {specialMachine.nodes.length} 个节点</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ml-auto"
-            onPress={openSpecialDraw}
-          >
-            编辑
-          </Button>
+          <div className="ml-auto flex items-center gap-1">
+            <Button size="sm" variant="ghost" onPress={openSpecialDrawIntro}>
+              编辑
+            </Button>
+            <Button size="sm" variant="ghost" onPress={resetSpecialDraw}>
+              恢复默认
+            </Button>
+          </div>
         </div>
       )}
 
-      <StepIndicator
-        step={step}
-        onStep={handleStep}
-        hasExperiment={Boolean(experiment)}
-        hasStudent={Boolean(student)}
-      />
+      {bankOverrideId && !specialMachine && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/25 bg-brand-500/5 px-3 py-2 text-xs">
+          <NotebookText
+            width={15}
+            height={15}
+            className="shrink-0 text-brand-600 dark:text-brand-300"
+          />
+          <span className="font-semibold text-fg">已使用其它题目集</span>
+          {bankOverrideName && <span className="text-fg-muted">{bankOverrideName}</span>}
+          <div className="ml-auto flex items-center gap-1">
+            <Button size="sm" variant="ghost" onPress={openBankPicker}>
+              编辑
+            </Button>
+            <Button size="sm" variant="ghost" onPress={resetBankOverride}>
+              恢复默认
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="relative">
+        <StepIndicator
+          step={step}
+          onStep={handleStep}
+          hasExperiment={Boolean(experiment)}
+          hasStudent={Boolean(student)}
+        />
+        {activeCustomCardSlots.length > 0 && (
+          <div className="z-20 mt-3 lg:absolute lg:left-full lg:top-0 lg:ml-3 lg:mt-0">
+            <CustomCardRail
+              customCards={customCards}
+              open={cardRailOpen}
+              activeSlotId={activeCustomCardSlotId}
+              markdownStyle={markdownStyle}
+              onToggle={() => setCardRailOpen((open) => !open)}
+              onShow={showCustomCard}
+              onCancel={cancelCustomCard}
+            />
+          </div>
+        )}
+      </div>
 
       {ratioError && (
         <Alert className="mt-4" status="warning">
@@ -689,6 +868,37 @@ export default function Checkoff() {
                   onCancel={prefsState.close}
                   layout="rows"
                 />
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+      <Modal
+        state={customCardState}
+        onOpenChange={(open) => {
+          customCardState.setOpen(open)
+          if (!open) {
+            setSelectedCustomCard(null)
+            setActiveCustomCardSlotId(null)
+          }
+        }}
+      >
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-2xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <NotebookText width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>自定义 Card</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                {selectedCustomCard?.content.trim() ? (
+                  <Markdown source={selectedCustomCard.content} style={markdownStyle} />
+                ) : (
+                  <p className="py-8 text-center text-sm text-fg-subtle">这张 Card 暂无内容</p>
+                )}
               </Modal.Body>
             </Modal.Dialog>
           </Modal.Container>
@@ -842,6 +1052,11 @@ export default function Checkoff() {
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
-    </div>
+      <SpecialDrawIntroModal
+        state={specialDrawState}
+        onEdit={openSpecialDrawEditor}
+        onApplied={applySpecialDrawMachine}
+      />
+    </CheckoffLayout>
   )
 }

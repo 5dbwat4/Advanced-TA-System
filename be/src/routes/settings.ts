@@ -4,9 +4,13 @@ import { z } from 'zod'
 import { hashPassword } from '../lib/password.js'
 import { prisma } from '../lib/prisma.js'
 import {
+  CUSTOM_CARD_CONTENT_MAX,
+  CUSTOM_CARD_TEXT_MAX,
   DRAW_COUNT_DEFAULT,
   DRAW_COUNT_MAX,
   DRAW_COUNT_MIN,
+  createDefaultCustomCards,
+  parseCustomCards,
   parsePreferences,
   publicUser,
   type UserPreferences,
@@ -102,6 +106,29 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     markdownEditor: z.enum(['uiw', 'mdx']).optional(),
     markdownStyle: z.enum(['github', 'prose']).optional(),
     drawCount: z.number().int().min(DRAW_COUNT_MIN).max(DRAW_COUNT_MAX).optional(),
+    customCards: z
+      .object({
+        slots: z
+          .array(
+            z.object({
+              id: z.string().max(64),
+              cardId: z.string().max(64).nullable(),
+            }),
+          )
+          .max(9),
+        cards: z
+          .array(
+            z.object({
+              id: z.string().max(64),
+              content: z.string().max(CUSTOM_CARD_CONTENT_MAX),
+              text: z.string().max(CUSTOM_CARD_TEXT_MAX),
+              textColor: z.string().max(16),
+              backgroundColor: z.string().max(16),
+            }),
+          )
+          .max(9),
+      })
+      .optional(),
   })
 
   /** 更新验收偏好（未提交的字段沿用已有值） */
@@ -120,6 +147,9 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       markdownEditor: parsed.data.markdownEditor ?? existing?.markdownEditor ?? 'uiw',
       markdownStyle: parsed.data.markdownStyle ?? existing?.markdownStyle ?? 'github',
       drawCount: parsed.data.drawCount ?? existing?.drawCount ?? DRAW_COUNT_DEFAULT,
+      customCards: parsed.data.customCards
+        ? parseCustomCards(parsed.data.customCards)
+        : existing?.customCards ?? createDefaultCustomCards(),
     }
     const updated = await prisma.user.update({
       where: { id: sub },

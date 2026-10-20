@@ -1,5 +1,6 @@
 import { deserializeItems, serializeItems } from '@/components/criteria/serialize'
 import type { CriterionItem } from '@/components/criteria/types'
+import type { CustomCards } from '@/lib/custom-cards'
 import { getZjuamCredential } from '@/lib/zjuam'
 
 const TOKEN_KEY = 'tasaas.token'
@@ -16,6 +17,7 @@ export type UserPreferences = {
   markdownEditor: MarkdownEditorId
   markdownStyle: MarkdownStyleId
   drawCount: number
+  customCards: CustomCards
 }
 
 export type ClassInfo = {

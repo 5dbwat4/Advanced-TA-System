@@ -1,9 +1,12 @@
 import { Button, NumberField, ToggleButton, ToggleButtonGroup } from '@heroui/react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
+import ArrowRight from '~icons/lucide/arrow-right'
 import Check from '~icons/lucide/check'
 import Dices from '~icons/lucide/dices'
 import Laptop from '~icons/lucide/laptop'
+import LayoutGrid from '~icons/lucide/layout-grid'
 import ListChecks from '~icons/lucide/list-checks'
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import Rocket from '~icons/lucide/rocket'
@@ -12,6 +15,7 @@ import { PreferenceRow } from '@/components/settings/PreferenceRow'
 import { Card } from '@/components/ui/Card'
 import { PendingButton } from '@/components/ui/PendingButton'
 import type { UserPreferences } from '@/lib/api'
+import { createDefaultCustomCards } from '@/lib/custom-cards'
 import type { IconComponent } from '@/lib/icon'
 import { cn } from '@/lib/utils'
 
@@ -109,6 +113,25 @@ export function PreferenceFields({
   showIcon?: boolean
   layout?: 'cards' | 'rows'
 }) {
+  const navigate = useNavigate()
+  const customCardRow = (
+    <PreferenceRow
+      title="配置自定义 Card"
+      hint="在验收页底部展示可切换的 Card"
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onPress={() => navigate('/console/checkoff/cards')}
+      >
+        <LayoutGrid width={14} height={14} className="shrink-0" />
+        配置
+        <ArrowRight width={14} height={14} className="shrink-0" />
+      </Button>
+    </PreferenceRow>
+  )
+
   if (layout === 'rows') {
     return (
       <div className="flex flex-col gap-3">
@@ -159,6 +182,8 @@ export function PreferenceFields({
         <PreferenceRow title="自定义抽题数目" hint="现场随机抽题时抽取的题目数量">
           <DrawCountField value={drawCount} onChange={onDrawCountChange} />
         </PreferenceRow>
+
+        {customCardRow}
       </div>
     )
   }
@@ -212,6 +237,8 @@ export function PreferenceFields({
       <PreferenceRow title="自定义抽题数目" hint="现场随机抽题时抽取的题目数量">
         <DrawCountField value={drawCount} onChange={onDrawCountChange} />
       </PreferenceRow>
+
+      {customCardRow}
     </>
   )
 }
@@ -241,6 +268,7 @@ export function PreferenceOnboarding({
         markdownEditor: initial?.markdownEditor ?? 'uiw',
         markdownStyle: initial?.markdownStyle ?? 'github',
         drawCount,
+        customCards: initial?.customCards ?? createDefaultCustomCards(),
       })
     } finally {
       setSaving(false)

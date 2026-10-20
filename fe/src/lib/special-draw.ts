@@ -1,12 +1,14 @@
 import { fetchBankQuestions, type CheckoffQuestion } from './api'
 
 export const SPECIAL_DRAW_STORAGE_KEY = 'tasaas.checkoff.specialDraw.v2'
+export const SPECIAL_DRAW_LIBRARY_STORAGE_KEY = 'tasaas.checkoff.specialDraw.library.v1'
 export const SPECIAL_DRAW_PAYLOAD_TYPE = 'tasaas.special-draw-machine'
 export const SPECIAL_DRAW_VERSION = 2
 export const SPECIAL_DRAW_FLAG_COUNT = 16
 export const SPECIAL_DRAW_MAX_COUNT = 100
 export const SPECIAL_DRAW_MAX_NODES = 128
 export const SPECIAL_DRAW_MAX_STEPS = 128
+export const SPECIAL_DRAW_LIBRARY_LIMIT = 20
 
 export type SpecialDrawNodeType =
   | 'start'
@@ -90,6 +92,12 @@ export type SpecialDrawNode =
 export type SpecialDrawMachine = {
   version: typeof SPECIAL_DRAW_VERSION
   nodes: SpecialDrawNode[]
+}
+
+export type SavedSpecialDrawMachine = {
+  id: string
+  savedAt: number
+  machine: SpecialDrawMachine
 }
 
 export type SpecialDrawBank = {
@@ -395,6 +403,22 @@ export function parseSpecialDrawPayload(raw: string): SpecialDrawMachine {
   } catch {
     throw new Error('payload 不是合法 JSON')
   }
+  if (Array.isArray(value)) {
+    value = {
+      type: SPECIAL_DRAW_PAYLOAD_TYPE,
+      version: SPECIAL_DRAW_VERSION,
+      nodes: value,
+    }
+  } else {
+    const record = asRecord(value)
+    if (record && record.type == null && Array.isArray(record.nodes)) {
+      value = {
+        type: SPECIAL_DRAW_PAYLOAD_TYPE,
+        version: record.version ?? SPECIAL_DRAW_VERSION,
+        nodes: record.nodes,
+      }
+    }
+  }
   return readMachine(value)
 }
 
@@ -408,7 +432,108 @@ export function loadSpecialDrawMachine(): SpecialDrawMachine | null {
 }
 
 export function saveSpecialDrawMachine(machine: SpecialDrawMachine): void {
-  localStorage.setItem(SPECIAL_DRAW_STORAGE_KEY, createSpecialDrawPayload(machine))
+  const payload = createSpecialDrawPayload(machine)
+  localStorage.setItem(SPECIAL_DRAW_STORAGE_KEY, payload)
+  try {
+    saveSpecialDrawMachineToLibrary(machine)
+  } catch {
+    // 本地历史保存失败时，不影响当前状态机保存
+  }
+}
+
+export function saveSpecialDrawMachineToLibrary(
+  machine: SpecialDrawMachine,
+): SavedSpecialDrawMachine {
+  const payload = createSpecialDrawPayload(machine)
+  const saved = listSavedSpecialDrawMachines()
+  const existing = saved.find((entry) => createSpecialDrawPayload(entry.machine) === payload)
+  const entry: SavedSpecialDrawMachine = {
+    id: existing?.id ?? createSavedMachineId(),
+    savedAt: Date.now(),
+    machine,
+  }
+  const next = [entry, ...saved.filter((item) => item.id !== existing?.id)].slice(
+    0,
+    SPECIAL_DRAW_LIBRARY_LIMIT,
+  )
+  localStorage.setItem(
+    SPECIAL_DRAW_LIBRARY_STORAGE_KEY,
+    JSON.stringify(
+      next.map((item) => ({
+        id: item.id,
+        savedAt: item.savedAt,
+        payload: createSpecialDrawPayload(item.machine),
+      })),
+    ),
+  )
+  return entry
+}
+
+export function removeSavedSpecialDrawMachine(id: string): void {
+  const saved = listSavedSpecialDrawMachines()
+  const target = saved.find((entry) => entry.id === id)
+  const next = saved.filter((entry) => entry.id !== id)
+  localStorage.setItem(
+    SPECIAL_DRAW_LIBRARY_STORAGE_KEY,
+    JSON.stringify(
+      next.map((entry) => ({
+        id: entry.id,
+        savedAt: entry.savedAt,
+        payload: createSpecialDrawPayload(entry.machine),
+      })),
+    ),
+  )
+
+  if (!target) return
+  try {
+    const active = localStorage.getItem(SPECIAL_DRAW_STORAGE_KEY)
+    if (active && active === createSpecialDrawPayload(target.machine)) {
+      localStorage.removeItem(SPECIAL_DRAW_STORAGE_KEY)
+    }
+  } catch {
+    // localStorage 不可用时忽略
+  }
+}
+
+export function listSavedSpecialDrawMachines(): SavedSpecialDrawMachine[] {
+  try {
+    const raw = localStorage.getItem(SPECIAL_DRAW_LIBRARY_STORAGE_KEY)
+    if (raw) {
+      const value: unknown = JSON.parse(raw)
+      if (Array.isArray(value)) {
+        const saved = value.flatMap((item): SavedSpecialDrawMachine[] => {
+          const record = asRecord(item)
+          if (!record) return []
+          if (typeof record.id !== 'string' || typeof record.payload !== 'string') return []
+          if (typeof record.savedAt !== 'number' || !Number.isFinite(record.savedAt)) return []
+          try {
+            return [
+              {
+                id: record.id,
+                savedAt: record.savedAt,
+                machine: parseSpecialDrawPayload(record.payload),
+              },
+            ]
+          } catch {
+            return []
+          }
+        })
+        if (saved.length > 0) return saved.sort((a, b) => b.savedAt - a.savedAt)
+      }
+    }
+  } catch {
+    // 本地历史损坏时退回当前状态机
+  }
+
+  const current = loadSpecialDrawMachine()
+  return current ? [{ id: 'current', savedAt: 0, machine: current }] : []
+}
+
+function createSavedMachineId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `saved-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 export function clearSpecialDrawMachine(): void {

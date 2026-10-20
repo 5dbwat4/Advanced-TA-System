@@ -31,7 +31,13 @@ function CountdownRing({ remaining, period }: { remaining: number; period: numbe
   )
 }
 
-export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
+export function MasterSlavePanel({
+  session,
+  onHide,
+}: {
+  session: MasterSessionView
+  onHide: () => void
+}) {
   const { code, remaining, period } = useTotp(session.secret, session.period, session.serverTime)
   const [sharing, setSharing] = useState(false)
   const url = `${window.location.origin}/checkin/${session.token ?? ''}`
@@ -183,21 +189,35 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
           </IconAction>
         )}
 
-        <div className="flex items-center gap-2 text-xs font-semibold">
-          <span
-            className={cn(
-              'h-2 w-2 rounded-full',
-              session.slaveConnected ? 'animate-pulse bg-emerald-500' : 'bg-fg-subtle/50',
-            )}
-          />
-          <span
-            className={
-              session.slaveConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-fg-subtle'
-            }
-          >
-            {session.slaveConnected ? '已连接' : '等待从机连接…'}
-          </span>
-        </div>
+        <Tooltip delay={0}>
+          <Tooltip.Trigger className="inline-flex">
+            <button
+              type="button"
+              onClick={onHide}
+              aria-label="隐藏从机配对信息"
+              className="flex cursor-pointer items-center gap-2 text-xs font-semibold transition-opacity hover:opacity-70"
+            >
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  session.slaveConnected ? 'animate-pulse bg-emerald-500' : 'bg-fg-subtle/50',
+                )}
+              />
+              <span
+                className={
+                  session.slaveConnected
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-fg-subtle'
+                }
+              >
+                {session.slaveConnected ? '已连接' : '等待从机连接…'}
+              </span>
+            </button>
+          </Tooltip.Trigger>
+          <Tooltip.Content placement="bottom" showArrow>
+            单击以隐藏从机配对信息
+          </Tooltip.Content>
+        </Tooltip>
       </div>
     </motion.div>
   )

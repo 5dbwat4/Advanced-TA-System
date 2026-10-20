@@ -8,6 +8,7 @@ import CircleCheck from '~icons/lucide/circle-check'
 import Cpu from '~icons/lucide/cpu'
 import SearchX from '~icons/lucide/search-x'
 import { ConnectionBadge } from '@/components/checkin/ConnectionBadge'
+import { CheckinHeader } from '@/components/checkin/CheckinHeader'
 import { SlaveCard } from '@/components/checkin/SlaveCard'
 import { useCheckoffSlave } from '@/lib/checkoff-socket'
 import { cn } from '@/lib/utils'
@@ -94,6 +95,9 @@ export function CheckinScreen({
           <Cpu width={15} height={15} className="shrink-0" />
           计算机系统课程 Checkoff
         </div>
+        {connected && meta && !closed && (
+          <CheckinHeader grader={meta.grader} student={meta.student} />
+        )}
         {content}
       </div>
     </div>

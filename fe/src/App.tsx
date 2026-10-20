@@ -21,6 +21,7 @@ const Checkoff = lazy(() => import('@/pages/Checkoff'))
 const Checkpoints = lazy(() => import('@/pages/Checkpoints'))
 const CourseSettings = lazy(() => import('@/pages/CourseSettings'))
 const CriteriaManage = lazy(() => import('@/pages/CriteriaManage'))
+const CustomCards = lazy(() => import('@/pages/CustomCards'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const ExperimentDetail = lazy(() => import('@/pages/ExperimentDetail'))
 const ExperimentRemarks = lazy(() => import('@/pages/ExperimentRemarks'))
@@ -87,13 +88,14 @@ export default function App() {
           </Route>
           <Route element={<RequireStaff />}>
             <Route path="/console/reports/:id" element={<ReportGrade />} />
+            <Route path="/console/checkoff" element={<Checkoff />} />
             <Route path="/console/checkoff/special" element={<SpecialDrawEditor />} />
             <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
             <Route path="/console/criteria/:key/edit" element={<ReportCriteria />} />
             <Route path="/console/courses/new-account" element={<NewClassAccount />} />
             <Route path="/console" element={<AppShell />}>
             <Route index element={<Dashboard />} />
-            <Route path="checkoff" element={<Checkoff />} />
+            <Route path="checkoff/cards" element={<CustomCards />} />
             <Route path="boards" element={<Boards />} />
             <Route path="boards/scan" element={<BoardScan />} />
             <Route path="experiments" element={<Experiments />} />

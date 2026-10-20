@@ -18,6 +18,9 @@ function cardKey(state: SlaveCardState): string {
   if (state.kind === 'ask_question') {
     return `q-${state.index}-${state.content.slice(0, 8)}`
   }
+  if (state.kind === 'custom_card') {
+    return `custom-${state.title}-${state.content.slice(0, 8)}`
+  }
   return state.kind
 }
 
@@ -85,15 +88,35 @@ function QuestionCard({
             问题 {index} / {total}
           </div>
           <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-fg-subtle">
+            <span>命题人</span>
             <AvatarImage
               id={questionAuthorAvatar}
               size={18}
               fallback={(questionAuthor || '未知').slice(0, 1)}
             />
-            <span>命题人：{questionAuthor || '未知'}</span>
+            <span>{questionAuthor || '未知'}</span>
           </div>
         </div>
       </div>
+      <Markdown source={content} style={markdownStyle} />
+    </div>
+  )
+}
+
+function CustomCardBody({
+  title,
+  content,
+  markdownStyle,
+}: {
+  title: string
+  content: string
+  markdownStyle?: MarkdownStyleId
+}) {
+  return (
+    <div>
+      {title.trim() && (
+        <div className="mb-4 text-2xl font-bold tracking-tight text-fg">{title}</div>
+      )}
       <Markdown source={content} style={markdownStyle} />
     </div>
   )
@@ -107,6 +130,14 @@ function CardBody({ state, markdownStyle }: { state: SlaveCardState; markdownSty
       return <HintCard title="您的姓名 / 学号？" hint="请告诉助教" />
     case 'ask_demo':
       return <HintCard title="请展示 demo" hint="代码 / 上板结果 / 仿真结果等" />
+    case 'custom_card':
+      return (
+        <CustomCardBody
+          title={state.title}
+          content={state.content}
+          markdownStyle={markdownStyle}
+        />
+      )
     case 'ask_question':
       return (
         <QuestionCard

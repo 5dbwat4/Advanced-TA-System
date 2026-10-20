@@ -8,6 +8,7 @@ export type SlaveCardState =
   | { kind: 'idle'; experimentMark: string; experimentTitle: string }
   | { kind: 'ask_name' }
   | { kind: 'ask_demo' }
+  | { kind: 'custom_card'; title: string; content: string }
   | {
       kind: 'ask_question'
       studentName: string
@@ -20,10 +21,17 @@ export type SlaveCardState =
     }
   | { kind: 'thank'; studentName?: string }
 
-/** master 透传到 slave 的展示偏好（Markdown 样式 / 亮暗模式） */
+/** master 透传到 slave 的展示偏好（Markdown 样式 / 亮暗模式 / 双方信息） */
+export type CheckoffPerson = {
+  name: string
+  avatar: number | null
+}
+
 export type CheckoffMeta = {
   markdownStyle: MarkdownStyleId
   theme: 'light' | 'dark'
+  grader: CheckoffPerson
+  student: CheckoffPerson | null
 }
 
 let socket: Socket | null = null

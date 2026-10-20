@@ -9,6 +9,7 @@ import { MarkdownStyleChoice } from '@/components/settings/MarkdownStyleChoice'
 import { Card } from '@/components/ui/Card'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { useAuth } from '@/lib/auth'
+import { createDefaultCustomCards } from '@/lib/custom-cards'
 import { getErrorMessage } from '@/lib/error'
 import type { MarkdownEditorId, MarkdownStyleId } from '@/lib/api'
 
@@ -51,6 +52,7 @@ export function PreferenceSection({
         markdownEditor: saved?.markdownEditor ?? markdownEditor,
         markdownStyle,
         drawCount: saved?.drawCount ?? drawCount,
+        customCards: saved?.customCards ?? createDefaultCustomCards(),
       })
       toast.success('偏好已保存')
     } catch (error) {

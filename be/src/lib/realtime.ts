@@ -128,6 +128,7 @@ export type SlaveCardState =
   | { kind: 'idle'; experimentMark: string; experimentTitle: string }
   | { kind: 'ask_name' }
   | { kind: 'ask_demo' }
+  | { kind: 'custom_card'; title: string; content: string }
   | {
       kind: 'ask_question'
       studentName: string
@@ -141,12 +142,34 @@ export type SlaveCardState =
   | { kind: 'thank'; studentName?: string }
 
 /** master 的展示偏好，随状态一起透传到 slave */
+export type CheckoffPerson = {
+  name: string
+  avatar: number | null
+}
+
 export type CheckoffMeta = {
   markdownStyle: 'github' | 'prose'
   theme: 'light' | 'dark'
+  grader: CheckoffPerson
+  student: CheckoffPerson | null
 }
 
-const DEFAULT_META: CheckoffMeta = { markdownStyle: 'github', theme: 'light' }
+const DEFAULT_META: CheckoffMeta = {
+  markdownStyle: 'github',
+  theme: 'light',
+  grader: { name: '', avatar: null },
+  student: null,
+}
+
+function readCheckoffPerson(value: unknown): CheckoffPerson | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as { name?: unknown; avatar?: unknown }
+  if (typeof record.name !== 'string') return null
+  return {
+    name: record.name,
+    avatar: typeof record.avatar === 'number' ? record.avatar : null,
+  }
+}
 
 type CheckoffSession = {
   token: string
@@ -522,6 +545,12 @@ export function createRealtime(fastify: FastifyInstance): Server {
         }
         if (meta?.theme === 'light' || meta?.theme === 'dark') {
           session.meta.theme = meta.theme
+        }
+        if (meta && 'grader' in meta) {
+          session.meta.grader = readCheckoffPerson(meta.grader) ?? { name: '', avatar: null }
+        }
+        if (meta && 'student' in meta) {
+          session.meta.student = readCheckoffPerson(meta.student)
         }
         session.state = state
         session.updatedAt = Date.now()
