@@ -29,6 +29,7 @@ import { settingsRoutes } from './routes/settings.js'
 import { staffRoutes } from './routes/staff.js'
 import { studentPreviewRoutes } from './routes/student-preview.js'
 import { studentRoutes } from './routes/student.js'
+import { telemetryRoutes } from './routes/telemetry.js'
 import { tokensRoutes } from './routes/tokens.js'
 import { xzzdSyncRoutes } from './routes/xzzd-sync.js'
 import { zjuamRoutes } from './routes/zjuam.js'
@@ -161,6 +162,7 @@ await fastify.register(studentPreviewRoutes, { prefix: '/api/student-preview' })
 await fastify.register(studentRoutes, { prefix: '/api/student' })
 await fastify.register(pushRoutes, { prefix: '/api/push' })
 await fastify.register(mcpRoutes)
+await fastify.register(telemetryRoutes, { prefix: '/api/theke-kerykos' })
 
 fastify.get('/api/health', async () => ({ ok: true }))
 

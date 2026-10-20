@@ -44,6 +44,7 @@ const ScoreEntry = lazy(() => import('@/pages/ScoreEntry'))
 const Scores = lazy(() => import('@/pages/Scores'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const Setup = lazy(() => import('@/pages/Setup'))
+const SpecialDrawEditor = lazy(() => import('@/pages/SpecialDrawEditor'))
 const StudentExperiment = lazy(() => import('@/pages/StudentExperiment'))
 const StudentOverview = lazy(() => import('@/pages/StudentOverview'))
 const StudentScores = lazy(() => import('@/pages/StudentScores'))
@@ -86,6 +87,7 @@ export default function App() {
           </Route>
           <Route element={<RequireStaff />}>
             <Route path="/console/reports/:id" element={<ReportGrade />} />
+            <Route path="/console/checkoff/special" element={<SpecialDrawEditor />} />
             <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
             <Route path="/console/criteria/:key/edit" element={<ReportCriteria />} />
             <Route path="/console/courses/new-account" element={<NewClassAccount />} />

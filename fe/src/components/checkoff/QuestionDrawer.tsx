@@ -158,6 +158,7 @@ export function QuestionDrawer({
   onQuestionIndex,
   showPager = false,
   drawCount = 3,
+  drawQuestions,
 }: {
   mode: 'random' | 'fixed'
   questions: CheckoffQuestion[]
@@ -173,6 +174,7 @@ export function QuestionDrawer({
   onQuestionIndex?: (index: number) => void
   showPager?: boolean
   drawCount?: number
+  drawQuestions?: (questions: CheckoffQuestion[]) => CheckoffQuestion[]
 }) {
   const [drawing, setDrawing] = useState(false)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
@@ -182,7 +184,7 @@ export function QuestionDrawer({
     if (!drawArmed.current) return
     drawArmed.current = false
     const count = Math.min(drawCount, questions.length)
-    onDrawnChange(shuffle(questions).slice(0, count))
+    onDrawnChange(drawQuestions ? drawQuestions(questions) : shuffle(questions).slice(0, count))
     setDrawing(false)
   }, 600)
 

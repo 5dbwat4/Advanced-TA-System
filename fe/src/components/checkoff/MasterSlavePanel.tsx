@@ -2,10 +2,12 @@ import { Spinner, Tooltip } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { motion } from 'motion/react'
 import { QRCodeSVG } from 'qrcode.react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import MonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import QrCode from '~icons/lucide/qr-code'
+import Share2 from '~icons/lucide/share-2'
 import { IconAction } from '@/components/ui/IconAction'
 import { ProgressRing } from '@/components/ui/ProgressRing'
 import { useTotp } from '@/lib/totp'
@@ -31,6 +33,20 @@ function CountdownRing({ remaining, period }: { remaining: number; period: numbe
 
 export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
   const { code, remaining, period } = useTotp(session.secret, session.period, session.serverTime)
+  const [sharing, setSharing] = useState(false)
+  const url = `${window.location.origin}/checkin/${session.token ?? ''}`
+  const canShare = (() => {
+    if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') {
+      return false
+    }
+    try {
+      return navigator.canShare({
+        files: [new File([url], 'tasaas-checkin-link.txt', { type: 'text/plain' })],
+      })
+    } catch {
+      return false
+    }
+  })()
 
   if (!session.ready) {
     return (
@@ -42,7 +58,6 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
   }
 
   const pin = code ?? '------'
-  const url = `${window.location.origin}/checkin/${session.token ?? ''}`
 
   const copy = async () => {
     const ok = await copyToClipboard(url)
@@ -55,6 +70,20 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
     const ok = await copyToClipboard(code)
     if (ok) toast.success('配对码已复制')
     else toast.error(code)
+  }
+
+  const share = async () => {
+    if (!session.token) return
+    setSharing(true)
+    try {
+      const file = new File([url], 'tasaas-checkin-link.txt', { type: 'text/plain' })
+      await navigator.share({ files: [file] })
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      toast.error('分享失败，请重试')
+    } finally {
+      setSharing(false)
+    }
   }
 
   return (
@@ -140,6 +169,19 @@ export function MasterSlavePanel({ session }: { session: MasterSessionView }) {
         >
           <QrCode width={14} height={14} className="shrink-0" />
         </IconAction>
+
+        {canShare && (
+          <IconAction
+            label="分享从机网址"
+            variant="secondary"
+            placement="bottom"
+            isDisabled={!session.token}
+            isPending={sharing}
+            onPress={() => void share()}
+          >
+            <Share2 width={14} height={14} className="shrink-0" />
+          </IconAction>
+        )}
 
         <div className="flex items-center gap-2 text-xs font-semibold">
           <span

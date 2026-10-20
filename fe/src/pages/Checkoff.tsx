@@ -13,7 +13,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { DemoStep } from '@/components/checkoff/DemoStep'
@@ -24,6 +24,7 @@ import { QuestionDrawer, type QuestionMark } from '@/components/checkoff/Questio
 import { ScoreForm } from '@/components/checkoff/ScoreForm'
 import { StepIndicator } from '@/components/checkoff/StepIndicator'
 import { StudentFinder } from '@/components/checkoff/StudentFinder'
+import Dices from '~icons/lucide/dices'
 import MoreHorizontal from '~icons/lucide/more-horizontal'
 import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
@@ -62,6 +63,15 @@ import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { SCORE_TYPES } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, type ScoreRatio } from '@/lib/scoring'
+import {
+  clearSpecialDrawMachine,
+  loadSpecialDrawBanks,
+  loadSpecialDrawMachine,
+  runSpecialDrawMachine,
+  SPECIAL_DRAW_STORAGE_KEY,
+  type SpecialDrawBank,
+  type SpecialDrawMachine,
+} from '@/lib/special-draw'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
@@ -78,6 +88,7 @@ export default function Checkoff() {
   const { user, loading: authLoading, updatePreferences } = useAuth()
   const classId = currentClass?.id
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const preselectId = searchParams.get('experiment')
 
   const [experiments, setExperiments] = useState<CheckoffExperiment[]>([])
@@ -100,6 +111,12 @@ export default function Checkoff() {
   const [recordsLoading, setRecordsLoading] = useState(false)
   const [banks, setBanks] = useState<QuestionBank[]>([])
   const [draftBank, setDraftBank] = useState<string | null>(null)
+  const [specialMachine, setSpecialMachine] = useState<SpecialDrawMachine | null>(
+    loadSpecialDrawMachine,
+  )
+  const [specialBanks, setSpecialBanks] = useState<SpecialDrawBank[]>([])
+  const [specialLoading, setSpecialLoading] = useState(specialMachine !== null)
+  const [specialError, setSpecialError] = useState<string | null>(null)
 
   const prefsState = useOverlayState()
   const presenceState = useOverlayState()
@@ -117,6 +134,30 @@ export default function Checkoff() {
     () => (experiment ? resolveScoreRatio(classSettings, experiment.id) : DEFAULT_SCORE_RATIO),
     [classSettings, experiment],
   )
+
+  const specialQuestionList = useMemo(() => {
+    if (!specialMachine) return []
+    const seen = new Set<string>()
+    const list: CheckoffQuestion[] = []
+    for (const bank of specialBanks) {
+      for (const question of bank.questions) {
+        if (seen.has(question.id)) continue
+        seen.add(question.id)
+        list.push(question)
+      }
+    }
+    return list
+  }, [specialMachine, specialBanks])
+
+  const pickSpecialQuestions = useCallback(() => {
+    if (!specialMachine) return []
+    const result = runSpecialDrawMachine(specialMachine, specialBanks)
+    if (result.error) {
+      toast.error(result.error)
+      return []
+    }
+    return result.questions
+  }, [specialMachine, specialBanks])
 
   const handleCheckoffStarted = useCallback((event: CheckoffStartedEvent) => {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
@@ -168,16 +209,77 @@ export default function Checkoff() {
     }
   }, [experiment, bankOverrideId, finderReloadKey])
 
-  const openBankPicker = useCallback(() => {
-    bankState.open()
-    setDraftBank(bankOverrideId)
+  useEffect(() => {
+    if (!specialMachine) {
+      setSpecialBanks([])
+      setSpecialError(null)
+      setSpecialLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setSpecialLoading(true)
+    setSpecialError(null)
+    loadSpecialDrawBanks(specialMachine)
+      .then((banks) => {
+        if (cancelled) return
+        setSpecialBanks(banks)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setSpecialBanks([])
+        setSpecialError(getErrorMessage(error, '加载特殊抽题题目失败'))
+      })
+      .finally(() => {
+        if (!cancelled) setSpecialLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [specialMachine, finderReloadKey])
+
+  const loadBanks = useCallback(() => {
     listBanks()
       .then((res) => setBanks(res.banks))
       .catch((error) => toast.error(getErrorMessage(error, '加载题目集失败')))
-  }, [bankState, bankOverrideId])
+  }, [])
+
+  const openBankPicker = useCallback(() => {
+    bankState.open()
+    setDraftBank(bankOverrideId)
+    loadBanks()
+  }, [bankState, bankOverrideId, loadBanks])
+
+  const openSpecialDraw = useCallback(() => {
+    navigate('/console/checkoff/special')
+  }, [navigate])
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SPECIAL_DRAW_STORAGE_KEY) {
+        setSpecialMachine(loadSpecialDrawMachine())
+        setDrawn([])
+        setMarks({})
+        setQuestionIndex(0)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   const confirmBankOverride = useCallback(() => {
     saveBankOverride(draftBank)
+    if (draftBank) {
+      clearSpecialDrawMachine()
+      setSpecialMachine(null)
+      setSpecialBanks([])
+      setSpecialError(null)
+      setSpecialLoading(false)
+      setDrawn([])
+      setMarks({})
+      setQuestionIndex(0)
+    }
     bankState.close()
     toast.success(draftBank ? '已切换题目集' : '已跟随实验设置')
   }, [saveBankOverride, draftBank, bankState])
@@ -391,6 +493,9 @@ export default function Checkoff() {
   }
 
   const preferences = user.preferences
+  const activeQuestions = specialMachine ? specialQuestionList : questions
+  const activeQuestionsLoading = specialMachine ? specialLoading : !questionsLoaded
+  const activeQuestionsError = specialMachine ? specialError : questionsError
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -402,16 +507,18 @@ export default function Checkoff() {
               <Settings2 width={15} height={15} className="shrink-0" />
             </IconAction>
             <Dropdown>
-              <Dropdown.Trigger>
-                <Button isIconOnly size="sm" variant="ghost" aria-label="更多">
-                  <MoreHorizontal width={16} height={16} className="shrink-0" />
-                </Button>
+              <Dropdown.Trigger
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-sunken hover:text-fg"
+                aria-label="更多"
+              >
+                <MoreHorizontal width={16} height={16} className="shrink-0" />
               </Dropdown.Trigger>
               <Dropdown.Popover className="min-w-[220px]">
                 <Dropdown.Menu
                   onAction={(key) => {
                     if (key === 'presence') openPresence()
                     else if (key === 'bank') openBankPicker()
+                    else if (key === 'special') openSpecialDraw()
                   }}
                 >
                   <Dropdown.Item id="presence" textValue="现在谁正在验收">
@@ -421,6 +528,10 @@ export default function Checkoff() {
                   <Dropdown.Item id="bank" textValue="使用其它题目集">
                     <NotebookText width={15} height={15} className="shrink-0 text-fg-muted" />
                     <Label>使用其它题目集</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item id="special" textValue="特殊的抽题方式">
+                    <Dices width={15} height={15} className="shrink-0 text-fg-muted" />
+                    <Label>特殊的抽题方式</Label>
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown.Popover>
@@ -432,6 +543,22 @@ export default function Checkoff() {
       {isMulti && (
         <div className="mb-4">
           <MasterSlavePanel session={master.session} />
+        </div>
+      )}
+
+      {specialMachine && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/25 bg-brand-500/5 px-3 py-2 text-xs">
+          <Dices width={15} height={15} className="shrink-0 text-brand-600 dark:text-brand-300" />
+          <span className="font-semibold text-fg">特殊的抽题方式已启用</span>
+          <span className="text-fg-muted">状态机 · {specialMachine.nodes.length} 个节点</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto"
+            onPress={openSpecialDraw}
+          >
+            编辑
+          </Button>
         </div>
       )}
 
@@ -498,16 +625,17 @@ export default function Checkoff() {
               />
             )}
             {step === 2 && experiment && student && <DemoStep onNext={() => setStep(3)} />}
-            {step === 3 && experiment && student && questionsError !== null && (
+            {step === 3 && experiment && student && activeQuestionsError !== null && (
               <div className="rounded-2xl border border-danger/40 bg-danger/5 p-8 text-center">
-                <p className="text-sm font-semibold text-danger">{questionsError}</p>
+                <p className="text-sm font-semibold text-danger">{activeQuestionsError}</p>
                 <div className="mt-4">
                   <Button
                     variant="secondary"
                     size="sm"
-                    isPending={!questionsLoaded && questionsError === null}
+                    isPending={activeQuestionsLoading}
                     onPress={() => {
                       setQuestionsError(null)
+                      setSpecialError(null)
                       setFinderReloadKey((key) => key + 1)
                     }}
                   >
@@ -516,19 +644,20 @@ export default function Checkoff() {
                 </div>
               </div>
             )}
-            {step === 3 && experiment && student && questionsError === null && (
+            {step === 3 && experiment && student && activeQuestionsError === null && (
               <QuestionDrawer
-                mode={preferences.draw}
-                questions={questions}
+                mode={specialMachine ? 'random' : preferences.draw}
+                questions={activeQuestions}
                 drawn={drawn}
                 onDrawnChange={setDrawn}
                 marks={marks}
                 onMark={mark}
                 drawCount={preferences.drawCount}
+                drawQuestions={specialMachine ? pickSpecialQuestions : undefined}
                 onNext={() => setStep(4)}
                 onSkip={() => setStep(4)}
                 student={student}
-                loading={!questionsLoaded}
+                loading={activeQuestionsLoading}
                 questionIndex={questionIndex}
                 onQuestionIndex={handleQuestionIndex}
                 showPager={isMulti}

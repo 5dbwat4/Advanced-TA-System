@@ -28,6 +28,7 @@ export function initSentry(): void {
 
   Sentry.init({
     dsn,
+    tunnel: '/api/theke-kerykos',
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
     release: __BUILD_HASH__,
     dataCollection: {
