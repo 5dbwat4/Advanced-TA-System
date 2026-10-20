@@ -22,6 +22,7 @@ if (!credentialKey) {
 
 export const env = {
   port: Number(process.env.PORT ?? 3001),
+  isDev: !isProduction,
   jwtSecret,
   databaseUrl: required('DATABASE_URL', 'file:./dev.db'),
   // 站点根地址（用于生成学生查看链接等绝对 URL），末尾斜杠可有可无

@@ -31,6 +31,7 @@ const Licenses = lazy(() => import('@/pages/Licenses'))
 const LicensesFull = lazy(() => import('@/pages/LicensesFull'))
 const LlmConnect = lazy(() => import('@/pages/LlmConnect'))
 const Login = lazy(() => import('@/pages/Login'))
+const LoginClassSelect = lazy(() => import('@/pages/LoginClassSelect'))
 const LoginSelect = lazy(() => import('@/pages/LoginSelect'))
 const More = lazy(() => import('@/pages/More'))
 const NewBank = lazy(() => import('@/pages/NewBank'))
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
         </Route>
         <Route path="/login/select" element={<LoginSelect />} />
+        <Route path="/login/class" element={<LoginClassSelect />} />
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<Navigate to="/student-console" replace />} />
           <Route path="/settings" element={<Settings />} />

@@ -3,13 +3,16 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import Check from '~icons/lucide/check'
 import ChevronRight from '~icons/lucide/chevron-right'
+import Copy from '~icons/lucide/copy'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import Settings2 from '~icons/lucide/settings-2'
 import UserPlus from '~icons/lucide/user-plus'
 import { Card } from '@/components/ui/Card'
 import { PendingButton } from '@/components/ui/PendingButton'
 import {
+  addClassTa,
   addTa,
   apiFetch,
   listClasses,
@@ -32,6 +35,14 @@ export function SystemSection({ index = 0 }: { index?: number }) {
   const [taError, setTaError] = useState<string | null>(null)
   const [taStudentId, setTaStudentId] = useState('')
   const [taAdding, setTaAdding] = useState(false)
+  const [classTaStudentId, setClassTaStudentId] = useState('')
+  const [classTaAdding, setClassTaAdding] = useState(false)
+  const [classTaResult, setClassTaResult] = useState<{
+    studentId: string
+    password: string
+    className: string | null
+  } | null>(null)
+  const [classTaCopied, setClassTaCopied] = useState(false)
   const [classes, setClasses] = useState<ClassInfo[]>([])
   const [bindTokens, setBindTokens] = useState<Record<string, string>>({})
   const { user } = useAuth()
@@ -113,7 +124,17 @@ export function SystemSection({ index = 0 }: { index?: number }) {
     },
   })
 
+  const classTaState = useOverlayState({
+    onOpenChange: (open) => {
+      if (open) return
+      setClassTaStudentId('')
+      setClassTaResult(null)
+      setClassTaCopied(false)
+    },
+  })
+
   const submitTa = async () => {
+    if (taAdding) return
     const studentId = taStudentId.trim()
     if (!studentId) return
     setTaAdding(true)
@@ -126,6 +147,39 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       toast.error(getErrorMessage(error, '添加失败'))
     } finally {
       setTaAdding(false)
+    }
+  }
+
+  const submitClassTa = async () => {
+    if (classTaAdding) return
+    const studentId = classTaStudentId.trim()
+    if (!studentId) return
+    setClassTaAdding(true)
+    try {
+      const result = await addClassTa(studentId)
+      setClassTaResult({
+        studentId: result.ta.studentId,
+        password: result.password,
+        className: result.ta.classes[0]?.name ?? null,
+      })
+      setClassTaStudentId('')
+      toast.success('已为本课程添加助教')
+    } catch (error) {
+      toast.error(getErrorMessage(error, '添加失败'))
+    } finally {
+      setClassTaAdding(false)
+    }
+  }
+
+  const copyClassTaPassword = async () => {
+    if (!classTaResult) return
+    try {
+      await navigator.clipboard.writeText(classTaResult.password)
+      setClassTaCopied(true)
+      toast.success('密码已复制')
+      window.setTimeout(() => setClassTaCopied(false), 1500)
+    } catch {
+      toast.error('复制失败，请手动复制')
     }
   }
 
@@ -275,6 +329,115 @@ export function SystemSection({ index = 0 }: { index?: number }) {
                 <Button slot="close" variant="secondary">
                   关闭
                 </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal state={classTaState}>
+        <Modal.Trigger className="flex w-full items-center gap-3 rounded-xl border border-line bg-sunken px-4 py-3 text-left transition-colors hover:border-danger/40">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger/10 text-danger">
+            <UserPlus width={18} height={18} className="shrink-0" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">为本课程添加助教</div>
+            <div className="truncate text-xs text-fg-subtle">
+              输入学号，创建本班账号并生成一次性初始密码
+            </div>
+          </div>
+          <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
+        </Modal.Trigger>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-danger/10 text-danger">
+                  <UserPlus width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>为本课程添加助教</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                {classTaResult ? (
+                  <>
+                    <div className="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                        学号
+                      </div>
+                      <div className="tabular mt-1 text-sm font-semibold">
+                        {classTaResult.studentId}
+                      </div>
+                      <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                        班级
+                      </div>
+                      <div className="mt-1 text-sm font-semibold">
+                        {classTaResult.className ?? user?.classes[0]?.name ?? '当前班级'}
+                      </div>
+                      <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                        初始密码
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <code className="min-w-0 flex-1 select-all break-all rounded-lg bg-sunken px-3 py-2 font-mono text-xs">
+                          {classTaResult.password}
+                        </code>
+                        <PendingButton
+                          size="sm"
+                          variant="secondary"
+                          icon={classTaCopied ? Check : Copy}
+                          onPress={() => void copyClassTaPassword()}
+                        >
+                          {classTaCopied ? '已复制' : '复制'}
+                        </PendingButton>
+                      </div>
+                    </div>
+                    <p className="text-xs leading-relaxed text-danger">
+                      密码仅在本次显示，请立即复制并发送给该助教。对方可用学号 + 初始密码登录，也可使用学在浙大登录；首次登录后需设置用户名，并可绑定密码 /
+                      WebAuthn。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs leading-relaxed text-fg-subtle">
+                      将在当前班级（{user?.classes[0]?.name ?? '未绑定'}）创建【学号 + 班级】的助教账号，并生成一次性初始密码。
+                    </p>
+                    <Input
+                      fullWidth
+                      type="text"
+                      value={classTaStudentId}
+                      onChange={(e) => setClassTaStudentId(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void submitClassTa()
+                      }}
+                      placeholder="请输入学号"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      autoFocus
+                      maxLength={32}
+                      aria-label="本课程助教学号"
+                    />
+                  </>
+                )}
+              </Modal.Body>
+              <Modal.Footer>
+                {classTaResult ? (
+                  <Button slot="close" variant="secondary">
+                    完成
+                  </Button>
+                ) : (
+                  <>
+                    <Button slot="close" variant="secondary">
+                      取消
+                    </Button>
+                    <PendingButton
+                      isDisabled={classTaStudentId.trim().length === 0}
+                      isPending={classTaAdding}
+                      onPress={() => void submitClassTa()}
+                    >
+                      添加
+                    </PendingButton>
+                  </>
+                )}
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>

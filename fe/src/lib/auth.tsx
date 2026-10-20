@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { ApiError, apiFetch, getToken, isLoginSelection, setToken, type LoginResult, type User, type UserPreferences } from '@/lib/api'
+import { ApiError, apiFetch, getToken, isClassSelection, isLoginSelection, selectZjuamClass, setToken, type LoginResult, type User, type UserPreferences } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
 import { setSentryUser } from '@/lib/sentry'
@@ -12,6 +12,11 @@ type AuthContextValue = {
   retryBootstrap: () => void
   login: (endpoint: string, body: Record<string, unknown>) => Promise<LoginResult>
   selectAccount: (selectionToken: string, userId: string) => Promise<User>
+  selectClass: (
+    selectionToken: string,
+    optionKey: string,
+    type?: '2026-sys1' | '2026-sys2' | '2026-sys3',
+  ) => Promise<User>
   exchangeStudentPreview: (token: string) => Promise<User>
   adoptSession: (session: { token: string; user: User }) => void
   completeSetup: (body: { username: string; password?: string }) => Promise<User>
@@ -83,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: 'POST',
           body: JSON.stringify(body),
         })
-        if (isLoginSelection(res)) return res
+        if (isLoginSelection(res) || isClassSelection(res)) return res
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)
@@ -95,6 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: 'POST',
           body: JSON.stringify({ selectionToken, userId }),
         })
+        setToken(res.token)
+        setUser(res.user)
+        setBootstrapError(null)
+        saveLastUser(res.user)
+        return res.user
+      },
+      selectClass: async (selectionToken, optionKey, type) => {
+        const res = await selectZjuamClass(selectionToken, optionKey, type)
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)

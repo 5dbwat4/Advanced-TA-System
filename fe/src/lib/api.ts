@@ -178,10 +178,42 @@ export type LoginSelection = {
   candidates: LoginCandidate[]
 }
 
-export type LoginResult = { token: string; user: User } | LoginSelection
+/** ZJUAM 首次登录可选的班级 / 课程 */
+export type ClassSelectCourse = {
+  key: string
+  name: string
+  registered: boolean
+}
+
+export type LoginClassSelection = {
+  requiresClassSelection: true
+  selectionToken: string
+  courses: ClassSelectCourse[]
+}
+
+export type LoginResult =
+  | { token: string; user: User }
+  | LoginSelection
+  | LoginClassSelection
 
 export function isLoginSelection(result: LoginResult): result is LoginSelection {
   return 'requiresSelection' in result && result.requiresSelection === true
+}
+
+export function isClassSelection(result: LoginResult): result is LoginClassSelection {
+  return 'requiresClassSelection' in result && result.requiresClassSelection === true
+}
+
+/** 首次登录选择班级（selectionToken 由 ZJUAM 登录签发） */
+export function selectZjuamClass(
+  selectionToken: string,
+  optionKey: string,
+  type?: '2026-sys1' | '2026-sys2' | '2026-sys3',
+): Promise<{ token: string; user: User }> {
+  return apiFetch<{ token: string; user: User }>('/api/auth/zjuam/select-class', {
+    method: 'POST',
+    body: JSON.stringify({ selectionToken, optionKey, type }),
+  })
 }
 
 /** 当前学号已绑定的全部课程账号（含助教 / 学生身份） */
@@ -279,6 +311,14 @@ export async function addTa(studentId: string): Promise<Ta> {
     body: JSON.stringify({ studentId }),
   })
   return res.ta
+}
+
+/** 为当前班级添加助教，返回一次性初始密码 */
+export async function addClassTa(studentId: string): Promise<{ ta: Ta; password: string }> {
+  return apiFetch<{ ta: Ta; password: string }>('/api/staff/tas/class', {
+    method: 'POST',
+    body: JSON.stringify({ studentId }),
+  })
 }
 
 export async function listClasses(): Promise<ClassInfo[]> {

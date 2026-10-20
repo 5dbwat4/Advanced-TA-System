@@ -103,7 +103,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 
 /**
  * 登录类公开接口限流（按 IP）：/api/auth/login*、/api/auth/zjuam/login、
- * /api/auth/passkey/authentication-verify。仅限 POST，GET authentication-options
+ * /api/auth/zjuam/select-class、/api/auth/passkey/authentication-verify。仅限 POST，GET authentication-options
  * 为公开枚举端点（QR / 跳转场景）不限流。
  */
 function registerPublicLoginRoutes(app: FastifyInstance): void {
@@ -113,6 +113,7 @@ function registerPublicLoginRoutes(app: FastifyInstance): void {
     '/api/auth/login/teacher',
     '/api/auth/login/student',
     '/api/auth/zjuam/login',
+    '/api/auth/zjuam/select-class',
     '/api/auth/select',
     '/api/auth/student/exchange',
     '/api/auth/passkey/authentication-verify',
@@ -164,7 +165,7 @@ await fastify.register(pushRoutes, { prefix: '/api/push' })
 await fastify.register(mcpRoutes)
 await fastify.register(telemetryRoutes, { prefix: '/api/theke-kerykos' })
 
-fastify.get('/api/health', async () => ({ ok: true }))
+fastify.get('/api/health', async () => ({ ok: true, dev: env.isDev }))
 
 try {
   await fastify.listen({ port: env.port, host: '0.0.0.0' })

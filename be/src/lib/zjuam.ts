@@ -77,6 +77,8 @@ export interface ZjuamLoginResult {
   coursesCount: number
   /** 拉取列表中所有 is_instructor === true 的课程 id */
   instructorCourseIds: number[]
+  /** 拉取列表中所有 is_instructor === true 的课程摘要 */
+  instructorCourses: ZjuamCourseSummary[]
   profile: ZjuamProfile
 }
 
@@ -338,11 +340,23 @@ async function withMyCourses<T>(
 
 export async function loginToCourses(account: string, password: string): Promise<ZjuamLoginResult> {
   return withMyCourses(account, password, async (fetchPage) => {
-    const courseList = await fetchPage(MY_COURSES_BODY.page, MY_COURSES_BODY.page_size)
+    const courseList: ZjuamCourse[] = []
+    for (let page = 1; page <= LIST_COURSES_MAX_PAGES; page += 1) {
+      const pageCourses = await fetchPage(page, LIST_COURSES_PAGE_SIZE)
+      courseList.push(...pageCourses)
+      if (pageCourses.length < LIST_COURSES_PAGE_SIZE) break
+    }
     const matchedCourse = courseList.find((course) => course.id === CS2_COURSE_ID) ?? null
-    const instructorCourseIds = courseList
+    const instructorCourses = courseList
       .filter((course) => course.is_instructor === true)
-      .map((course) => course.id)
+      .map((course) => ({
+        id: course.id,
+        name: String(course.name ?? course.display_name ?? course.second_name ?? ''),
+        displayName: (course.display_name as string | undefined) ?? null,
+        courseCode: (course.course_code as string | undefined) ?? null,
+        isInstructor: true,
+      }))
+    const instructorCourseIds = instructorCourses.map((course) => course.id)
 
     return {
       ok: true,
@@ -350,6 +364,7 @@ export async function loginToCourses(account: string, password: string): Promise
       course: matchedCourse,
       coursesCount: courseList.length,
       instructorCourseIds,
+      instructorCourses,
       profile: { account },
     }
   })

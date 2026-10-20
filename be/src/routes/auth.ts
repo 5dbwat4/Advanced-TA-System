@@ -1,11 +1,12 @@
-import type { Class, User } from '@prisma/client'
+import { Prisma, type Class, type User } from '@prisma/client'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
+import { env } from '../env.js'
 import { verifyCaptcha } from '../lib/hcaptcha.js'
 import { prisma } from '../lib/prisma.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
-import { isRole, isStaff, type Role } from '../lib/roles.js'
+import { isRole, type Role } from '../lib/roles.js'
 import type { StudentViewPayload } from '../lib/student-view.js'
 import { isUsernameTaken } from '../lib/username.js'
 import { publicUser } from '../lib/user.js'
@@ -20,6 +21,12 @@ const loginSchema = z.object({
 const zjuamLoginSchema = z.object({
   account: z.string().trim().min(1),
   password: z.string().min(1),
+})
+
+const classSelectSchema = z.object({
+  selectionToken: z.string().min(1),
+  optionKey: z.string().min(1),
+  type: z.enum(['2026-sys1', '2026-sys2', '2026-sys3']).optional(),
 })
 
 const setupSchema = z.object({
@@ -67,6 +74,25 @@ type SelectionPayload = {
   userIds: string[]
 }
 
+/** 首次登录选择班级页的可选项；课程可能尚未录入本地 Class */
+type ClassSelectOption = {
+  key: string
+  name: string
+  classId: string | null
+  courseId: string | null
+  registered: boolean
+}
+
+type ClassSelectPayload = {
+  purpose: 'zjuam-class-select'
+  account: string
+  name: string | null
+  zjuPersonId: number | null
+  /** existing=已登记账号；new=未登记但命中已录入课程 */
+  mode: 'existing' | 'new'
+  options: ClassSelectOption[]
+}
+
 type UserWithClass = User & { klass: Class | null }
 
 function toCandidate(user: UserWithClass): LoginCandidate {
@@ -100,6 +126,61 @@ async function selectionResponse(
 async function issueLogin(fastify: FastifyInstance, user: UserWithClass) {
   const token = await fastify.jwt.sign({ sub: user.id, role: user.role })
   return { token, user: publicUser(user) }
+}
+
+/** 首次登录选择班级：签发短期的班级选择 JWT，不直接签发登录 JWT */
+function classSelectionResponse(
+  fastify: FastifyInstance,
+  input: Omit<ClassSelectPayload, 'purpose'>,
+) {
+  const selectionToken = fastify.jwt.sign(
+    { purpose: 'zjuam-class-select', ...input } satisfies ClassSelectPayload,
+    { expiresIn: '5m' },
+  )
+  return {
+    requiresClassSelection: true as const,
+    selectionToken,
+    courses: input.options.map((option) => ({
+      key: option.key,
+      name: option.name,
+      registered: option.registered,
+    })),
+  }
+}
+
+/** 校验班级选择 JWT；无效 / 过期 / 用途不符时返回 null */
+function verifyClassSelectToken(
+  fastify: FastifyInstance,
+  token: string,
+): ClassSelectPayload | null {
+  try {
+    const payload = fastify.jwt.verify<ClassSelectPayload>(token)
+    if (
+      payload.purpose !== 'zjuam-class-select' ||
+      typeof payload.account !== 'string' ||
+      (payload.mode !== 'existing' && payload.mode !== 'new') ||
+      !Array.isArray(payload.options)
+    ) {
+      return null
+    }
+    return payload
+  } catch {
+    return null
+  }
+}
+
+/** 课程展示名：优先本地班级名，其次学在浙大显示名 */
+function classOptionName(input: {
+  className?: string | null
+  displayName?: string | null
+  courseName?: string | null
+  courseId: string
+}): string {
+  return input.className || input.displayName || input.courseName || input.courseId
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
 }
 
 /**
@@ -143,44 +224,6 @@ async function passwordLogin(
   return { ok: true as const, ...(await selectionResponse(fastify, matched)) }
 }
 
-/**
- * 首次登录时按学在浙大课程绑定班级：单班模型下仅在恰好命中 1 个班时写入，
- * 幂等，失败仅记录警告，绝不影响登录流程。
- */
-async function bindClassOnFirstLogin(
-  fastify: FastifyInstance,
-  user: UserWithClass,
-  instructorCourseIds: number[],
-): Promise<UserWithClass> {
-  if (!isStaff(user.role) || user.classId) {
-    return user
-  }
-
-  try {
-    const classes = await prisma.class.findMany({ where: { xzzdClassId: { not: null } } })
-    const matches = classes.filter((klass) => {
-      const xzzdClassId = klass.xzzdClassId
-      if (xzzdClassId == null) return false
-      return instructorCourseIds.some((courseId) => String(courseId) === xzzdClassId)
-    })
-    if (matches.length !== 1) {
-      if (matches.length > 1) {
-        fastify.log.warn({ userId: user.id }, '命中多个班级，单班模型下不自动绑定')
-      }
-      return user
-    }
-
-    return await prisma.user.update({
-      where: { id: user.id },
-      data: { classId: matches[0].id },
-      include: { klass: true },
-    })
-  } catch (error) {
-    fastify.log.warn({ err: error, userId: user.id }, '自动绑定班级失败')
-    return user
-  }
-}
-
 /** 需要人机验证的登录入口（完整路径） */
 const CAPTCHA_LOGIN_ROUTES = new Set([
   '/api/auth/login',
@@ -190,11 +233,39 @@ const CAPTCHA_LOGIN_ROUTES = new Set([
   '/api/auth/zjuam/login',
 ])
 
+/** 是否为 localhost / 127.0.0.1 / ::1（用于开发环境跳过人机验证） */
+function isLocalhostOrigin(value: string | undefined): boolean {
+  if (!value) return false
+  try {
+    const hostname = new URL(value).hostname.toLowerCase()
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname === '::1' ||
+      hostname.endsWith('.localhost')
+    )
+  } catch {
+    return false
+  }
+}
+
+function isLocalhostRequest(request: {
+  headers: { origin?: string; referer?: string; host?: string }
+}): boolean {
+  if (isLocalhostOrigin(request.headers.origin) || isLocalhostOrigin(request.headers.referer)) {
+    return true
+  }
+  if (request.headers.origin || request.headers.referer) return false
+  return isLocalhostOrigin(request.headers.host ? `http://${request.headers.host}` : undefined)
+}
+
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /** 登录前校验 hCaptcha；未配置 HCAPTCHA_SECRET 时自动跳过 */
   fastify.addHook('preHandler', async (request, reply) => {
     if (request.method !== 'POST') return
     if (!CAPTCHA_LOGIN_ROUTES.has(request.routeOptions.url ?? '')) return
+    if (env.isDev && isLocalhostRequest(request)) return
 
     const raw = (request.body as { captchaToken?: unknown } | null)?.captchaToken
     const token = typeof raw === 'string' ? raw : undefined
@@ -287,78 +358,264 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const result = loginResult
-    const studentId = account
-    const { name, zjuPersonId } = result.profile
+    const name = result.profile.name ?? null
+    const zjuPersonId = result.profile.zjuPersonId ?? null
+    const instructorCourses = result.instructorCourses
+
+    const instructorCourseIdSet = new Set(instructorCourses.map((course) => String(course.id)))
+    const allClasses = await prisma.class.findMany({ where: { xzzdClassId: { not: null } } })
+    const localClasses = allClasses.filter(
+      (klass) => klass.xzzdClassId !== null && instructorCourseIdSet.has(klass.xzzdClassId),
+    )
+    const localClassByCourseId = new Map(
+      localClasses.map((klass) => [klass.xzzdClassId ?? '', klass]),
+    )
 
     const existing = await prisma.user.findMany({
-      where: { OR: [{ studentId: account }, { zjuamAccount: account }] },
+      where: {
+        OR: [{ studentId: account }, { zjuamAccount: account }],
+        role: { in: ['TA', 'TEACHER'] },
+      },
       include: { klass: true },
+      orderBy: { createdAt: 'asc' },
     })
+    const active = existing.filter((user) => user.status === 'ACTIVE')
 
-    if (existing.length > 0) {
-      const active = existing.filter((user) => user.status === 'ACTIVE')
-      if (active.length === 0) {
-        return reply.code(403).send({ error: 'ACCOUNT_DISABLED', message: '该账号已被移出名单' })
-      }
+    if (existing.length > 0 && active.length === 0) {
+      return reply.code(403).send({ error: 'ACCOUNT_DISABLED', message: '该账号已被移出名单' })
+    }
 
-      // 同一人的跨班账号共享统一身份认证信息
+    // A. 已登记账号：更新统一身份认证信息；唯一且已绑定班级时直接登录
+    if (active.length > 0) {
       await prisma.user.updateMany({
         where: { id: { in: active.map((user) => user.id) } },
         data: {
           zjuamAccount: account,
           zjuSyncedAt: new Date(),
-          ...(zjuPersonId !== undefined ? { zjuPersonId } : {}),
-          ...(active.some((user) => user.studentId === null) ? { studentId } : {}),
+          ...(zjuPersonId !== null ? { zjuPersonId } : {}),
+          ...(active.some((user) => user.studentId === null) ? { studentId: account } : {}),
         },
       })
 
-      if (active.length === 1) {
-        const user = await bindClassOnFirstLogin(fastify, active[0], result.instructorCourseIds)
+      if (active.length === 1 && active[0].classId) {
         const refreshed = await prisma.user.findUniqueOrThrow({
-          where: { id: user.id },
+          where: { id: active[0].id },
           include: { klass: true },
         })
         return reply.send(await issueLogin(fastify, refreshed))
       }
 
-      return reply.send(await selectionResponse(fastify, active))
-    }
+      // 未绑定 / 多班：进入班级选择。A 可选择其担任助教的任意课程（含未录入课程）
+      const options = new Map<string, ClassSelectOption>()
+      for (const course of instructorCourses) {
+        const klass = localClassByCourseId.get(String(course.id))
+        const key = klass ? `class:${klass.id}` : `course:${course.id}`
+        options.set(key, {
+          key,
+          name: classOptionName({
+            className: klass?.name,
+            displayName: course.displayName,
+            courseName: course.name,
+            courseId: String(course.id),
+          }),
+          classId: klass?.id ?? null,
+          courseId: String(course.id),
+          registered: Boolean(klass),
+        })
+      }
+      // 已绑定账号对应的班级也保留为可选项
+      for (const user of active) {
+        if (!user.klass) continue
+        const key = `class:${user.klass.id}`
+        if (options.has(key)) continue
+        options.set(key, {
+          key,
+          name: user.klass.name,
+          classId: user.klass.id,
+          courseId: user.klass.xzzdClassId,
+          registered: true,
+        })
+      }
 
-    if (result.isInstructor !== true) {
-      return reply.code(403).send({ error: 'NOT_IN_ROSTER', message: '该学号不在助教名单中' })
-    }
+      if (options.size === 0) {
+        return reply.code(403).send({
+          error: 'NO_CLASS_AVAILABLE',
+          message: '你目前没有可选择的班级，请联系课程教师',
+        })
+      }
 
-    // 助教自助注册：按命中的班级各建一条（单班模型）
-    const classes = await prisma.class.findMany({ where: { xzzdClassId: { not: null } } })
-    const matches = classes.filter((klass) => {
-      if (klass.xzzdClassId == null) return false
-      return result.instructorCourseIds.some((courseId) => String(courseId) === klass.xzzdClassId)
-    })
-    if (matches.length === 0) {
-      return reply.code(403).send({ error: 'NOT_IN_ROSTER', message: '该学号不在助教名单中' })
-    }
-
-    const created = await Promise.all(
-      matches.map((klass) =>
-        prisma.user.create({
-          data: {
-            studentId,
-            name: name ?? account,
-            role: 'TA',
-            classId: klass.id,
-            zjuamAccount: account,
-            zjuPersonId: zjuPersonId ?? null,
-            zjuSyncedAt: new Date(),
-          },
-          include: { klass: true },
+      return reply.send(
+        classSelectionResponse(fastify, {
+          account,
+          name,
+          zjuPersonId,
+          mode: 'existing',
+          options: [...options.values()],
         }),
-      ),
-    )
-
-    if (created.length === 1) {
-      return reply.send(await issueLogin(fastify, created[0]))
+      )
     }
-    return reply.send(await selectionResponse(fastify, created))
+
+    // B. 未登记：只有在已录入课程中担任助教才放行，且只能选择这些已录入课程
+    if (localClasses.length === 0) {
+      return reply.code(403).send({
+        error: 'NOT_IN_REGISTERED_COURSE',
+        message: '该学号未在已录入的课程中担任助教',
+      })
+    }
+
+    return reply.send(
+      classSelectionResponse(fastify, {
+        account,
+        name,
+        zjuPersonId,
+        mode: 'new',
+        options: localClasses.map((klass) => ({
+          key: `class:${klass.id}`,
+          name: klass.name,
+          classId: klass.id,
+          courseId: klass.xzzdClassId,
+          registered: true,
+        })),
+      }),
+    )
+  })
+
+  /** 首次登录选择班级：校验短期 JWT 后绑定 / 创建账号并签发登录 JWT */
+  fastify.post('/zjuam/select-class', async (request, reply) => {
+    const parsed = classSelectSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请选择要进入的班级' })
+    }
+
+    const payload = verifyClassSelectToken(fastify, parsed.data.selectionToken)
+    if (!payload) {
+      return reply.code(401).send({ error: 'INVALID_SELECTION', message: '选择已过期，请重新登录' })
+    }
+
+    const option = payload.options.find((item) => item.key === parsed.data.optionKey)
+    if (!option) {
+      return reply.code(401).send({ error: 'INVALID_SELECTION', message: '选择已过期，请重新登录' })
+    }
+
+    const account = payload.account
+    const accountWhere: Prisma.UserWhereInput = {
+      status: 'ACTIVE',
+      role: { in: ['TA', 'TEACHER'] },
+      OR: [{ studentId: account }, { zjuamAccount: account }],
+    }
+
+    // 防止在登录 / 选择班级的间隙账号被移除后重新创建
+    const knownAccounts = await prisma.user.findMany({
+      where: {
+        role: { in: ['TA', 'TEACHER'] },
+        OR: [{ studentId: account }, { zjuamAccount: account }],
+      },
+      select: { status: true },
+    })
+    if (knownAccounts.length > 0 && knownAccounts.every((item) => item.status !== 'ACTIVE')) {
+      return reply.code(403).send({ error: 'ACCOUNT_DISABLED', message: '该账号已被移出名单' })
+    }
+
+    let klass: Class | null = null
+    if (option.classId) {
+      klass = await prisma.class.findUnique({ where: { id: option.classId } })
+    }
+    if (!klass && option.courseId) {
+      klass = await prisma.class.findUnique({ where: { xzzdClassId: option.courseId } })
+    }
+
+    if (!klass) {
+      // 仅 A 类用户可以选择尚未录入的课程；B 类只能选已录入课程
+      if (payload.mode !== 'existing' || option.registered || !option.courseId) {
+        return reply.code(409).send({ error: 'CLASS_UNAVAILABLE', message: '该班级已不存在，请重新登录' })
+      }
+      if (!parsed.data.type) {
+        return reply.code(400).send({ error: 'CLASS_TYPE_REQUIRED', message: '请选择班级类型' })
+      }
+
+      try {
+        klass = await prisma.class.create({
+          data: {
+            xzzdClassId: option.courseId,
+            name: option.name,
+            type: parsed.data.type,
+          },
+        })
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) throw error
+        klass = await prisma.class.findUnique({ where: { xzzdClassId: option.courseId } })
+        if (!klass) {
+          return reply.code(409).send({ error: 'CLASS_UNAVAILABLE', message: '班级创建失败，请重试' })
+        }
+      }
+    }
+
+    const zjuamData = {
+      zjuamAccount: account,
+      zjuPersonId: payload.zjuPersonId,
+      zjuSyncedAt: new Date(),
+    }
+
+    let user = await prisma.user.findFirst({
+      where: { ...accountWhere, classId: klass.id },
+      include: { klass: true },
+    })
+    if (user) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ...zjuamData,
+          ...(user.studentId === null ? { studentId: account } : {}),
+          ...(user.username ? {} : { name: payload.name ?? user.name }),
+        },
+        include: { klass: true },
+      })
+      return reply.send(await issueLogin(fastify, user))
+    }
+
+    // 优先复用“添加新助教”预置的未绑定账号
+    const unbound = await prisma.user.findFirst({
+      where: { ...accountWhere, classId: null },
+      include: { klass: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (unbound) {
+      user = await prisma.user.update({
+        where: { id: unbound.id },
+        data: {
+          ...zjuamData,
+          ...(unbound.studentId === null ? { studentId: account } : {}),
+          classId: klass.id,
+          ...(unbound.username ? {} : { name: payload.name ?? unbound.name }),
+        },
+        include: { klass: true },
+      })
+      return reply.send(await issueLogin(fastify, user))
+    }
+
+    try {
+      user = await prisma.user.create({
+        data: {
+          studentId: account,
+          name: payload.name ?? account,
+          role: 'TA',
+          classId: klass.id,
+          ...zjuamData,
+        },
+        include: { klass: true },
+      })
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error
+      user = await prisma.user.findFirst({
+        where: { ...accountWhere, classId: klass.id },
+        include: { klass: true },
+      })
+      if (!user) {
+        return reply.code(409).send({ error: 'ACCOUNT_EXISTS', message: '该班级已存在你的账号' })
+      }
+    }
+
+    return reply.send(await issueLogin(fastify, user))
   })
 
   /** 多班选择：校验 selectionToken 后签发所选账号的 JWT */

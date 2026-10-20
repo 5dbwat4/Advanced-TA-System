@@ -20,12 +20,13 @@ import Users from '~icons/lucide/users'
 import { Logo } from '@/components/ui/Logo'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { ApiError, isLoginSelection } from '@/lib/api'
+import { ApiError, isClassSelection, isLoginSelection } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import type { IconComponent } from '@/lib/icon'
 import { getLastUsers, lastUserIdentifier, type LastUser } from '@/lib/last-user'
 import { getAuthenticationOptions } from '@/lib/passkey'
+import { getRuntimeInfo, isLocalhostHost } from '@/lib/runtime'
 import { homePathFor } from '@/lib/student-route'
 import { cn } from '@/lib/utils'
 
@@ -36,7 +37,7 @@ const METHODS: { key: Method; icon: IconComponent; label: string }[] = [
   { key: 'zjuam', icon: University, label: '统一身份认证' },
 ]
 
-const HCAPTCHA_SITEKEY = import.meta.env.VITE_HCAPTCHA_SITEKEY
+const HCAPTCHA_SITEKEY = import.meta.env.VITE_HCAPTCHA_SITEKEY ?? ''
 
 export function LoginPanel() {
   const navigate = useNavigate()
@@ -55,8 +56,22 @@ export function LoginPanel() {
   const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaEnabled, setCaptchaEnabled] = useState(Boolean(HCAPTCHA_SITEKEY))
   const [captchaTheme, setCaptchaTheme] = useState<'light' | 'dark'>('light')
   const captchaRef = useRef<HCaptcha>(null)
+
+  useEffect(() => {
+    // localhost + 后端 dev 时后端会跳过 hCaptcha，前端也不再展示 / 要求验证
+    if (!HCAPTCHA_SITEKEY) return
+    let cancelled = false
+    void getRuntimeInfo().then((info) => {
+      if (cancelled || !info) return
+      if (info.dev && isLocalhostHost()) setCaptchaEnabled(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     // 已验证时保持组件不变，避免重绘清空勾选；重置后再同步当前主题
@@ -110,7 +125,7 @@ export function LoginPanel() {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
 
-    if (HCAPTCHA_SITEKEY && !captchaToken) {
+    if (captchaEnabled && !captchaToken) {
       toast.error('请先完成人机验证')
       return
     }
@@ -137,13 +152,24 @@ export function LoginPanel() {
         })
         return
       }
+      if (isClassSelection(result)) {
+        navigate('/login/class', {
+          replace: true,
+          state: {
+            selectionToken: result.selectionToken,
+            courses: result.courses,
+            from,
+          },
+        })
+        return
+      }
       const user = result.user
       toast.success(`欢迎回来，${user.name}`)
       const dest =
         user.role === 'STUDENT' ? homePathFor(user) : user.username ? (from ?? '/console') : '/setup'
       navigate(dest, { replace: true })
     } catch (error) {
-      if (HCAPTCHA_SITEKEY) {
+      if (captchaEnabled) {
         captchaRef.current?.resetCaptcha()
         setCaptchaToken(null)
       }
@@ -164,7 +190,7 @@ export function LoginPanel() {
         response: assertion,
         challengeToken,
       })
-      if (isLoginSelection(result)) return
+      if (isLoginSelection(result) || isClassSelection(result)) return
       const user = result.user
       toast.success(`欢迎回来，${user.name}`)
       const from = (location.state as { from?: string } | null)?.from
@@ -414,7 +440,7 @@ export function LoginPanel() {
                 {isZjuam && (
                   <p className="text-xs text-fg-subtle">使用学校统一身份认证登录，无需本地账号</p>
                 )}
-                {HCAPTCHA_SITEKEY && (
+                {captchaEnabled && (
                   <div className="flex justify-center">
                     <HCaptcha
                       key={captchaTheme}
