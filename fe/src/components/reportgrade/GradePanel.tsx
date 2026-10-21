@@ -18,6 +18,7 @@ import Copy from '~icons/lucide/copy'
 import Ellipsis from '~icons/lucide/ellipsis'
 import Plus from '~icons/lucide/plus'
 import Save from '~icons/lucide/save'
+import Sparkles from '~icons/lucide/sparkles'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import { CriteriaGrading } from '@/components/criteria/CriteriaGrading'
 import { defaultStates, decodeReviewContent, encodeReviewContent, totalScore } from '@/components/criteria/scoring'
@@ -38,6 +39,9 @@ import {
   saveScore,
   type Score,
 } from '@/lib/api'
+import { runAiGrade } from '@/lib/ai-grade'
+import { useAiConfig } from '@/lib/ai-config'
+import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -63,6 +67,8 @@ export function GradePanel({
   criteriaOpenToken?: number
 }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const aiConfig = useAiConfig(user?.id)
   const criteriaState = useOverlayState()
   const addState = useOverlayState()
   const rangeState = useOverlayState()
@@ -74,6 +80,7 @@ export function GradePanel({
   const [dirty, setDirty] = useState(false)
   const [savedOverride, setSavedOverride] = useState<{ userId: string; score: Score } | null>(null)
   const [savingReport, setSavingReport] = useState(false)
+  const [aiBusy, setAiBusy] = useState(false)
 
   const [addTarget, setAddTarget] = useState('root')
   const [newMode, setNewMode] = useState<CriterionMode>('subtract')
@@ -226,6 +233,44 @@ export function GradePanel({
     setStates(defaultStates(loadedItems))
     setExtras({})
     setDirty(false)
+  }
+
+  const applyAiGrade = async () => {
+    if (!userId || !items || !student) return
+    setAiBusy(true)
+    try {
+      const results = await runAiGrade({
+        experimentId,
+        personId: student.personId,
+        items,
+        extras,
+        config: aiConfig,
+      })
+      const byId = new Map(results.map((result) => [result.id, result]))
+      setStates((prev) => {
+        const next = { ...prev }
+        for (const [id, state] of Object.entries(next)) {
+          const result = byId.get(id)
+          if (!result) continue
+          next[id] = {
+            ...state,
+            selected: result.selected,
+            appendix: result.selected ? result.appendix.trim() : '',
+          }
+        }
+        return next
+      })
+      setDirty(true)
+      toast.success(
+        aiConfig.demoMode
+          ? '演示模式：已生成示例预评分，请人工复核'
+          : 'AI 已完成预评分，请人工复核',
+      )
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'AI 预评分失败'))
+    } finally {
+      setAiBusy(false)
+    }
   }
 
   const copyShareCode = async () => {
@@ -435,6 +480,17 @@ export function GradePanel({
             </Dropdown.Popover>
           </Dropdown>
         </div>
+
+        <PendingButton
+          variant="secondary"
+          className="w-full"
+          isPending={aiBusy}
+          isDisabled={!items || student.userId == null}
+          onPress={() => void applyAiGrade()}
+          icon={Sparkles}
+        >
+          AI 预评分
+        </PendingButton>
 
         {student.userId == null ? (
           <Alert status="warning">

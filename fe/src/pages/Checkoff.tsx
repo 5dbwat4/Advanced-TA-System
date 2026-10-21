@@ -846,6 +846,7 @@ export default function Checkoff() {
               <ScoreForm
                 experimentId={experiment.id}
                 student={student}
+                questions={drawn}
                 marks={marks}
                 existingScores={existingScores}
                 ratio={scoreRatio}

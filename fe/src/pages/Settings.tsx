@@ -13,6 +13,7 @@ import Pencil from '~icons/lucide/pencil'
 import Plus from '~icons/lucide/plus'
 import Smartphone from '~icons/lucide/smartphone'
 import Trash2 from '~icons/lucide/trash-2'
+import { AiSection } from '@/components/settings/AiSection'
 import { AvatarPicker } from '@/components/settings/AvatarPicker'
 import { CacheSection } from '@/components/settings/CacheSection'
 import { CreditsSection } from '@/components/settings/CreditsSection'
@@ -34,6 +35,7 @@ const SECTIONS: TocItem[] = [
   { id: 'profile', label: '个人信息' },
   { id: 'zjuam', label: '统一身份认证' },
   { id: 'preferences', label: '偏好设置' },
+  { id: 'ai', label: 'AI 能力' },
   { id: 'system', label: '系统设置' },
   { id: 'cache', label: '缓存' },
   { id: 'credits', label: 'Credits' },
@@ -372,17 +374,23 @@ export default function Settings() {
         </section>
 
         {!isStudent && (
+          <section id="ai" className={sectionClass('ai')}>
+            <AiSection index={3} />
+          </section>
+        )}
+
+        {!isStudent && (
           <section id="system" className={sectionClass('system')}>
-            <SystemSection index={3} />
+            <SystemSection index={4} />
           </section>
         )}
 
         <section id="cache" className={sectionClass('cache')}>
-          <CacheSection index={4} />
+          <CacheSection index={5} />
         </section>
 
         <section id="credits" className={sectionClass('credits')}>
-          <CreditsSection index={5} />
+          <CreditsSection index={6} />
         </section>
         </div>
 

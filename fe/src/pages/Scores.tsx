@@ -652,8 +652,15 @@ export default function Scores() {
                   {sortedStudents.map((student) => (
                     <tr key={student.userId} className="transition-colors hover:bg-sunken/40">
                       <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
-                        <div className="font-bold">{student.name}</div>
-                        <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/console/scores/students/${student.userId}`)}
+                          className="w-full text-left transition-colors hover:text-brand-600 dark:hover:text-brand-300"
+                          title="查看学情报告"
+                        >
+                          <div className="font-bold">{student.name}</div>
+                          <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
+                        </button>
                       </td>
                       {classExperiments.flatMap((exp) => {
                         const total = experimentTotal(student, exp)

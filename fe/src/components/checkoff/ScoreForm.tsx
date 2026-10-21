@@ -6,6 +6,7 @@ import Check from '~icons/lucide/check'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Info from '~icons/lucide/info'
 import MessageCircleQuestion from '~icons/lucide/message-circle-question'
+import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { AvatarImage } from '@/components/ui/AvatarImage'
@@ -13,6 +14,7 @@ import { PendingButton } from '@/components/ui/PendingButton'
 import {
   REMARK_TYPE_CHECKOFF,
   submitCheckoff,
+  type CheckoffQuestion,
   type CheckoffStudent,
   type Score,
 } from '@/lib/api'
@@ -31,6 +33,7 @@ const DEFAULT_SCORE = 100
 export function ScoreForm({
   experimentId,
   student,
+  questions,
   marks,
   existingScores,
   ratio,
@@ -38,6 +41,7 @@ export function ScoreForm({
 }: {
   experimentId: string
   student: CheckoffStudent
+  questions: Pick<CheckoffQuestion, 'question' | 'answer'>[]
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
   ratio: number[]
@@ -45,6 +49,7 @@ export function ScoreForm({
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
   const [saving, setSaving] = useState(false)
+  const [remarkSync, setRemarkSync] = useState<{ nonce: number; text: string } | null>(null)
 
   useEffect(() => {
     const next: Record<number, number> = { 0: DEFAULT_SCORE, 1: DEFAULT_SCORE }
@@ -107,6 +112,17 @@ export function ScoreForm({
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
         <span className="text-xs text-fg-subtle">默认 100，可按需下调</span>
+      </div>
+
+      <div className="mb-4">
+        <AiAudioGrade
+          questions={questions}
+          disabled={saving}
+          onResult={(result) => {
+            setValue(1, result.score)
+            setRemarkSync({ nonce: Date.now(), text: result.comment })
+          }}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -184,6 +200,7 @@ export function ScoreForm({
           userId={student.userId}
           experimentId={experimentId}
           type={REMARK_TYPE_CHECKOFF}
+          sync={remarkSync ?? undefined}
         />
       </div>
 

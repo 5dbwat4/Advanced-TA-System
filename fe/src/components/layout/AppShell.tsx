@@ -10,6 +10,7 @@ import LogOut from '~icons/lucide/log-out'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
+import { AiAssistant } from '@/components/ai/AiAssistant'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
@@ -380,6 +381,8 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      <AiAssistant />
     </div>
   )
 }
