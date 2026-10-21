@@ -41,14 +41,20 @@ export function MasterSlavePanel({
   const { code, remaining, period } = useTotp(session.secret, session.period, session.serverTime)
   const [sharing, setSharing] = useState(false)
   const url = `${window.location.origin}/checkin/${session.token ?? ''}`
+  const shareData: ShareData = {
+    title: 'Tasaas 从机配对',
+    text: '在从机打开此链接以完成配对',
+    url,
+  }
   const canShare = (() => {
-    if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') {
+    if (typeof navigator.share !== 'function') {
       return false
     }
+    if (typeof navigator.canShare !== 'function') {
+      return true
+    }
     try {
-      return navigator.canShare({
-        files: [new File([url], 'tasaas-checkin-link.txt', { type: 'text/plain' })],
-      })
+      return navigator.canShare(shareData)
     } catch {
       return false
     }
@@ -82,8 +88,7 @@ export function MasterSlavePanel({
     if (!session.token) return
     setSharing(true)
     try {
-      const file = new File([url], 'tasaas-checkin-link.txt', { type: 'text/plain' })
-      await navigator.share({ files: [file] })
+      await navigator.share(shareData)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       toast.error('分享失败，请重试')

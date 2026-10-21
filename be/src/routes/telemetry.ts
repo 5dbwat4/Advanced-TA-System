@@ -8,7 +8,7 @@ const MAX_ENVELOPE_BYTES = 1024 * 1024
 
 export const telemetryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addContentTypeParser(
-    'application/x-sentry-envelope',
+    ['application/x-sentry-envelope', 'text/plain'],
     { parseAs: 'buffer' },
     (_request, body, done) => done(null, body),
   )
