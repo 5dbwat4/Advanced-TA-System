@@ -5,6 +5,11 @@
       "type": "local",
       "command": ["npx", "-y", "@heroui/react-mcp@latest"],
       "enabled": true
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+      "enabled": true
     }
   }
 }
