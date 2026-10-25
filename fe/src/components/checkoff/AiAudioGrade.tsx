@@ -4,6 +4,8 @@ import RecordRTC from 'recordrtc'
 import { toast } from 'sonner'
 
 import Mic from '~icons/lucide/mic'
+import Pause from '~icons/lucide/pause'
+import Play from '~icons/lucide/play'
 import RotateCcw from '~icons/lucide/rotate-ccw'
 import Sparkles from '~icons/lucide/sparkles'
 import Square from '~icons/lucide/square'
@@ -34,6 +36,10 @@ export function AiAudioGrade({
   const [grading, setGrading] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const recorderRef = useRef<RecordRTC | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -75,9 +81,7 @@ export function AiAudioGrade({
         config: aiConfig,
       })
       onResult(result)
-      toast.success(
-        aiConfig.demoMode ? '演示模式：已生成示例听答评分，请人工复核' : 'AI 已完成听答评分，请人工复核',
-      )
+      toast.success('AI 已完成听答评分，请人工复核')
     } catch (error) {
       toast.error(getErrorMessage(error, 'AI 听答评分失败'))
     } finally {
@@ -122,6 +126,9 @@ export function AiAudioGrade({
         if (previous) URL.revokeObjectURL(previous)
         return URL.createObjectURL(blob)
       })
+      setPlaying(false)
+      setCurrentTime(0)
+      setDuration(0)
       recorder.destroy()
       recorderRef.current = null
       stopTracks()
@@ -129,21 +136,14 @@ export function AiAudioGrade({
     })
   }
 
+  const playbackDuration = Number.isFinite(duration) ? duration : 0
+
   return (
     <div className="rounded-2xl border border-brand-500/30 bg-brand-500/5 p-5">
       <div className="flex items-center gap-2 text-sm font-bold">
         <Sparkles width={15} height={15} className="shrink-0 text-brand-600 dark:text-brand-300" />
         AI 听答评分
-        {aiConfig.demoMode && (
-          <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-300">
-            演示模式
-          </span>
-        )}
       </div>
-      <p className="mt-1 text-[11px] text-fg-subtle">
-        录制学生本轮口头回答，发送给支持音频的多模态模型，自动给出「口头问答」分数和评语。评语会写入备注。
-      </p>
-
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {!recording ? (
           <Button
@@ -177,23 +177,82 @@ export function AiAudioGrade({
         )}
 
         {audioUrl && !recording && (
-          <Button
-            size="sm"
-            variant="ghost"
-            isIconOnly
-            aria-label="清除录音"
-            isDisabled={grading}
-            onPress={() => {
-              URL.revokeObjectURL(audioUrl)
-              setAudioUrl(null)
-            }}
-          >
-            <RotateCcw width={14} height={14} className="shrink-0" />
-          </Button>
+          <>
+            <div className="flex items-center gap-1.5 rounded-xl border border-line bg-elevated px-1.5 py-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                isIconOnly
+                aria-label={playing ? '暂停录音' : '播放录音'}
+                onPress={() => {
+                  const audio = audioRef.current
+                  if (!audio) return
+                  if (audio.paused) {
+                    void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false))
+                  } else {
+                    audio.pause()
+                    setPlaying(false)
+                  }
+                }}
+              >
+                {playing ? (
+                  <Pause width={14} height={14} className="shrink-0" />
+                ) : (
+                  <Play width={14} height={14} className="shrink-0" />
+                )}
+              </Button>
+              <input
+                type="range"
+                aria-label="录音进度"
+                min={0}
+                max={playbackDuration}
+                step={0.1}
+                value={Math.min(currentTime, playbackDuration)}
+                onChange={(event) => {
+                  const audio = audioRef.current
+                  const next = Number(event.target.value)
+                  if (!audio) return
+                  audio.currentTime = next
+                  setCurrentTime(next)
+                }}
+                className="h-1 w-20 accent-brand-600"
+              />
+              <span className="tabular text-[11px] text-fg-subtle">
+                {formatDuration(Math.floor(currentTime))} /{' '}
+                {formatDuration(Math.floor(playbackDuration))}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              isIconOnly
+              aria-label="清除录音"
+              isDisabled={grading}
+              onPress={() => {
+                audioRef.current?.pause()
+                setPlaying(false)
+                setCurrentTime(0)
+                setDuration(0)
+                URL.revokeObjectURL(audioUrl)
+                setAudioUrl(null)
+              }}
+            >
+              <RotateCcw width={14} height={14} className="shrink-0" />
+            </Button>
+          </>
         )}
       </div>
 
-      {audioUrl && <audio controls src={audioUrl} className="mt-3 w-full" />}
+      {audioUrl && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          className="hidden"
+          onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+          onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+          onEnded={() => setPlaying(false)}
+        />
+      )}
     </div>
   )
 }

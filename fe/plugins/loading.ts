@@ -9,44 +9,25 @@ import type { Plugin } from 'vite'
 const loadingDir = fileURLToPath(new URL('./loading', import.meta.url))
 
 const LOADER_CSS = [
-  '.pb-shell{position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:var(--pb-bg,#fafbff);color:var(--pb-fg,#1b1e2e);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;transition:opacity .3s ease}',
-  '.pb-shell.pb-hide{opacity:0;pointer-events:none}',
-  '.pb-shell.pb-fail .pb-spin{border-top-color:#d64550;animation-play-state:paused}',
-  '.pb-spin{width:44px;height:44px;border:3px solid rgba(99,102,241,.18);border-top-color:#4f52e2;border-radius:50%;animation:pb-rot .8s linear infinite}',
-  '@keyframes pb-rot{to{transform:rotate(1turn)}}',
-  '.pb-title{margin:0;max-width:min(560px,88vw);text-align:center;line-height:1.6;font-size:14px;font-family:Cambria,kaiti,Cochin,Georgia,Times,"Times New Roman",serif;opacity:.72}',
-  // 进度框仅在真正开始下载时才出现（避免空态撑高、破坏垂直居中）。
-  '.pb-main{width:min(560px,88vw);display:none;flex-direction:column;gap:12px}',
-  '.pb-shell.pb-downloading .pb-main{display:flex}',
-  '.pb-row{display:flex;flex-direction:column;gap:6px}',
-  '.pb-list{display:flex;flex-direction:column;gap:10px;height:min(40vh,320px);overflow:auto}',
-  '.pb-line{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}',
-  '.pb-name{font-size:12.5px;font-weight:600;font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-  '.pb-hash{color:#94a3b8;font-weight:400}',
-  '.pb-meta{font-size:11.5px;opacity:.62;white-space:nowrap;font-variant-numeric:tabular-nums}',
-  '.pb-row.pb-err .pb-meta{color:#d64550;opacity:1}',
-  '.pb-rail{height:10px;border-radius:999px;background:rgba(99,102,241,.14);overflow:hidden}',
-  '.pb-fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#4f52e2,#8b5cf6);transition:width .15s linear}',
-  '.pb-ind .pb-fill{width:36%;animation:pb-slide 1.1s ease-in-out infinite}',
-  '@keyframes pb-slide{0%{transform:translateX(-110%)}100%{transform:translateX(290%)}}',
-  '.pb-retry{margin-top:4px;border:0;border-radius:8px;background:#4f52e2;color:#fff;font-size:13px;font-weight:600;padding:8px 22px;cursor:pointer}',
-  '.pb-retry:hover{background:#4144cf}',
-  '@media(prefers-color-scheme:dark){.pb-shell{--pb-bg:#101218;--pb-fg:#e9ebf4}.pb-spin{border-color:rgba(148,163,255,.16);border-top-color:#8b8ff8}.pb-rail{background:rgba(148,163,255,.16)}}',
-  '@media(prefers-reduced-motion:reduce){.pb-spin,.pb-ind .pb-fill{animation:none}}',
+  // 顶部细进度条：不遮挡页面，页面可立即渲染与交互。
+  '.pb-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:2147483647;pointer-events:none;opacity:1;transition:opacity .35s ease}',
+  '.pb-bar.pb-hide{opacity:0}',
+  '.pb-track{position:absolute;inset:0;background:rgba(79,82,226,.14);overflow:hidden}',
+  '.pb-fill{height:100%;width:0;border-radius:0 2px 2px 0;background:linear-gradient(90deg,#4f52e2,#8b5cf6);box-shadow:0 0 8px rgba(79,82,226,.45);transition:width .2s ease}',
+  '.pb-bar.pb-ind .pb-fill{width:32%;animation:pb-slide 1.2s ease-in-out infinite}',
+  '@keyframes pb-slide{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}',
+  // 只有 manifest 加载失败才展示全屏错误态。
+  '.pb-fatal{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:24px;background:#fafbff;color:#1b1e2e;font:14px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;text-align:center}',
+  '.pb-fatal p{margin:0}',
+  '.pb-fatal button{margin-top:14px;border:0;border-radius:8px;background:#4f52e2;color:#fff;font-size:13px;font-weight:600;padding:8px 22px;cursor:pointer}',
+  '.pb-fatal button:hover{background:#4144cf}',
+  '@media(prefers-color-scheme:dark){.pb-track{background:rgba(148,163,255,.18)}.pb-fatal{background:#101218;color:#e9ebf4}}',
+  '@media(prefers-reduced-motion:reduce){.pb-fill,.pb-bar{transition:none}.pb-bar.pb-ind .pb-fill{animation:none;width:100%;opacity:.55}}',
 ].join('')
 
 const SHELL =
-  '<div id="pb-shell" class="pb-shell">' +
-  '<div class="pb-spin" aria-hidden="true"></div>' +
-  '<p id="pb-title" class="pb-title">这个阶段，人们通常会绞尽脑汁写一些笑话写上去，避免用户因为FMP过高而退出……</p>' +
-  '<div class="pb-main">' +
-  '<div class="pb-row" id="pb-mainrow">' +
-  '<div class="pb-line"><span class="pb-name" id="pb-name"></span><span class="pb-meta" id="pb-meta"></span></div>' +
-  '<div class="pb-rail" id="pb-grail" role="progressbar" aria-valuenow="0"><div class="pb-fill" id="pb-gfill"></div></div>' +
-  '</div>' +
-  '<div id="pb-list" class="pb-list"></div>' +
-  '</div>' +
-  '<button id="pb-retry" class="pb-retry" hidden>重试</button>' +
+  '<div id="pb-bar" class="pb-bar pb-ind" role="progressbar" aria-label="正在加载资源" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">' +
+  '<div class="pb-track"><div id="pb-fill" class="pb-fill"></div></div>' +
   '</div>'
 
 function isRemote(url: string): boolean {
@@ -131,10 +112,10 @@ function listPublicFiles(dir: string): Array<{ rel: string; size: number }> {
 }
 
 /**
- * 构建时把 index.html 改造成“带进度加载器”的版本：
+ * 构建时把 index.html 改造成“顶部进度条 + 按需加载”的版本：
  * - manifest.json：独立文件，列出全部资源与大小；其内容哈希写入 sw.js（manifest 变化 → sw.js 变化 → 浏览器触发更新）。
  * - loader.js：独立、带内容哈希、已 minify 的小文件（不再内联进 HTML）。
- * - sw.js：minify 后输出到根目录。
+ * - sw.js：minify 后输出到根目录；后台按 manifest 预加载 chunk，并广播进度。
  */
 export function loading(): Plugin {
   let base = '/'

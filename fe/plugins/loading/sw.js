@@ -8,10 +8,13 @@
  *   install 时预取本版本两者；activate 时清理旧版本。这样页面与 manifest 始终同版本，
  *   应用只在用户点“刷新”（新 SW 接管）后升级，而不是静默更新。
  *
- * 预缓存：页面加载器通过 postMessage 发送 { type: 'PRECACHE', assets }，
- *   SW 逐条 fetch（流式读取并统计字节）写入 STATIC_CACHE，并通过 MessagePort 上报
- *   progress / done / error，最后发送 complete；命中缓存时直接上报 done。
- * /api、/socket.io、/mcp：直接放行，绝不缓存。
+ * 加载策略（按需）：
+ * - 不再阻塞首屏等待全部 chunk 下载完成。install 只预取本版本的 index.html 与 manifest.json。
+ * - activate 后（以及页面发送 PRELOAD_START 时），SW 在后台基于 manifest.json 把 chunk
+ *   （JS/CSS）逐条写入 STATIC_CACHE，并通过 clients.postMessage 广播 CHUNK_PROGRESS。
+ * - 页面请求 /assets/* 时 cache-first：命中直接返回；未命中立刻联网（不会等待后台预加载），
+ *   并把响应写入缓存；若同一资源后台正在下载，则复用在途请求，避免重复下载。
+ * - /api、/socket.io、/mcp：直接放行，绝不缓存。
  * 更新：默认不 skipWaiting，等待页面提示用户后发送 SKIP_WAITING 再接管。
  */
 const VERSION = '__BUILD_VERSION__'
@@ -23,11 +26,13 @@ const SCOPE = self.registration.scope
 const PAGE_KEY = new URL('index.html', SCOPE).href
 const MANIFEST_PATH = new URL('manifest.json', SCOPE).pathname
 const MANIFEST_KEY = new URL('manifest.json', SCOPE).href
+const ASSETS_PATH = new URL('assets/', SCOPE).pathname
 
 const API_PREFIXES = ['/api', '/socket.io', '/mcp']
 const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com'
 const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com'
-const PRECACHE_CONCURRENCY = 6
+const PRELOAD_CONCURRENCY = 6
+const CHUNK_RE = /\.(?:m?js|css)$/i
 
 const GRADE_TAG = 'tasaas-grade-updates'
 
@@ -45,9 +50,219 @@ async function runPool(tasks, limit) {
   await Promise.all(runners)
 }
 
+function isChunk(url) {
+  try {
+    const parsed = new URL(url, SCOPE)
+    if (parsed.origin !== self.location.origin) return false
+    if (!parsed.pathname.startsWith(ASSETS_PATH)) return false
+    return CHUNK_RE.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
+/* ---------- 后台 chunk 加载进程 ---------- */
+
+let preloadPromise = null
+let preloadState = null
+let broadcastTimer = 0
+
+/** 后台预加载中的 URL -> Promise<void>（完成时代表已写入 Cache Storage）。 */
+const preloadTasks = new Map()
+/** 页面发出、仍在下载中的 URL -> Promise<void>（完成后可直接从缓存命中）。 */
+const pageTasks = new Map()
+/** 本版本需要加载的 chunk 及其大小。 */
+const chunkSizes = new Map()
+/** 已计入进度的 chunk（无论成功失败，保证进度能收敛到 100%）。 */
+const chunkDone = new Set()
+
+function progressMessage() {
+  if (!preloadState) return null
+  return {
+    type: 'CHUNK_PROGRESS',
+    done: preloadState.done,
+    total: preloadState.total,
+    bytes: preloadState.bytes,
+    totalBytes: preloadState.totalBytes,
+    failed: preloadState.failed,
+    complete: preloadState.complete,
+  }
+}
+
+async function broadcastProgress() {
+  const message = progressMessage()
+  if (!message) return
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  await Promise.all(
+    clients.map(async (client) => {
+      try {
+        client.postMessage(message)
+      } catch {
+        /* 客户端已关闭 */
+      }
+    }),
+  )
+}
+
+function scheduleBroadcast(force) {
+  if (force) {
+    if (broadcastTimer) {
+      clearTimeout(broadcastTimer)
+      broadcastTimer = 0
+    }
+    broadcastProgress()
+    return
+  }
+  if (broadcastTimer) return
+  broadcastTimer = setTimeout(() => {
+    broadcastTimer = 0
+    broadcastProgress()
+  }, 120)
+}
+
+function markChunkSettled(url, bytes, failed) {
+  if (!preloadState || !chunkSizes.has(url) || chunkDone.has(url)) return
+  chunkDone.add(url)
+  preloadState.done += 1
+  preloadState.bytes += Number(bytes) > 0 ? Number(bytes) : 0
+  if (failed) preloadState.failed += 1
+  if (preloadState.done >= preloadState.total) preloadState.complete = true
+  scheduleBroadcast(preloadState.complete)
+}
+
+async function readManifest() {
+  const cache = await caches.open(PAGE_CACHE)
+  let response = await cache.match(MANIFEST_KEY)
+  if (!response) {
+    response = await fetch(new Request(MANIFEST_KEY, { cache: 'reload' }))
+    if (isCacheable(response)) cache.put(MANIFEST_KEY, response.clone())
+  }
+  if (!response || !response.ok) throw new Error('manifest unavailable')
+  return response.json()
+}
+
+/**
+ * 开始（或复用）后台预加载进程。进程可被重复调用：已完成后再调用会快速扫描缓存并重新广播状态。
+ * 页面侧的 PRELOAD_START / PRELOAD_STATE 会用 event.waitUntil 锚定它，避免 SW 在下载途中被回收。
+ */
+function startPreload() {
+  if (preloadPromise) return preloadPromise
+
+  preloadPromise = (async () => {
+    const manifest = await readManifest()
+    const assets = Array.isArray(manifest.assets) ? manifest.assets : []
+
+    const chunks = []
+    const seen = new Set()
+    chunkSizes.clear()
+    chunkDone.clear()
+    for (const asset of assets) {
+      if (!asset || typeof asset.u !== 'string') continue
+      if (!isChunk(asset.u) || seen.has(asset.u)) continue
+      seen.add(asset.u)
+      const size = Number(asset.s) > 0 ? Number(asset.s) : 0
+      chunkSizes.set(asset.u, size)
+      chunks.push({ u: asset.u, s: size })
+    }
+
+    preloadState = {
+      done: 0,
+      total: chunks.length,
+      bytes: 0,
+      totalBytes: chunks.reduce((sum, asset) => sum + asset.s, 0),
+      failed: 0,
+      complete: chunks.length === 0,
+    }
+    scheduleBroadcast(true)
+
+    const cache = await caches.open(STATIC_CACHE)
+    const pending = []
+    const hits = await Promise.all(
+      chunks.map((asset) => cache.match(new Request(asset.u, { credentials: 'same-origin' }))),
+    )
+    hits.forEach((hit, index) => {
+      if (hit) markChunkSettled(chunks[index].u, chunks[index].s, false)
+      else pending.push(chunks[index])
+    })
+
+    if (pending.length === 0) {
+      preloadState.complete = true
+      scheduleBroadcast(true)
+      return progressMessage()
+    }
+
+    await runPool(
+      pending.map((asset) => async () => {
+        await preloadAsset(asset, cache)
+      }),
+      PRELOAD_CONCURRENCY,
+    )
+    preloadState.complete = true
+    scheduleBroadcast(true)
+    return progressMessage()
+  })()
+    .catch(() => {
+      if (!preloadState) {
+        preloadState = { done: 0, total: 0, bytes: 0, totalBytes: 0, failed: 0, complete: true }
+      }
+      preloadState.complete = true
+      scheduleBroadcast(true)
+      return progressMessage()
+    })
+    .finally(() => {
+      preloadPromise = null
+    })
+
+  return preloadPromise
+}
+
+async function preloadAsset(asset, cache) {
+  const url = asset.u
+  const request = new Request(url, { credentials: 'same-origin' })
+
+  const cached = await cache.match(request)
+  if (cached) {
+    markChunkSettled(url, asset.s, false)
+    return
+  }
+
+  // 页面已经开始下载同一资源：等它写完缓存即可，避免重复请求。
+  const pageTask = pageTasks.get(url)
+  if (pageTask) {
+    await pageTask.catch(() => {})
+    const hit = await cache.match(request)
+    if (hit) {
+      markChunkSettled(url, asset.s, false)
+      return
+    }
+  }
+
+  // 已有同资源的预加载在途（正常不会发生，runPool 已去重），直接复用。
+  const inFlight = preloadTasks.get(url)
+  if (inFlight) {
+    await inFlight.catch(() => {})
+    return
+  }
+
+  const task = (async () => {
+    const response = await fetch(request)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    await cache.put(request, response)
+    markChunkSettled(url, asset.s, false)
+  })()
+
+  preloadTasks.set(url, task)
+  try {
+    await task
+  } catch {
+    markChunkSettled(url, asset.s, true)
+  } finally {
+    if (preloadTasks.get(url) === task) preloadTasks.delete(url)
+  }
+}
+
 self.addEventListener('install', (event) => {
-  // 预取本版本的 index.html 与 manifest.json，供刷新后由新 SW 直接命中；
-  // 具体资源由页面加载器按需预缓存。
+  // 只预取本版本的 index.html 与 manifest.json；具体 chunk 由后台加载进程按需写入。
   event.waitUntil(
     (async () => {
       const cache = await caches.open(PAGE_CACHE)
@@ -74,6 +289,10 @@ self.addEventListener('activate', (event) => {
       await self.clients.claim()
     })(),
   )
+  // 首次安装 / 新版本接管后主动在后台开始加载；页面消息会再次锚定该进程。
+  setTimeout(() => {
+    startPreload().catch(() => {})
+  }, 0)
 })
 
 self.addEventListener('message', (event) => {
@@ -86,76 +305,101 @@ self.addEventListener('message', (event) => {
     event.source.postMessage({ type: 'VERSION', version: VERSION })
     return
   }
-  if (data.type === 'PRECACHE') {
-    const port = event.ports && event.ports[0]
-    const assets = Array.isArray(data.assets) ? data.assets : []
-    event.waitUntil(handlePrecache(assets, port))
+  if (data.type === 'PRELOAD_START') {
+    event.waitUntil(startPreload().catch(() => {}))
+    return
+  }
+  if (data.type === 'PRELOAD_STATE') {
+    const message = progressMessage() || {
+      type: 'CHUNK_PROGRESS',
+      done: 0,
+      total: 0,
+      bytes: 0,
+      totalBytes: 0,
+      failed: 0,
+      complete: false,
+    }
+    if (event.source && 'postMessage' in event.source) {
+      try {
+        event.source.postMessage(message)
+      } catch {
+        /* 客户端已关闭 */
+      }
+    }
+    // 顺带恢复/保活后台进程（例如上一次事件结束后 SW 被回收）。
+    event.waitUntil(startPreload().catch(() => {}))
   }
 })
 
-async function handlePrecache(assets, port) {
+/**
+ * 页面请求 /assets/*：命中缓存立即返回；否则立刻联网（流式返回给页面），
+ * 同时写一份副本到缓存。若后台预加载正在下载同一资源，则复用它，避免重复下载。
+ */
+async function serveChunk(request) {
   const cache = await caches.open(STATIC_CACHE)
+  const hit = await cache.match(request)
+  if (hit) return hit
 
-  // 先算出有哪些资源需要更新（未命中缓存），只下载这些。
-  const pending = []
-  await Promise.all(
-    assets.map(async (asset) => {
-      if (!asset || !asset.u) return
-      const cached = await cache.match(new Request(asset.u, { credentials: 'same-origin' }))
-      if (!cached) pending.push(asset)
-    }),
-  )
-  if (port) port.postMessage({ type: 'plan', pending: pending.map((asset) => ({ u: asset.u, s: asset.s })) })
-  if (pending.length === 0) {
-    if (port) port.postMessage({ type: 'complete', ok: true })
-    return
-  }
+  const url = request.url
 
-  let failed = false
-  await runPool(
-    pending.map((asset) => async () => {
-      const ok = await precacheAsset(asset, cache, port)
-      if (!ok) failed = true
-    }),
-    PRECACHE_CONCURRENCY,
-  )
-  if (port) port.postMessage({ type: 'complete', ok: !failed })
-}
-
-async function precacheAsset(asset, cache, port) {
-  const url = asset && asset.u
-  if (!url) return true
-  const request = new Request(url, { credentials: 'same-origin' })
-
-  try {
-    const response = await fetch(request)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const header = response.headers.get('content-length')
-    const declared = Number(asset.s) > 0 ? Number(asset.s) : header && !isNaN(+header) ? +header : 0
-    const copy = response.clone()
-
-    if (response.body && typeof response.body.getReader === 'function') {
-      const reader = response.body.getReader()
-      let received = 0
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        received += value.length
-        port?.postMessage({ type: 'progress', url, received, total: declared })
-      }
-      await cache.put(request, copy)
-      port?.postMessage({ type: 'done', url, bytes: received, total: declared || received })
-      return true
+  const preloading = preloadTasks.get(url)
+  if (preloading) {
+    try {
+      await preloading
+    } catch {
+      /* 预加载失败则回退到页面自己请求 */
     }
-
-    const buffer = await response.arrayBuffer()
-    await cache.put(request, copy)
-    port?.postMessage({ type: 'done', url, bytes: buffer.byteLength, total: declared || buffer.byteLength })
-    return true
-  } catch (error) {
-    port?.postMessage({ type: 'error', url, message: String((error && error.message) || error) })
-    return false
+    const cached = await cache.match(request)
+    if (cached) return cached
   }
+
+  const pending = pageTasks.get(url)
+  if (pending) {
+    try {
+      await pending
+    } catch {
+      /* 另一个页面请求失败则重试 */
+    }
+    const cached = await cache.match(request)
+    if (cached) return cached
+  }
+
+  let resolveTask
+  const task = new Promise((resolve) => {
+    resolveTask = resolve
+  })
+  pageTasks.set(url, task)
+
+  let response
+  try {
+    response = await fetch(request)
+  } catch (error) {
+    if (pageTasks.get(url) === task) pageTasks.delete(url)
+    resolveTask()
+    throw error
+  }
+
+  if (isCacheable(response)) {
+    const copy = response.clone()
+    cache
+      .put(request, copy)
+      .catch(() => false)
+      .then((ok) => {
+        const header = response.headers.get('content-length')
+        const declared = Number(header)
+        const size = chunkSizes.get(url) || (declared > 0 ? declared : 0)
+        markChunkSettled(url, size, ok === false)
+      })
+      .finally(() => {
+        if (pageTasks.get(url) === task) pageTasks.delete(url)
+        resolveTask()
+      })
+  } else {
+    if (pageTasks.get(url) === task) pageTasks.delete(url)
+    resolveTask()
+  }
+
+  return response
 }
 
 async function cacheFirst(request, cacheName) {
@@ -217,8 +461,8 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (sameOrigin && url.pathname.startsWith('/assets/')) {
-    event.respondWith(cacheFirst(request, STATIC_CACHE))
+  if (sameOrigin && url.pathname.startsWith(ASSETS_PATH)) {
+    event.respondWith(serveChunk(request))
     return
   }
 

@@ -15,6 +15,7 @@ import TrendingUp from '~icons/lucide/trending-up'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { useAiConfig } from '@/lib/ai-config'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import {
   generateLearningReport,
   type LearningReport,
@@ -137,7 +138,7 @@ export default function StudentReport() {
         reportStorageKey(userId),
         JSON.stringify({ report: result, savedAt: timestamp }),
       )
-      toast.success(aiConfig.demoMode ? '演示模式：已生成示例学情报告' : '学情报告已生成')
+      toast.success('学情报告已生成')
     } catch (err) {
       toast.error(getErrorMessage(err, '生成学情报告失败'))
     } finally {
@@ -195,13 +196,15 @@ export default function StudentReport() {
               {reportAverage ?? '—'}
             </div>
           </div>
-          <PendingButton
-            isPending={generating}
-            onPress={() => void generate()}
-            icon={Sparkles}
-          >
-            {report ? '重新生成学情报告' : '生成学情报告'}
-          </PendingButton>
+          {AI_ENABLED && (
+            <PendingButton
+              isPending={generating}
+              onPress={() => void generate()}
+              icon={Sparkles}
+            >
+              {report ? '重新生成学情报告' : '生成学情报告'}
+            </PendingButton>
+          )}
         </div>
 
         <section className="flex flex-col gap-3">
@@ -312,7 +315,7 @@ export default function StudentReport() {
           )}
         </section>
 
-        {report ? (
+        {AI_ENABLED && report ? (
           <section className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">AI 学情报告</h2>
@@ -421,7 +424,7 @@ export default function StudentReport() {
               {report.closing}
             </p>
           </section>
-        ) : (
+        ) : AI_ENABLED ? (
           <div className="rounded-2xl border border-dashed border-line p-10 text-center">
             <Sparkles width={22} height={22} className="mx-auto shrink-0 text-fg-subtle" />
             <div className="mt-2 text-sm font-semibold">还没有学情报告</div>
@@ -429,7 +432,7 @@ export default function StudentReport() {
               点击上方「生成学情报告」，将全部报告评分、评语和扣分项交给 AI 汇总。
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

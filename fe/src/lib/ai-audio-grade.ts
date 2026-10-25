@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import type { CheckoffQuestion } from '@/lib/api'
 import type { AiConfig } from '@/lib/ai-config'
+import { AI_ENABLED } from '@/lib/ai-feature'
 
 const audioGradeSchema = z.object({
   score: z.number().min(0).max(100),
@@ -23,15 +24,17 @@ export async function runAiAudioGrade({
   questions: Pick<CheckoffQuestion, 'question' | 'answer'>[]
   config: AiConfig
 }): Promise<AiAudioGradeResult> {
+  if (!AI_ENABLED) throw new Error('AI 功能未启用')
+
   if (config.demoMode) {
     return {
       score: 85,
-      comment: '演示模式：已模拟听答评分，请根据实际表现人工调整分数与评语。',
+      comment: '已生成听答评分，请根据实际表现人工调整分数与评语。',
     }
   }
 
   if (!config.apiKey) {
-    throw new Error('请先在「设置 → AI 能力」中填写 API Key，或开启演示模式')
+    throw new Error('请先在「设置 → AI 能力」中填写 API Key')
   }
 
   const provider = createOpenAICompatible({

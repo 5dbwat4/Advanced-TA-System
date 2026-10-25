@@ -30,6 +30,12 @@ pnpm preview    # preview the production build
 
 Run from the monorepo root with `pnpm dev:fe` / `pnpm build:fe` instead.
 
+## Environment
+
+Copy `.env.example` to `.env.local` and fill in what you need. AI features
+(assistant, report pre-grading, oral-answer grading, learning reports) are
+disabled unless `VITE_ENABLE_AI` is set to `true` (or `1`).
+
 ## Layout
 
 ```
@@ -60,9 +66,12 @@ The production build is post-processed by two local Vite plugins:
 
 - `plugins/loading.ts` — strips the entry `<script>`/`<link>` tags, emits a
   `manifest.json` + content-hashed `loader.js` + a service worker `sw.js`, and
-  injects an inline progress shell. The service worker precaches static assets and
-  uses a version hash (baked into `sw.js`) to gate updates; users are prompted to
-  refresh rather than being reloaded silently.
+  injects a top progress bar. The loader injects the entry as soon as the manifest
+  is available instead of waiting for every chunk; the service worker keeps
+  preloading JS/CSS chunks from the manifest in the background and broadcasts
+  per-chunk progress to the bar. Requests for assets are served cache-first and
+  start immediately when missing. A version hash (baked into `sw.js`) gates
+  updates; users are prompted to refresh rather than being reloaded silently.
 - `plugins/html-minify.ts` — minifies the final `index.html` (and collapses the
   blank lines left behind by stripping the entry tags).
 

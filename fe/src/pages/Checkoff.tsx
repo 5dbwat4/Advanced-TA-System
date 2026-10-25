@@ -17,6 +17,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
+import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
@@ -54,6 +55,7 @@ import {
   type Score,
   type UserPreferences,
 } from '@/lib/api'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import { useAuth } from '@/lib/auth'
 import { useCheckoffBankOverride } from '@/lib/checkoff-bank'
 import {
@@ -145,6 +147,11 @@ export default function Checkoff() {
   const [step, setStep] = useState(0)
   const [searching, setSearching] = useState(false)
   const [questionIndex, setQuestionIndex] = useState(0)
+  const [aiOral, setAiOral] = useState<{
+    nonce: number
+    score: number
+    comment: string
+  } | null>(null)
   const [records, setRecords] = useState<CheckoffRecord[]>([])
   const [recordsLoading, setRecordsLoading] = useState(false)
   const [banks, setBanks] = useState<QuestionBank[]>([])
@@ -420,6 +427,7 @@ export default function Checkoff() {
     setQuestionsError(null)
     setQuestionIndex(0)
     setSearching(false)
+    setAiOral(null)
     setStep(1)
   }, [])
 
@@ -437,6 +445,7 @@ export default function Checkoff() {
       setMarks({})
       setQuestionIndex(0)
       setSearching(false)
+      setAiOral(null)
       setStep(2)
       if (classId) notifyCheckoffStarted({ classId, studentName: next.name })
     },
@@ -454,6 +463,7 @@ export default function Checkoff() {
     setExistingScores([])
     setQuestionIndex(0)
     setSearching(false)
+    setAiOral(null)
     setStep(1)
     if (classId) clearCheckoffPresence(classId)
   }, [classId])
@@ -760,6 +770,22 @@ export default function Checkoff() {
       )}
 
       <div className="mt-6">
+        {AI_ENABLED && step >= 2 && step <= 4 && student && (
+          <div className="mb-4">
+            <AiAudioGrade
+              questions={drawn.length > 0 ? drawn : activeQuestions}
+              disabled={activeQuestionsLoading}
+              onResult={(result) =>
+                setAiOral({
+                  nonce: Date.now(),
+                  score: result.score,
+                  comment: result.comment,
+                })
+              }
+            />
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -846,7 +872,7 @@ export default function Checkoff() {
               <ScoreForm
                 experimentId={experiment.id}
                 student={student}
-                questions={drawn}
+                aiOral={aiOral}
                 marks={marks}
                 existingScores={existingScores}
                 ratio={scoreRatio}

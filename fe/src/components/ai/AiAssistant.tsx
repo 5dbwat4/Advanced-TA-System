@@ -9,7 +9,7 @@ import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import { Button } from '@heroui/react'
 import { useMemo, useState } from 'react'
 
-import Sparkles from '~icons/lucide/sparkles'
+import Bot from '~icons/lucide/bot'
 import X from '~icons/lucide/x'
 import { useAiConfig } from '@/lib/ai-config'
 import { DEMO_SUGGESTIONS } from '@/lib/ai-demo'
@@ -46,23 +46,20 @@ function AssistantMessage() {
 function ChatPanel({ onClose }: { onClose: () => void }) {
   const { user } = useAuth()
   const ai = useAiConfig(user?.id)
-  const usingDemo = ai.demoMode || !ai.apiKey
 
   const transport = useMemo(() => createAiTransport(ai), [ai])
   const runtime = useChatRuntime({ transport })
 
-  const welcome = usingDemo
-    ? '当前为演示模式，我只回答预置问题。试试下面的建议。'
-    : '我是站内助手，可以帮你了解实验、题库、验收、报告批改和成绩相关操作。'
+  const welcome = '我是站内助手，可以帮你了解实验、题库、验收、报告批改和成绩相关操作。'
 
   return (
     <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[380px] flex-col border-l border-line bg-bg shadow-2xl">
       <header className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
-        <Sparkles width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
+        <Bot width={16} height={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold">AI 助手</div>
           <div className="truncate text-[11px] text-fg-subtle">
-            {usingDemo ? '演示模式 · 仅响应预置问题' : ai.model || '自定义模型'}
+            {ai.model || '课程助教助手'}
           </div>
         </div>
         <Button size="sm" variant="ghost" isIconOnly aria-label="关闭 AI 助手" onPress={onClose}>
@@ -123,12 +120,12 @@ export function AiAssistant() {
   return (
     <Button
       variant="primary"
-      className="fixed bottom-24 right-4 z-40 rounded-full shadow-lg md:bottom-6 md:right-6"
+      isIconOnly
+      className="fixed bottom-24 right-4 z-40 h-12 w-12 rounded-full shadow-lg md:bottom-6 md:right-6"
       onPress={() => setOpen(true)}
       aria-label="打开 AI 助手"
     >
-      <Sparkles width={16} height={16} className="shrink-0" />
-      AI 助手
+      <Bot width={22} height={22} className="shrink-0" />
     </Button>
   )
 }

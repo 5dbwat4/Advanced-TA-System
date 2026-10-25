@@ -3,6 +3,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 
 import type { AiConfig } from '@/lib/ai-config'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import { SCORE_TYPES } from '@/lib/scores'
 import type { StudentCase } from '@/lib/student-cases'
 
@@ -183,7 +184,7 @@ function demoReport(cases: StudentCase[], studentName: string): LearningReport {
         detail: '每次收到评语后记录一条改进措施，并在下一次实验中验证效果。',
       },
     ],
-    closing: '以上为演示模式生成的学情报告，请结合教师评语与课堂表现人工复核。',
+    closing: '以上为生成的学情报告，请结合教师评语与课堂表现人工复核。',
   }
 }
 
@@ -241,10 +242,12 @@ export async function generateLearningReport({
   cases: StudentCase[]
   config: AiConfig
 }): Promise<LearningReport> {
+  if (!AI_ENABLED) throw new Error('AI 功能未启用')
+
   if (config.demoMode) return demoReport(cases, studentName)
 
   if (!config.apiKey) {
-    throw new Error('请先在「设置 → AI 能力」中填写 API Key，或开启演示模式')
+    throw new Error('请先在「设置 → AI 能力」中填写 API Key')
   }
 
   const provider = createOpenAICompatible({

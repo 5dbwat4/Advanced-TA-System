@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { CriterionCard, CriterionExtras, CriterionItem } from '@/components/criteria/types'
 import { fetchXzzdSubmissionAttachments } from '@/lib/api'
 import type { AiConfig } from '@/lib/ai-config'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import { loadAttachmentBytes } from '@/components/reportgrade/cache'
 import { fileExtension } from '@/components/reportgrade/shared'
 import { extractPdfText } from '@/lib/pdf-text'
@@ -17,6 +18,7 @@ const gradingSchema = z.object({
     z.object({
       id: z.string(),
       selected: z.boolean(),
+      score: z.number().min(0).optional(),
       appendix: z.string(),
     }),
   ),
@@ -53,21 +55,36 @@ function criteriaPayload(cards: FlatCard[]) {
   }))
 }
 
-function demoGrade(cards: FlatCard[], text: string): AiGradeResult[] {
-  const normalized = text.toLowerCase()
-  return cards.map(({ card }) => {
-    const tokens = `${card.rule} ${card.detail}`
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((token) => token.length >= 2)
-    const matched = tokens.filter((token) => normalized.includes(token))
-    const selected = card.defaultSelected || matched.length > 0
+const DEMO_PRESET_RULE_KEY = '623a6a150e56179670e20e852b399a0231c46e0849d2c3d7'
+
+function demoGrade(cards: FlatCard[], ruleKey?: string | null): AiGradeResult[] {
+  if (ruleKey === DEMO_PRESET_RULE_KEY) {
+    return cards.map(({ card }) => {
+      const rule = card.rule.trim()
+      if (rule.includes('解释未能自洽')) {
+        return { id: card.id, selected: true, score: 1, appendix: '' }
+      }
+      if (rule.includes('LLM 风格过于明显')) {
+        return { id: card.id, selected: true, score: 1, appendix: '' }
+      }
+      return { id: card.id, selected: false, appendix: '' }
+    })
+  }
+
+  return cards.map(({ card }, index) => {
+    const selected = card.defaultSelected || index % 3 === 0
+    const min = Number(card.score) || 0
+    const max = card.scoreMax.trim() === '' ? min : Number(card.scoreMax) || min
+    const low = Math.min(min, max)
+    const high = Math.max(min, max)
+    const ratio = 0.2 + ((index * 17) % 45) / 100
+    const score = Math.round(low + (high - low) * ratio)
+    const rule = card.rule.trim() || card.detail.trim() || '该评分项'
     return {
       id: card.id,
       selected,
-      appendix: selected
-        ? `演示模式：报告中出现「${matched[0] ?? card.rule}」相关表述`
-        : '',
+      score: selected && card.scoreMax.trim() !== '' ? score : undefined,
+      appendix: selected ? `根据评分标准命中「${rule}」` : '',
     }
   })
 }
@@ -169,26 +186,30 @@ export async function runAiGrade({
   items,
   extras,
   config,
+  ruleKey,
 }: {
   experimentId: string
   personId: number
   items: CriterionItem[]
   extras: CriterionExtras
   config: AiConfig
+  ruleKey?: string | null
 }): Promise<AiGradeResult[]> {
+  if (!AI_ENABLED) throw new Error('AI 功能未启用')
+
   const cards = collectCards(items, extras)
   if (cards.length === 0) {
     throw new Error('当前没有可用的评分标准')
   }
 
-  const { files, text } = await loadReport(experimentId, personId)
-
   if (config.demoMode) {
-    return demoGrade(cards, text)
+    return demoGrade(cards, ruleKey)
   }
 
+  const { files, text } = await loadReport(experimentId, personId)
+
   if (!config.apiKey) {
-    throw new Error('请先在「设置 → AI 能力」中填写 API Key，或开启演示模式')
+    throw new Error('请先在「设置 → AI 能力」中填写 API Key')
   }
 
   const provider = createOpenAICompatible({
@@ -199,6 +220,7 @@ export async function runAiGrade({
   const model = provider.chatModel(config.model || 'gpt-4o-mini')
   const system = `你是一名课程助教，正在根据学生提交的报告和评分标准进行预评分。
 对输入中的每一个评分标准 id 判断是否命中（selected）。
+对带 scoreMax 评分范围的评分项，同时返回 score（在 score 与 scoreMax 之间，表示实际扣分/加分）；固定分值项省略 score。
 命中时用一句简短中文说明报告中的依据（appendix）；未命中时 appendix 为空字符串。
 必须覆盖所有 id，不得新增、删除或修改 id。`
 

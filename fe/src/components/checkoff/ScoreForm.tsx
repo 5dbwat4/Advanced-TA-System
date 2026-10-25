@@ -6,7 +6,6 @@ import Check from '~icons/lucide/check'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Info from '~icons/lucide/info'
 import MessageCircleQuestion from '~icons/lucide/message-circle-question'
-import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { AvatarImage } from '@/components/ui/AvatarImage'
@@ -14,7 +13,6 @@ import { PendingButton } from '@/components/ui/PendingButton'
 import {
   REMARK_TYPE_CHECKOFF,
   submitCheckoff,
-  type CheckoffQuestion,
   type CheckoffStudent,
   type Score,
 } from '@/lib/api'
@@ -33,7 +31,7 @@ const DEFAULT_SCORE = 100
 export function ScoreForm({
   experimentId,
   student,
-  questions,
+  aiOral,
   marks,
   existingScores,
   ratio,
@@ -41,7 +39,7 @@ export function ScoreForm({
 }: {
   experimentId: string
   student: CheckoffStudent
-  questions: Pick<CheckoffQuestion, 'question' | 'answer'>[]
+  aiOral: { nonce: number; score: number; comment: string } | null
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
   ratio: number[]
@@ -57,8 +55,14 @@ export function ScoreForm({
       const found = existingScores.find((score) => score.type === type.value)
       if (found) next[type.value] = found.score
     }
+    if (aiOral) next[1] = aiOral.score
     setValues(next)
-  }, [student.userId, existingScores])
+  }, [student.userId, existingScores, aiOral])
+
+  useEffect(() => {
+    if (!aiOral) return
+    setRemarkSync({ nonce: aiOral.nonce, text: aiOral.comment })
+  }, [aiOral])
 
   // 仅取功能测试 / 验收问答的权重；两者都为 0 时退化为等权，避免总分为空
   const rawWeights = SCORED_TYPES.map((type) => ratio[type.value] ?? 0)
@@ -112,17 +116,6 @@ export function ScoreForm({
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
         <span className="text-xs text-fg-subtle">默认 100，可按需下调</span>
-      </div>
-
-      <div className="mb-4">
-        <AiAudioGrade
-          questions={questions}
-          disabled={saving}
-          onResult={(result) => {
-            setValue(1, result.score)
-            setRemarkSync({ nonce: Date.now(), text: result.comment })
-          }}
-        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">

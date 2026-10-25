@@ -15,6 +15,7 @@ import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import { fetchMyAccounts, switchMyAccount, type LoginCandidate } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
@@ -382,7 +383,7 @@ export function AppShell() {
         </main>
       </div>
 
-      <AiAssistant />
+      {AI_ENABLED && <AiAssistant />}
     </div>
   )
 }

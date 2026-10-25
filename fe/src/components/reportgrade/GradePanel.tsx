@@ -41,6 +41,7 @@ import {
 } from '@/lib/api'
 import { runAiGrade } from '@/lib/ai-grade'
 import { useAiConfig } from '@/lib/ai-config'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
@@ -245,6 +246,7 @@ export function GradePanel({
         items,
         extras,
         config: aiConfig,
+        ruleKey,
       })
       const byId = new Map(results.map((result) => [result.id, result]))
       setStates((prev) => {
@@ -255,17 +257,15 @@ export function GradePanel({
           next[id] = {
             ...state,
             selected: result.selected,
+            score:
+              result.selected && result.score != null ? String(result.score) : state.score,
             appendix: result.selected ? result.appendix.trim() : '',
           }
         }
         return next
       })
       setDirty(true)
-      toast.success(
-        aiConfig.demoMode
-          ? '演示模式：已生成示例预评分，请人工复核'
-          : 'AI 已完成预评分，请人工复核',
-      )
+      toast.success('AI 已完成预评分，请人工复核')
     } catch (error) {
       toast.error(getErrorMessage(error, 'AI 预评分失败'))
     } finally {
@@ -481,16 +481,18 @@ export function GradePanel({
           </Dropdown>
         </div>
 
-        <PendingButton
-          variant="secondary"
-          className="w-full"
-          isPending={aiBusy}
-          isDisabled={!items || student.userId == null}
-          onPress={() => void applyAiGrade()}
-          icon={Sparkles}
-        >
-          AI 预评分
-        </PendingButton>
+        {AI_ENABLED && (
+          <PendingButton
+            variant="secondary"
+            className="w-full"
+            isPending={aiBusy}
+            isDisabled={!items || student.userId == null}
+            onPress={() => void applyAiGrade()}
+            icon={Sparkles}
+          >
+            AI 预评分
+          </PendingButton>
+        )}
 
         {student.userId == null ? (
           <Alert status="warning">

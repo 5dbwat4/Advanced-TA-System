@@ -25,6 +25,7 @@ import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
+import { AI_ENABLED } from '@/lib/ai-feature'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { useScrollToHash } from '@/lib/hash'
@@ -35,7 +36,7 @@ const SECTIONS: TocItem[] = [
   { id: 'profile', label: '个人信息' },
   { id: 'zjuam', label: '统一身份认证' },
   { id: 'preferences', label: '偏好设置' },
-  { id: 'ai', label: 'AI 能力' },
+  ...(AI_ENABLED ? [{ id: 'ai', label: 'AI 能力' }] : []),
   { id: 'system', label: '系统设置' },
   { id: 'cache', label: '缓存' },
   { id: 'credits', label: 'Credits' },
@@ -373,7 +374,7 @@ export default function Settings() {
           <PreferenceSection index={2} />
         </section>
 
-        {!isStudent && (
+        {!isStudent && AI_ENABLED && (
           <section id="ai" className={sectionClass('ai')}>
             <AiSection index={3} />
           </section>

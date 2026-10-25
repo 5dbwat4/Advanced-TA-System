@@ -4,6 +4,7 @@ import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 
 import type { AiConfig } from '@/lib/ai-config'
 import { demoReply } from '@/lib/ai-demo'
+import { AI_ENABLED } from '@/lib/ai-feature'
 
 const SYSTEM_PROMPT = `你是 ATASAAS 课程助教系统的站内助手。
 只回答与课程助教系统使用、页面导航、实验、题库、验收、报告批改、成绩相关的问题。
@@ -80,6 +81,8 @@ function createRemoteModel(config: AiConfig) {
 }
 
 export function createAiTransport(config: AiConfig) {
+  if (!AI_ENABLED) throw new Error('AI 功能未启用')
+
   const model =
     config.demoMode || !config.apiKey ? createDemoModel() : createRemoteModel(config)
   const agent = new ToolLoopAgent({
