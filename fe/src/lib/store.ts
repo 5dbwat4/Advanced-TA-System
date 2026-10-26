@@ -1,12 +1,23 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-import { apiFetch, type ClassInfo, type Course } from '@/lib/api'
+import { apiFetch, type ClassInfo, type Course, type InviteInfo, type Role } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { getZjuamCredential } from '@/lib/zjuam'
 
 export type ZjuamStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+/** 登录后账号信息不完整时的来源 */
+export type IncompleteLogin = {
+  source: 'zjuam' | 'login'
+  /** 学工号 / 用户名 / 统一身份认证账号 */
+  identifier: string | null
+  className: string | null
+  role: Role
+}
+
+export type OnboardingInfo = InviteInfo | IncompleteLogin
 
 type AppState = {
   currentClassId: string | null
@@ -15,11 +26,15 @@ type AppState = {
   zjuamCourses: Course[] | null
   zjuamStatus: ZjuamStatus
   zjuamError: string | null
+  onboarding: boolean
+  onboardingInfo: OnboardingInfo | null
   setCurrentClassId: (id: string | null) => void
   toggleSidebar: () => void
   syncLocalCredential: () => void
   loadZjuamCourses: (opts?: { force?: boolean }) => Promise<void>
   resetZjuam: () => void
+  setOnboarding: (onboarding: boolean) => void
+  setOnboardingInfo: (info: OnboardingInfo | null) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -31,6 +46,8 @@ export const useAppStore = create<AppState>()(
       zjuamCourses: null,
       zjuamStatus: 'idle',
       zjuamError: null,
+      onboarding: false,
+      onboardingInfo: null,
       setCurrentClassId: (id) => set({ currentClassId: id }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       syncLocalCredential: () => set({ hasLocalCredential: Boolean(getZjuamCredential()) }),
@@ -54,6 +71,8 @@ export const useAppStore = create<AppState>()(
         }
       },
       resetZjuam: () => set({ zjuamCourses: null, zjuamStatus: 'idle', zjuamError: null }),
+      setOnboarding: (onboarding) => set({ onboarding }),
+      setOnboardingInfo: (onboardingInfo) => set({ onboardingInfo }),
     }),
     {
       name: 'tasaas.app',

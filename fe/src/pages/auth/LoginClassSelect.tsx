@@ -11,6 +11,8 @@ import { PendingButton } from '@/components/ui/PendingButton'
 import { ApiError, type ClassSelectCourse, type User } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
+import { homePathFor } from '@/lib/student-route'
+import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 type ClassSelectState = {
@@ -31,6 +33,8 @@ export default function LoginClassSelect() {
   const location = useLocation()
   const navigate = useNavigate()
   const { selectClass } = useAuth()
+  const setOnboarding = useAppStore((state) => state.setOnboarding)
+  const setOnboardingInfo = useAppStore((state) => state.setOnboardingInfo)
   const state = location.state as ClassSelectState | null
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [typeCourse, setTypeCourse] = useState<ClassSelectCourse | null>(null)
@@ -48,8 +52,17 @@ export default function LoginClassSelect() {
   const { selectionToken, courses, from } = state
 
   const finish = (user: User) => {
+    if (!user.username) {
+      setOnboardingInfo({
+        source: 'zjuam',
+        identifier: user.studentId,
+        className: user.classes[0]?.name ?? null,
+        role: user.role,
+      })
+      setOnboarding(true)
+    }
     toast.success(user.username ? `欢迎回来，${user.name}` : '班级已绑定，请完善信息')
-    const dest = user.username ? (from ?? '/console') : '/setup'
+    const dest = from ?? homePathFor(user)
     navigate(dest, { replace: true })
   }
 

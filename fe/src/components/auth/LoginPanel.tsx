@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import ArrowRight from '~icons/lucide/arrow-right'
 import BookOpenCheck from '~icons/lucide/book-open-check'
 import Ellipsis from '~icons/lucide/ellipsis'
+import Eye from '~icons/lucide/eye'
 import Fingerprint from '~icons/lucide/fingerprint'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import KeyRound from '~icons/lucide/key-round'
@@ -28,6 +29,7 @@ import { getLastUsers, lastUserIdentifier, type LastUser } from '@/lib/last-user
 import { getAuthenticationOptions } from '@/lib/passkey'
 import { getRuntimeInfo, isLocalhostHost } from '@/lib/runtime'
 import { homePathFor } from '@/lib/student-route'
+import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 type Method = 'password' | 'zjuam'
@@ -43,6 +45,8 @@ export function LoginPanel() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
+  const setOnboarding = useAppStore((state) => state.setOnboarding)
+  const setOnboardingInfo = useAppStore((state) => state.setOnboardingInfo)
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
   const [lastUsers] = useState<LastUser[]>(() => getLastUsers())
@@ -164,9 +168,17 @@ export function LoginPanel() {
         return
       }
       const user = result.user
+      if (!user.username) {
+        setOnboardingInfo({
+          source: isZjuam ? 'zjuam' : 'login',
+          identifier: isZjuam ? account.trim() : identifier.trim(),
+          className: user.classes[0]?.name ?? null,
+          role: user.role,
+        })
+        setOnboarding(true)
+      }
       toast.success(`欢迎回来，${user.name}`)
-      const dest =
-        user.role === 'STUDENT' ? homePathFor(user) : user.username ? (from ?? '/console') : '/setup'
+      const dest = from ?? homePathFor(user)
       navigate(dest, { replace: true })
     } catch (error) {
       if (captchaEnabled) {
@@ -192,10 +204,18 @@ export function LoginPanel() {
       })
       if (isLoginSelection(result) || isClassSelection(result)) return
       const user = result.user
+      if (!user.username) {
+        setOnboardingInfo({
+          source: 'login',
+          identifier: user.studentId ?? hint ?? null,
+          className: user.classes[0]?.name ?? null,
+          role: user.role,
+        })
+        setOnboarding(true)
+      }
       toast.success(`欢迎回来，${user.name}`)
       const from = (location.state as { from?: string } | null)?.from
-      const dest =
-        user.role === 'STUDENT' ? homePathFor(user) : user.username ? (from ?? '/console') : '/setup'
+      const dest = from ?? homePathFor(user)
       navigate(dest, { replace: true })
     } catch (error) {
       if ((error as Error).name === 'NotAllowedError') return
@@ -262,6 +282,8 @@ export function LoginPanel() {
                         <BookOpenCheck width={18} height={18} className="shrink-0" />
                       ) : item.role === 'STUDENT' ? (
                         <GraduationCap width={18} height={18} className="shrink-0" />
+                      ) : item.role === 'VIEWER' ? (
+                        <Eye width={18} height={18} className="shrink-0" />
                       ) : (
                         <ShieldCheck width={18} height={18} className="shrink-0" />
                       )}
@@ -303,6 +325,8 @@ export function LoginPanel() {
                   <BookOpenCheck width={20} height={20} className="shrink-0" />
                 ) : lastUser.role === 'STUDENT' ? (
                   <GraduationCap width={20} height={20} className="shrink-0" />
+                ) : lastUser.role === 'VIEWER' ? (
+                  <Eye width={20} height={20} className="shrink-0" />
                 ) : (
                   <ShieldCheck width={20} height={20} className="shrink-0" />
                 )}
@@ -315,7 +339,9 @@ export function LoginPanel() {
                     ? '教师'
                     : lastUser.role === 'STUDENT'
                       ? '学生'
-                      : '助教'}
+                      : lastUser.role === 'VIEWER'
+                        ? '观察者'
+                        : '助教'}
                 </div>
               </div>
               <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[10px] font-semibold text-fg-subtle">

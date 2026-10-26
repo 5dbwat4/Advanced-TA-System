@@ -1,8 +1,11 @@
-import { Alert, Button, CloseButton, ListBox, Select, Switch } from '@heroui/react'
-import { useCallback, useState } from 'react'
+import { Alert, Button, CloseButton, Input, ListBox, Select, Switch } from '@heroui/react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTimeoutFn } from 'react-use'
+import { toast } from 'sonner'
 
+import Check from '~icons/lucide/check'
+import Info from '~icons/lucide/info'
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { CommentTemplateSection } from '@/components/settings/CommentTemplateSection'
 import { ConvenienceToolsSection } from '@/components/settings/ConvenienceToolsSection'
@@ -11,9 +14,13 @@ import { ExperimentScoringSection } from '@/components/settings/ExperimentScorin
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { TableOfContents, type TocItem } from '@/components/ui/TableOfContents'
+import { renameClass } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 import { CHECKPOINT_RULES } from '@/lib/checkpoints'
+import { getErrorMessage } from '@/lib/error'
 import { useClassSettingsPatch } from '@/lib/use-class-settings'
 import { useScrollToHash } from '@/lib/hash'
 import { useCurrentClass } from '@/lib/store'
@@ -32,15 +39,17 @@ const SECTIONS: TocItem[] = [
   { id: 'xzzd', label: '学在浙大' },
 ]
 
-const PLACEHOLDER_SECTIONS = SECTIONS.filter(
-  (section) =>
-    section.id !== 'checkpoint' &&
-    section.id !== 'scoring' &&
-    section.id !== 'focus' &&
-    section.id !== 'boards' &&
-    section.id !== 'comment' &&
-    section.id !== 'tools',
-)
+const IMPLEMENTED_SECTIONS = new Set([
+  'checkpoint',
+  'scoring',
+  'focus',
+  'boards',
+  'comment',
+  'tools',
+  'basic',
+])
+
+const PLACEHOLDER_SECTIONS = SECTIONS.filter((section) => !IMPLEMENTED_SECTIONS.has(section.id))
 
 export default function CourseSettings() {
   const [highlightId, setHighlightId] = useState<string | null>(null)
@@ -91,9 +100,13 @@ export default function CourseSettings() {
             <ConvenienceToolsSection index={5} />
           </section>
 
+          <section id="basic" className={sectionClass('basic')}>
+            <BasicInfoSection index={6} />
+          </section>
+
           {PLACEHOLDER_SECTIONS.map((section, index) => (
             <section key={section.id} id={section.id} className={sectionClass(section.id)}>
-              <Card index={index + 6}>
+              <Card index={index + 7}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>
@@ -104,6 +117,80 @@ export default function CourseSettings() {
         <TableOfContents items={SECTIONS} />
       </div>
     </div>
+  )
+}
+
+function BasicInfoSection({ index }: { index: number }) {
+  const currentClass = useCurrentClass()
+  const { refresh } = useAuth()
+  const [name, setName] = useState(currentClass?.name ?? '')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setName(currentClass?.name ?? '')
+  }, [currentClass?.id, currentClass?.name])
+
+  const className = currentClass?.name ?? ''
+  const trimmedName = name.trim()
+  const dirty = Boolean(currentClass) && trimmedName.length > 0 && trimmedName !== className
+
+  const save = async () => {
+    if (!currentClass || !dirty || saving) return
+    setSaving(true)
+    try {
+      const { class: updated } = await renameClass(currentClass.id, trimmedName)
+      setName(updated.name)
+      toast.success('课程名称已更新')
+      void refresh().catch(() => {})
+    } catch (error) {
+      toast.error(getErrorMessage(error, '保存失败'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card index={index} className="flex flex-col gap-4">
+      <SectionHeader icon={Info}>基本信息</SectionHeader>
+
+      {!currentClass ? (
+        <p className="text-xs text-fg-subtle">请先在右上角选择或绑定一个课程。</p>
+      ) : (
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void save()
+          }}
+        >
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-fg-muted">课程名称</label>
+            <Input
+              fullWidth
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="课程名称"
+              maxLength={64}
+            />
+            <p className="mt-1.5 text-[11px] text-fg-subtle">
+              推荐课程名称包含任课教师名和年份。
+            </p>
+          </div>
+
+          <div className="flex justify-end">
+            <PendingButton
+              type="submit"
+              size="sm"
+              isDisabled={!dirty}
+              isPending={saving}
+              icon={Check}
+            >
+              保存
+            </PendingButton>
+          </div>
+        </form>
+      )}
+    </Card>
   )
 }
 

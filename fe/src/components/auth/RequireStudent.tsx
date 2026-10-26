@@ -2,6 +2,7 @@ import { Spinner } from '@heroui/react'
 import { Navigate, Outlet } from 'react-router-dom'
 
 import { useAuth } from '@/lib/auth'
+import { homePathFor } from '@/lib/student-route'
 
 /** 仅已解封的学生可进入学生控制台 */
 export function RequireStudent() {
@@ -16,8 +17,8 @@ export function RequireStudent() {
   }
 
   if (!user) return <Navigate to="/login" replace />
-  if (user.role !== 'STUDENT') return <Navigate to="/console" replace />
-  if (!user.username) return <Navigate to="/student/unlock" replace />
+  if (user.role !== 'STUDENT') return <Navigate to={homePathFor(user)} replace />
+  if (!user.username) return <Navigate to="/setup" replace />
 
   return <Outlet />
 }

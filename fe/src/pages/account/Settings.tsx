@@ -42,7 +42,7 @@ const SECTIONS: TocItem[] = [
   { id: 'credits', label: 'Credits' },
 ]
 
-const STUDENT_SECTIONS: TocItem[] = [
+const BASIC_SECTIONS: TocItem[] = [
   { id: 'profile', label: '个人信息' },
   { id: 'preferences', label: '偏好设置' },
   { id: 'cache', label: '缓存' },
@@ -81,11 +81,17 @@ export default function Settings() {
   const nameState = useOverlayState()
 
   const hasPassword = user?.hasPassword ?? false
-  const isStudent = user?.role === 'STUDENT'
-  const sections = isStudent ? STUDENT_SECTIONS : SECTIONS
+  const isBasic = user?.role === 'STUDENT' || user?.role === 'VIEWER'
+  const sections = isBasic ? BASIC_SECTIONS : SECTIONS
   const passkeys = user?.passkeys ?? []
   const roleLabel =
-    user?.role === 'TEACHER' ? '教师' : user?.role === 'TA' ? '助教' : '学生'
+    user?.role === 'TEACHER'
+      ? '教师'
+      : user?.role === 'TA'
+        ? '助教'
+        : user?.role === 'VIEWER'
+          ? '观察者'
+          : '学生'
 
   const savePassword = async () => {
     setSavingPassword(true)
@@ -149,12 +155,12 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      {isStudent && (
+      {isBasic && (
         <Button
           variant="ghost"
           size="sm"
           className="mb-3"
-          onPress={() => navigate('/home')}
+          onPress={() => navigate(user?.role === 'VIEWER' ? '/viewer' : '/home')}
         >
           返回主页
         </Button>
@@ -182,7 +188,7 @@ export default function Settings() {
               </div>
               <div className="mt-1 flex items-center gap-1.5">
                 <div className="min-w-0 flex-1 truncate text-sm text-fg">{user?.name ?? '—'}</div>
-                {!isStudent && (
+                {!isBasic && (
                   <IconAction label="修改用户名" onPress={openNameEdit}>
                     <Pencil width={14} height={14} className="shrink-0" />
                   </IconAction>
@@ -364,7 +370,7 @@ export default function Settings() {
           </Modal.Backdrop>
         </Modal>
 
-        {!isStudent && (
+        {!isBasic && (
           <section id="zjuam" className={sectionClass('zjuam')}>
             <ZjuamSection index={1} />
           </section>
@@ -374,13 +380,13 @@ export default function Settings() {
           <PreferenceSection index={2} />
         </section>
 
-        {!isStudent && AI_ENABLED && (
+        {!isBasic && AI_ENABLED && (
           <section id="ai" className={sectionClass('ai')}>
             <AiSection index={3} />
           </section>
         )}
 
-        {!isStudent && (
+        {!isBasic && (
           <section id="system" className={sectionClass('system')}>
             <SystemSection index={4} />
           </section>

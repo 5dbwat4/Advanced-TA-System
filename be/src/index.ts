@@ -17,6 +17,7 @@ import { classesRoutes } from './routes/classes.js'
 import { criteriaRoutes } from './routes/criteria.js'
 import { devboardsRoutes } from './routes/devboards.js'
 import { experimentsRoutes } from './routes/experiments.js'
+import { inviteRoutes } from './routes/invites.js'
 import { mcpRoutes } from './routes/mcp.js'
 import { passkeyRoutes } from './routes/passkey.js'
 import { pushRoutes } from './routes/push.js'
@@ -90,14 +91,34 @@ const STUDENT_ALLOWED_ROUTES = new Set([
   '/api/push/unsubscribe',
   '/api/settings',
   '/api/settings/preferences',
+  '/api/invites/info',
+  '/api/invites/accept',
+])
+
+/** 观察者可访问的接口白名单（独立面板开发完成前仅开放账号基础能力） */
+const VIEWER_ALLOWED_ROUTES = new Set([
+  '/api/auth/me',
+  '/api/auth/setup',
+  '/api/auth/logout',
+  '/api/auth/passkey/registration-options',
+  '/api/auth/passkey/registration-verify',
+  '/api/settings',
+  '/api/settings/preferences',
+  '/api/invites/info',
+  '/api/invites/accept',
 ])
 
 fastify.addHook('preHandler', async (request, reply) => {
   const user = request.user as { role?: string } | undefined
-  if (!user || user.role !== 'STUDENT') return
+  const role = user?.role
+  if (!role) return
   const url = request.routeOptions.url ?? ''
-  if (!STUDENT_ALLOWED_ROUTES.has(url)) {
+
+  if (role === 'STUDENT' && !STUDENT_ALLOWED_ROUTES.has(url)) {
     return reply.code(403).send({ error: 'FORBIDDEN', message: '学生账号无权访问该接口' })
+  }
+  if (role === 'VIEWER' && !VIEWER_ALLOWED_ROUTES.has(url)) {
+    return reply.code(403).send({ error: 'FORBIDDEN', message: '观察者账号无权访问该接口' })
   }
 })
 
@@ -149,6 +170,7 @@ await fastify.register(criteriaRoutes, { prefix: '/api/criteria' })
 await fastify.register(settingsRoutes, { prefix: '/api/settings' })
 await fastify.register(tokensRoutes, { prefix: '/api/tokens' })
 await fastify.register(staffRoutes, { prefix: '/api/staff' })
+await fastify.register(inviteRoutes, { prefix: '/api/invites' })
 await fastify.register(experimentsRoutes, { prefix: '/api/experiments' })
 await fastify.register(xzzdSyncRoutes, { prefix: '/api/experiments' })
 await fastify.register(questionsRoutes, { prefix: '/api/questions' })

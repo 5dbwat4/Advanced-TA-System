@@ -31,6 +31,15 @@ const classSelectSchema = z.object({
 
 const setupSchema = z.object({
   username: z.string().trim().min(1).max(32),
+  /** 姓名；留空时沿用用户名 */
+  name: z.string().trim().min(1).max(32).optional(),
+  /** 学工号；仅在账号尚未绑定时可写入 */
+  studentId: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
   /** 可留空；留空视为不设置密码 */
   password: z
     .union([z.literal(''), z.string().min(8).max(128)])
@@ -53,6 +62,15 @@ const switchAccountSchema = z.object({
 
 const studentUnlockSchema = z.object({
   username: z.string().trim().min(1).max(32),
+  /** 姓名；留空时沿用名单姓名 */
+  name: z.string().trim().min(1).max(32).optional(),
+  /** 学工号；仅在账号尚未绑定时可写入 */
+  studentId: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
   password: z
     .union([z.literal(''), z.string().min(8).max(128)])
     .optional()
@@ -754,6 +772,9 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       if (current.role === 'STUDENT' && target.role !== 'STUDENT') {
         return reply.code(403).send({ error: 'FORBIDDEN', message: '学生账号不能切换到助教账号' })
       }
+      if (current.role === 'VIEWER' && target.role !== 'VIEWER') {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '观察者账号不能切换到助教账号' })
+      }
 
       return reply.send(await issueLogin(fastify, target))
     },
@@ -775,7 +796,11 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '用户不存在' })
     }
 
-    const { username, password } = parsed.data
+    const { username, name, studentId, password } = parsed.data
+
+    if (!current.studentId && !studentId && !current.password && !password) {
+      return reply.code(400).send({ error: 'IDENTITY_REQUIRED', message: '至少要提供学工号或密码之一' })
+    }
 
     if (await isUsernameTaken(prisma, username, current)) {
       return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名已被占用' })
@@ -785,7 +810,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: sub },
-      data: { username, name: username, ...(passwordHash ? { password: passwordHash } : {}) },
+      data: {
+        username,
+        name: name ?? username,
+        ...(current.studentId ? {} : studentId ? { studentId } : {}),
+        ...(passwordHash ? { password: passwordHash } : {}),
+      },
       include: { klass: true },
     })
 
@@ -823,7 +853,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(409).send({ error: 'ALREADY_UNLOCKED', message: '账号已解封' })
       }
 
-      const { username, password } = parsed.data
+      const { username, name, studentId, password } = parsed.data
       if (await isUsernameTaken(prisma, username, current)) {
         return reply.code(409).send({ error: 'USERNAME_TAKEN', message: '该用户名已被占用' })
       }
@@ -831,7 +861,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       const passwordHash = password ? await hashPassword(password) : undefined
       const updated = await prisma.user.update({
         where: { id: current.id },
-        data: { username, ...(passwordHash ? { password: passwordHash } : {}) },
+        data: {
+          username,
+          ...(name ? { name } : {}),
+          ...(current.studentId ? {} : studentId ? { studentId } : {}),
+          ...(passwordHash ? { password: passwordHash } : {}),
+        },
         include: { klass: true },
       })
 

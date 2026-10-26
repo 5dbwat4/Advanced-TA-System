@@ -5,7 +5,10 @@ import { getZjuamCredential } from '@/lib/zjuam'
 
 const TOKEN_KEY = 'tasaas.token'
 
-export type Role = 'TA' | 'TEACHER' | 'STUDENT'
+export type Role = 'TA' | 'TEACHER' | 'VIEWER' | 'STUDENT'
+
+/** 可通过「添加用户 / 邀请链接」授予的角色；学生由课程名单产生 */
+export type InvitableRole = 'TA' | 'TEACHER' | 'VIEWER'
 
 export type MarkdownEditorId = 'uiw' | 'mdx'
 
@@ -48,6 +51,7 @@ export type Student = {
 export type Ta = {
   id: string
   name: string
+  role: Role
   studentId: string
   username: string | null
   classId: string | null
@@ -313,11 +317,53 @@ export async function addTa(studentId: string): Promise<Ta> {
   return res.ta
 }
 
-/** 为当前班级添加助教，返回一次性初始密码 */
-export async function addClassTa(studentId: string): Promise<{ ta: Ta; password: string }> {
-  return apiFetch<{ ta: Ta; password: string }>('/api/staff/tas/class', {
+/** 为本课程添加指定角色的用户，返回一次性初始密码 */
+export async function addClassUser(
+  studentId: string,
+  role: InvitableRole,
+): Promise<{ user: Ta; password: string }> {
+  return apiFetch<{ user: Ta; password: string }>('/api/staff/users/class', {
     method: 'POST',
-    body: JSON.stringify({ studentId }),
+    body: JSON.stringify({ studentId, role }),
+  })
+}
+
+/** 生成课程邀请链接 JWT */
+export function createInviteLink(
+  role: InvitableRole,
+): Promise<{ token: string; role: InvitableRole; expiresAt: string }> {
+  return apiFetch<{ token: string; role: InvitableRole; expiresAt: string }>('/api/invites', {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  })
+}
+
+export type InviteInfo = {
+  role: InvitableRole
+  expiresAt: string
+  inviterName: string
+  className: string | null
+}
+
+/** 查看邀请信息（公开） */
+export function getInviteInfo(token: string): Promise<InviteInfo> {
+  return apiFetch<InviteInfo>(`/api/invites/info?token=${encodeURIComponent(token)}`)
+}
+
+/** 接受邀请并创建 / 复用班级账号 */
+export type AcceptInviteInput = {
+  token: string
+  studentId?: string
+  username: string
+  name: string
+  password?: string
+}
+
+/** 接受邀请并创建班级账号 */
+export function acceptInvite(input: AcceptInviteInput): Promise<{ token: string; user: User }> {
+  return apiFetch<{ token: string; user: User }>('/api/invites/accept', {
+    method: 'POST',
+    body: JSON.stringify(input),
   })
 }
 
@@ -730,6 +776,8 @@ export function fetchStudentExperiment(id: string): Promise<StudentPreviewData> 
 
 export function unlockStudent(body: {
   username: string
+  name?: string
+  studentId?: string
   password?: string
 }): Promise<{ user: User }> {
   return apiFetch<{ user: User }>('/api/auth/student/unlock', {
@@ -748,6 +796,13 @@ export function createClass(body: CreateClassInput): Promise<{ class: ClassInfo 
   return apiFetch<{ class: ClassInfo }>('/api/classes', {
     method: 'POST',
     body: JSON.stringify(body),
+  })
+}
+
+export function renameClass(classId: string, name: string): Promise<{ class: ClassInfo }> {
+  return apiFetch<{ class: ClassInfo }>(`/api/classes/${classId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
   })
 }
 

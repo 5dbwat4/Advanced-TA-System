@@ -6,10 +6,17 @@ import { z } from 'zod'
 import { requireStaff } from '../lib/class-access.js'
 import { hashPassword } from '../lib/password.js'
 import { prisma } from '../lib/prisma.js'
+import { INVITABLE_ROLES } from '../lib/roles.js'
 
 const createTaSchema = z.object({
   /** 学号 */
   studentId: z.string().trim().min(1).max(32),
+})
+
+const createMemberSchema = z.object({
+  /** 学工号 */
+  studentId: z.string().trim().min(1).max(32),
+  role: z.enum(INVITABLE_ROLES),
 })
 
 type TaWithClass = User & { klass: Class | null }
@@ -19,6 +26,7 @@ function toTa(user: TaWithClass) {
   return {
     id: user.id,
     name: user.name,
+    role: user.role,
     studentId: user.studentId,
     username: user.username,
     classId: user.classId,
@@ -140,5 +148,78 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
         })
 
     return reply.code(201).send({ ta: toTa(user), password })
+  })
+
+  /**
+   * 为当前班级添加指定角色的用户：创建【学工号 + 班级】记录，并生成一次性初始密码。
+   */
+  fastify.post('/users/class', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const parsed = createMemberSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请输入有效的学工号 / 用户名和用户类型' })
+    }
+
+    const { sub } = request.user as { sub: string }
+    const current = await prisma.user.findUnique({
+      where: { id: sub },
+      select: { classId: true },
+    })
+    if (!current?.classId) {
+      return reply
+        .code(400)
+        .send({ error: 'CLASS_REQUIRED', message: '当前账号未绑定班级，无法添加用户' })
+    }
+
+    const { studentId, role } = parsed.data
+    const existing = await prisma.user.findFirst({
+      where: {
+        classId: current.classId,
+        OR: [{ studentId }, { username: studentId }],
+      },
+      select: { id: true, role: true },
+    })
+    if (existing) {
+      return reply.code(409).send({
+        error: 'ALREADY_EXISTS',
+        message: `该学工号 / 用户名已在本班中（${existing.role}）`,
+      })
+    }
+
+    const password = randomBytes(12).toString('hex')
+    const passwordHash = await hashPassword(password)
+
+    const unbound = await prisma.user.findFirst({
+      where: {
+        role,
+        classId: null,
+        status: 'ACTIVE',
+        OR: [{ studentId }, { username: studentId }],
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    const user = unbound
+      ? await prisma.user.update({
+          where: { id: unbound.id },
+          data: {
+            classId: current.classId,
+            password: passwordHash,
+            ...(unbound.username ? {} : { name: studentId }),
+          },
+          include: { klass: true },
+        })
+      : await prisma.user.create({
+          data: {
+            studentId,
+            name: studentId,
+            role,
+            classId: current.classId,
+            password: passwordHash,
+          },
+          include: { klass: true },
+        })
+
+    return reply.code(201).send({ user: toTa(user), password })
   })
 }

@@ -19,7 +19,12 @@ type AuthContextValue = {
   ) => Promise<User>
   exchangeStudentPreview: (token: string) => Promise<User>
   adoptSession: (session: { token: string; user: User }) => void
-  completeSetup: (body: { username: string; password?: string }) => Promise<User>
+  completeSetup: (body: {
+    username: string
+    name?: string
+    studentId?: string
+    password?: string
+  }) => Promise<User>
   refresh: () => Promise<void>
   updateSettings: (
     body:

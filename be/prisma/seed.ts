@@ -22,6 +22,13 @@ const USERS: SeedUser[] = [
     username: 'teacher',
     password: 'teacher123',
   },
+  {
+    name: '赵观察',
+    role: 'VIEWER',
+    studentId: '3240100003',
+    username: 'viewer',
+    password: 'viewer123',
+  },
   // 预置助教名单（无本地账号/密码，通过统一身份认证登录后完善信息）
   { name: '3240102049', role: 'TA', studentId: '3240102049', username: null },
 ]

@@ -24,6 +24,11 @@ const createClassSchema = z.object({
   type: z.enum(['2026-sys1', '2026-sys2', '2026-sys3']),
 })
 
+/** 更新课程基本信息 */
+const updateClassSchema = z.object({
+  name: z.string().trim().min(1).max(64),
+})
+
 /** 为新班级创建账号：绑定授权由“获取课程”时签发，服务端不再信任客户端课程 id */
 const newClassAccountSchema = z.object({
   bindToken: z.string().min(1),
@@ -214,6 +219,38 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
         name: klass.name,
         type: klass.type,
         xzzdClassId: klass.xzzdClassId,
+      },
+    })
+  })
+
+  /** 更新课程基本信息 */
+  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const parsedParams = classParamsSchema.safeParse(request.params)
+    if (!parsedParams.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const klass = await resolveOwnedClass(request, reply, parsedParams.data.id)
+    if (!klass) return reply
+
+    const parsedBody = updateClassSchema.safeParse(request.body ?? {})
+    if (!parsedBody.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+
+    const updated = await prisma.class.update({
+      where: { id: klass.id },
+      data: { name: parsedBody.data.name },
+    })
+
+    return reply.send({
+      class: {
+        id: updated.id,
+        name: updated.name,
+        type: updated.type,
+        xzzdClassId: updated.xzzdClassId,
       },
     })
   })

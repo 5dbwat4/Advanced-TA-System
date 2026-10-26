@@ -27,6 +27,7 @@ import { getZjuamCredential } from '@/lib/zjuam'
 const ROLE_LABELS: Record<LoginCandidate['role'], string> = {
   TA: '助教',
   TEACHER: '教师',
+  VIEWER: '观察者',
   STUDENT: '学生',
 }
 

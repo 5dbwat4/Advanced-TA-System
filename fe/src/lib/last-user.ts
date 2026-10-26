@@ -10,14 +10,20 @@ export type LastUser = {
   name: string
   username: string | null
   studentId: string | null
-  role: 'TA' | 'TEACHER' | 'STUDENT'
+  role: 'TA' | 'TEACHER' | 'VIEWER' | 'STUDENT'
   hasWebauthn: boolean
   hasPassword: boolean
   savedAt: number
 }
 
 function normalizeRole(value: unknown): LastUser['role'] {
-  return value === 'TEACHER' ? 'TEACHER' : value === 'STUDENT' ? 'STUDENT' : 'TA'
+  return value === 'TEACHER'
+    ? 'TEACHER'
+    : value === 'VIEWER'
+      ? 'VIEWER'
+      : value === 'STUDENT'
+        ? 'STUDENT'
+        : 'TA'
 }
 
 function toLastUser(value: unknown): LastUser | null {

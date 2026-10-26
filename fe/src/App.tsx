@@ -4,12 +4,15 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { RedirectIfAuthed } from '@/components/auth/RedirectIfAuthed'
 import { RequireAuth } from '@/components/auth/RequireAuth'
+import { RequireOnboarding } from '@/components/auth/RequireOnboarding'
 import { RequireStaff } from '@/components/auth/RequireStaff'
 import { RequireStudent } from '@/components/auth/RequireStudent'
+import { RequireViewer } from '@/components/auth/RequireViewer'
 import { AppShell } from '@/components/layout/AppShell'
 import { PublicLayout } from '@/components/layout/PublicLayout'
 import { StudentShell } from '@/components/layout/StudentShell'
 
+const AddCourseUser = lazy(() => import('@/pages/console/courses/AddCourseUser'))
 const BankDetail = lazy(() => import('@/pages/console/questions/BankDetail'))
 const BankManage = lazy(() => import('@/pages/console/questions/BankManage'))
 const BoardScan = lazy(() => import('@/pages/console/boards/BoardScan'))
@@ -27,6 +30,7 @@ const ExperimentDetail = lazy(() => import('@/pages/console/experiments/Experime
 const ExperimentRemarks = lazy(() => import('@/pages/console/experiments/ExperimentRemarks'))
 const Experiments = lazy(() => import('@/pages/console/experiments/Experiments'))
 const FocusStudents = lazy(() => import('@/pages/console/courses/FocusStudents'))
+const Invite = lazy(() => import('@/pages/public/Invite'))
 const Licenses = lazy(() => import('@/pages/public/Licenses'))
 const LicensesFull = lazy(() => import('@/pages/public/LicensesFull'))
 const LlmConnect = lazy(() => import('@/pages/console/LlmConnect'))
@@ -55,6 +59,7 @@ const StudentUnlock = lazy(() => import('@/pages/student/StudentUnlock'))
 const StudentPreviewView = lazy(() => import('@/pages/student/StudentPreviewView'))
 const StudentReport = lazy(() => import('@/pages/console/scores/StudentReport'))
 const Terms = lazy(() => import('@/pages/public/Terms'))
+const ViewerHome = lazy(() => import('@/pages/viewer/ViewerHome'))
 const XzzdPush = lazy(() => import('@/pages/console/experiments/XzzdPush'))
 const XzzdScoreSync = lazy(() => import('@/pages/console/courses/XzzdScoreSync'))
 
@@ -84,10 +89,12 @@ export default function App() {
         </Route>
         <Route path="/login/select" element={<LoginSelect />} />
         <Route path="/login/class" element={<LoginClassSelect />} />
+        <Route element={<RequireOnboarding />}>
+          <Route path="/setup" element={<Setup />} />
+        </Route>
         <Route element={<RequireAuth />}>
           <Route path="/home" element={<Navigate to="/student-console" replace />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/setup" element={<Setup />} />
           <Route path="/student/unlock" element={<StudentUnlock />} />
           <Route element={<RequireStudent />}>
             <Route path="/student-console" element={<StudentShell />}>
@@ -96,6 +103,9 @@ export default function App() {
               <Route path="experiments/:id" element={<StudentExperiment />} />
               <Route path="settings" element={<StudentSettings />} />
             </Route>
+          </Route>
+          <Route element={<RequireViewer />}>
+            <Route path="/viewer" element={<ViewerHome />} />
           </Route>
           <Route element={<RequireStaff />}>
             <Route path="/console/reports/:id" element={<ReportGrade />} />
@@ -125,6 +135,7 @@ export default function App() {
             <Route path="scores/students/:userId" element={<StudentReport />} />
             <Route path="scores/standalone" element={<ScoreEntry />} />
             <Route path="courses/settings" element={<CourseSettings />} />
+            <Route path="courses/users/new" element={<AddCourseUser />} />
             <Route path="courses/sync-scores" element={<XzzdScoreSync />} />
             <Route path="courses/new" element={<NewCourse />} />
             <Route path="courses/checkpoints" element={<Checkpoints />} />
@@ -135,6 +146,7 @@ export default function App() {
         </Route>
         <Route element={<PublicLayout />}>
           <Route path="/changelog" element={<Changelog />} />
+          <Route path="/invite" element={<Invite />} />
           <Route path="/license" element={<Licenses />} />
           <Route path="/license/full" element={<LicensesFull />} />
           <Route path="*" element={<NotFound />} />

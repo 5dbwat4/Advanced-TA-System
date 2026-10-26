@@ -7,12 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// 用户表：助教 / 教师 / 学生
-/// role 取值仅限 TA | TEACHER | STUDENT
+/// 用户表：助教 / 教师 / 观察者 / 学生
+/// role 取值仅限 TA | TEACHER | VIEWER | STUDENT
 model User {
   id   String @id @default(uuid(4))
   name String
-  role String // TA | TEACHER | STUDENT
+  role String // TA | TEACHER | VIEWER | STUDENT
 
   /// 学号；同一学号可在不同班级各有一条记录
   studentId String?

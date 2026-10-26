@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import Eye from '~icons/lucide/eye'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import ShieldCheck from '~icons/lucide/shield-check'
 import { Logo } from '@/components/ui/Logo'
@@ -10,6 +11,7 @@ import type { LoginCandidate } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { homePathFor } from '@/lib/student-route'
+import { useAppStore } from '@/lib/store'
 
 type SelectState = {
   selectionToken: string
@@ -20,6 +22,7 @@ type SelectState = {
 const ROLE_LABEL: Record<string, string> = {
   TA: '助教',
   TEACHER: '教师',
+  VIEWER: '观察者',
   STUDENT: '学生',
 }
 
@@ -27,6 +30,8 @@ export default function LoginSelect() {
   const location = useLocation()
   const navigate = useNavigate()
   const { selectAccount } = useAuth()
+  const setOnboarding = useAppStore((state) => state.setOnboarding)
+  const setOnboardingInfo = useAppStore((state) => state.setOnboardingInfo)
   const state = location.state as SelectState | null
   const [pendingId, setPendingId] = useState<string | null>(null)
 
@@ -40,8 +45,17 @@ export default function LoginSelect() {
     setPendingId(candidate.userId)
     try {
       const user = await selectAccount(selectionToken, candidate.userId)
+      if (!user.username) {
+        setOnboardingInfo({
+          source: 'login',
+          identifier: user.studentId ?? candidate.studentId,
+          className: user.classes[0]?.name ?? candidate.className,
+          role: user.role,
+        })
+        setOnboarding(true)
+      }
       toast.success(`欢迎回来，${user.name}`)
-      const dest = user.role === 'STUDENT' ? homePathFor(user) : (from ?? '/console')
+      const dest = from ?? homePathFor(user)
       navigate(dest, { replace: true })
     } catch (error) {
       toast.error(getErrorMessage(error, '登录失败，请重新登录'))
@@ -65,7 +79,8 @@ export default function LoginSelect() {
         <div className="flex flex-col gap-2">
           {candidates.map((candidate) => {
             const isStudent = candidate.role === 'STUDENT'
-            const Icon = isStudent ? GraduationCap : ShieldCheck
+            const isViewer = candidate.role === 'VIEWER'
+            const Icon = isStudent ? GraduationCap : isViewer ? Eye : ShieldCheck
             return (
               <Button
                 key={candidate.userId}

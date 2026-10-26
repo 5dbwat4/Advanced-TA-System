@@ -2,9 +2,9 @@ import { Spinner } from '@heroui/react'
 import { Navigate, Outlet } from 'react-router-dom'
 
 import { useAuth } from '@/lib/auth'
-import { studentHomePath } from '@/lib/student-route'
+import { homePathFor, studentHomePath } from '@/lib/student-route'
 
-/** 仅助教 / 教师可进入后台；学生回到学生主页 */
+/** 仅助教 / 教师可进入后台；学生回学生主页，观察者回独立面板 */
 export function RequireStaff() {
   const { user, loading } = useAuth()
 
@@ -18,6 +18,7 @@ export function RequireStaff() {
 
   if (!user) return <Navigate to="/login" replace />
   if (user.role === 'STUDENT') return <Navigate to={studentHomePath(user)} replace />
+  if (user.role === 'VIEWER') return <Navigate to={homePathFor(user)} replace />
 
   return <Outlet />
 }

@@ -1,11 +1,10 @@
 import * as Sentry from '@sentry/react'
 import { createRoutesFromChildren, matchRoutes, useLocation, useNavigationType } from 'react-router-dom'
 
-import { isLocalDev, isLocalhostHost } from '@/lib/runtime'
+import { isLocalhostHost } from '@/lib/runtime'
 
 const SENSITIVE_HEADER = /authorization|cookie|token|password|captcha|credential/i
 let initialized = false
-let starting = false
 
 function readRate(value: string | undefined, fallback: number): number {
   if (!value) return fallback
@@ -79,23 +78,12 @@ function startSentry(dsn: string): void {
 
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN?.trim()
-  if (!dsn || initialized || starting) return
+  if (!dsn || initialized) return
 
-  // localhost 下先确认后端是否为 dev；是 dev 时完全不初始化 Sentry
-  if (!isLocalhostHost()) {
-    startSentry(dsn)
-    return
-  }
+  // 本地地址一律不上报 Sentry
+  if (isLocalhostHost()) return
 
-  starting = true
-  void isLocalDev()
-    .then((localDev) => {
-      starting = false
-      if (!localDev) startSentry(dsn)
-    })
-    .catch(() => {
-      starting = false
-    })
+  startSentry(dsn)
 }
 
 export function setSentryUser(user: { id: string; role: string } | null): void {
