@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import ArrowLeft from '~icons/lucide/arrow-left'
 import { fetchStudentExperiment, type StudentPreviewData } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
-import { StudentPreviewContent } from '@/pages/StudentPreviewView'
+import { StudentPreviewContent } from '@/pages/student/StudentPreviewView'
 
 export default function StudentExperiment() {
   const { id = '' } = useParams()

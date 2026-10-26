@@ -52,8 +52,93 @@
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme')
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var dark = stored === 'dark' || ((!stored || stored === 'system') && prefersDark)
+          var root = document.documentElement
+          root.classList.toggle('dark', dark)
+          root.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (error) {}
+      })()
+    </script>
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483646;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f6f7fb;
+        transition:
+          opacity 0.35s ease,
+          visibility 0.35s ease;
+      }
+      html.dark #app-splash {
+        background: #0a0e1a;
+      }
+      #app-splash .app-splash-logo {
+        display: none;
+        width: min(64vw, 280px);
+        height: auto;
+        user-select: none;
+        -webkit-user-drag: none;
+        animation: app-splash-breathe 1.8s ease-in-out infinite;
+      }
+      #app-splash .app-splash-logo--on-light {
+        display: block;
+      }
+      html.dark #app-splash .app-splash-logo--on-light {
+        display: none;
+      }
+      html.dark #app-splash .app-splash-logo--on-dark {
+        display: block;
+      }
+      #app-splash.app-splash--hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      @keyframes app-splash-breathe {
+        0%,
+        100% {
+          opacity: 0.82;
+          transform: scale(0.985);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash,
+        #app-splash .app-splash-logo {
+          transition: none;
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="app-splash" role="status" aria-label="正在加载">
+      <img
+        class="app-splash-logo app-splash-logo--on-light"
+        src="/src/assets/U_Logo_T1_MadeWith_Black_RGB.png"
+        alt=""
+        aria-hidden="true"
+        draggable="false"
+      />
+      <img
+        class="app-splash-logo app-splash-logo--on-dark"
+        src="/src/assets/Logo_T1_MadeWith_White_RGB.png"
+        alt=""
+        aria-hidden="true"
+        draggable="false"
+      />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

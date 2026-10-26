@@ -12,6 +12,7 @@
  * - 不再阻塞首屏等待全部 chunk 下载完成。install 只预取本版本的 index.html 与 manifest.json。
  * - activate 后（以及页面发送 PRELOAD_START 时），SW 在后台基于 manifest.json 把 chunk
  *   （JS/CSS）逐条写入 STATIC_CACHE，并通过 clients.postMessage 广播 CHUNK_PROGRESS。
+ *   预加载固定单并发，避免占满浏览器同源连接数、拖慢 entry 与当前路由。
  * - 页面请求 /assets/* 时 cache-first：命中直接返回；未命中立刻联网（不会等待后台预加载），
  *   并把响应写入缓存；若同一资源后台正在下载，则复用在途请求，避免重复下载。
  * - /api、/socket.io、/mcp：直接放行，绝不缓存。
@@ -31,7 +32,8 @@ const ASSETS_PATH = new URL('assets/', SCOPE).pathname
 const API_PREFIXES = ['/api', '/socket.io', '/mcp']
 const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com'
 const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com'
-const PRELOAD_CONCURRENCY = 6
+// 只占一个连接：浏览器同源并发通常为 6，其余留给 entry / 当前路由的按需加载。
+const PRELOAD_CONCURRENCY = 1
 const CHUNK_RE = /\.(?:m?js|css)$/i
 
 const GRADE_TAG = 'tasaas-grade-updates'

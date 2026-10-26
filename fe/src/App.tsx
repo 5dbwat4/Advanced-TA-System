@@ -1,5 +1,5 @@
 import { Spinner } from '@heroui/react'
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { RedirectIfAuthed } from '@/components/auth/RedirectIfAuthed'
@@ -10,53 +10,53 @@ import { AppShell } from '@/components/layout/AppShell'
 import { PublicLayout } from '@/components/layout/PublicLayout'
 import { StudentShell } from '@/components/layout/StudentShell'
 
-const BankDetail = lazy(() => import('@/pages/BankDetail'))
-const BankManage = lazy(() => import('@/pages/BankManage'))
-const BoardScan = lazy(() => import('@/pages/BoardScan'))
-const Boards = lazy(() => import('@/pages/Boards'))
-const Changelog = lazy(() => import('@/pages/Changelog'))
-const Checkin = lazy(() => import('@/pages/Checkin'))
-const CheckinSession = lazy(() => import('@/pages/CheckinSession'))
-const Checkoff = lazy(() => import('@/pages/Checkoff'))
-const Checkpoints = lazy(() => import('@/pages/Checkpoints'))
-const CourseSettings = lazy(() => import('@/pages/CourseSettings'))
-const CriteriaManage = lazy(() => import('@/pages/CriteriaManage'))
-const CustomCards = lazy(() => import('@/pages/CustomCards'))
-const Dashboard = lazy(() => import('@/pages/Dashboard'))
-const ExperimentDetail = lazy(() => import('@/pages/ExperimentDetail'))
-const ExperimentRemarks = lazy(() => import('@/pages/ExperimentRemarks'))
-const Experiments = lazy(() => import('@/pages/Experiments'))
-const FocusStudents = lazy(() => import('@/pages/FocusStudents'))
-const Licenses = lazy(() => import('@/pages/Licenses'))
-const LicensesFull = lazy(() => import('@/pages/LicensesFull'))
-const LlmConnect = lazy(() => import('@/pages/LlmConnect'))
-const Login = lazy(() => import('@/pages/Login'))
-const LoginClassSelect = lazy(() => import('@/pages/LoginClassSelect'))
-const LoginSelect = lazy(() => import('@/pages/LoginSelect'))
-const More = lazy(() => import('@/pages/More'))
-const NewBank = lazy(() => import('@/pages/NewBank'))
-const NewClassAccount = lazy(() => import('@/pages/NewClassAccount'))
-const NewCourse = lazy(() => import('@/pages/NewCourse'))
-const NotFound = lazy(() => import('@/pages/NotFound'))
-const Questions = lazy(() => import('@/pages/Questions'))
-const ReportCriteria = lazy(() => import('@/pages/ReportCriteria'))
-const ReportGrade = lazy(() => import('@/pages/ReportGrade'))
-const Reports = lazy(() => import('@/pages/Reports'))
-const ScoreEntry = lazy(() => import('@/pages/ScoreEntry'))
-const Scores = lazy(() => import('@/pages/Scores'))
-const Settings = lazy(() => import('@/pages/Settings'))
-const Setup = lazy(() => import('@/pages/Setup'))
-const SpecialDrawEditor = lazy(() => import('@/pages/SpecialDrawEditor'))
-const StudentExperiment = lazy(() => import('@/pages/StudentExperiment'))
-const StudentOverview = lazy(() => import('@/pages/StudentOverview'))
-const StudentScores = lazy(() => import('@/pages/StudentScores'))
-const StudentSettings = lazy(() => import('@/pages/StudentSettings'))
-const StudentUnlock = lazy(() => import('@/pages/StudentUnlock'))
-const StudentPreviewView = lazy(() => import('@/pages/StudentPreviewView'))
-const StudentReport = lazy(() => import('@/pages/StudentReport'))
-const Terms = lazy(() => import('@/pages/Terms'))
-const XzzdPush = lazy(() => import('@/pages/XzzdPush'))
-const XzzdScoreSync = lazy(() => import('@/pages/XzzdScoreSync'))
+const BankDetail = lazy(() => import('@/pages/console/questions/BankDetail'))
+const BankManage = lazy(() => import('@/pages/console/questions/BankManage'))
+const BoardScan = lazy(() => import('@/pages/console/boards/BoardScan'))
+const Boards = lazy(() => import('@/pages/console/boards/Boards'))
+const Changelog = lazy(() => import('@/pages/public/Changelog'))
+const Checkin = lazy(() => import('@/pages/checkin/Checkin'))
+const CheckinSession = lazy(() => import('@/pages/checkin/CheckinSession'))
+const Checkoff = lazy(() => import('@/pages/console/checkoff/Checkoff'))
+const Checkpoints = lazy(() => import('@/pages/console/courses/Checkpoints'))
+const CourseSettings = lazy(() => import('@/pages/console/courses/CourseSettings'))
+const CriteriaManage = lazy(() => import('@/pages/console/reports/CriteriaManage'))
+const CustomCards = lazy(() => import('@/pages/console/checkoff/CustomCards'))
+const Dashboard = lazy(() => import('@/pages/console/Dashboard'))
+const ExperimentDetail = lazy(() => import('@/pages/console/experiments/ExperimentDetail'))
+const ExperimentRemarks = lazy(() => import('@/pages/console/experiments/ExperimentRemarks'))
+const Experiments = lazy(() => import('@/pages/console/experiments/Experiments'))
+const FocusStudents = lazy(() => import('@/pages/console/courses/FocusStudents'))
+const Licenses = lazy(() => import('@/pages/public/Licenses'))
+const LicensesFull = lazy(() => import('@/pages/public/LicensesFull'))
+const LlmConnect = lazy(() => import('@/pages/console/LlmConnect'))
+const Login = lazy(() => import('@/pages/auth/Login'))
+const LoginClassSelect = lazy(() => import('@/pages/auth/LoginClassSelect'))
+const LoginSelect = lazy(() => import('@/pages/auth/LoginSelect'))
+const More = lazy(() => import('@/pages/console/More'))
+const NewBank = lazy(() => import('@/pages/console/questions/NewBank'))
+const NewClassAccount = lazy(() => import('@/pages/console/courses/NewClassAccount'))
+const NewCourse = lazy(() => import('@/pages/console/courses/NewCourse'))
+const NotFound = lazy(() => import('@/pages/public/NotFound'))
+const Questions = lazy(() => import('@/pages/console/questions/Questions'))
+const ReportCriteria = lazy(() => import('@/pages/console/reports/ReportCriteria'))
+const ReportGrade = lazy(() => import('@/pages/console/reports/ReportGrade'))
+const Reports = lazy(() => import('@/pages/console/reports/Reports'))
+const ScoreEntry = lazy(() => import('@/pages/console/scores/ScoreEntry'))
+const Scores = lazy(() => import('@/pages/console/scores/Scores'))
+const Settings = lazy(() => import('@/pages/account/Settings'))
+const Setup = lazy(() => import('@/pages/account/Setup'))
+const SpecialDrawEditor = lazy(() => import('@/pages/console/checkoff/SpecialDrawEditor'))
+const StudentExperiment = lazy(() => import('@/pages/student/StudentExperiment'))
+const StudentOverview = lazy(() => import('@/pages/student/StudentOverview'))
+const StudentScores = lazy(() => import('@/pages/student/StudentScores'))
+const StudentSettings = lazy(() => import('@/pages/student/StudentSettings'))
+const StudentUnlock = lazy(() => import('@/pages/student/StudentUnlock'))
+const StudentPreviewView = lazy(() => import('@/pages/student/StudentPreviewView'))
+const StudentReport = lazy(() => import('@/pages/console/scores/StudentReport'))
+const Terms = lazy(() => import('@/pages/public/Terms'))
+const XzzdPush = lazy(() => import('@/pages/console/experiments/XzzdPush'))
+const XzzdScoreSync = lazy(() => import('@/pages/console/courses/XzzdScoreSync'))
 
 function RouteLoading() {
   return (
@@ -67,6 +67,14 @@ function RouteLoading() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const splash = document.getElementById('app-splash')
+    if (!splash) return
+    splash.classList.add('app-splash--hidden')
+    const timer = window.setTimeout(() => splash.remove(), 400)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   return (
     <Suspense fallback={<RouteLoading />}>
       <Routes>
