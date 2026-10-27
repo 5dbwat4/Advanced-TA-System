@@ -7,8 +7,10 @@
     "dev": "concurrently -n be,fe -c blue,magenta \"pnpm dev:be\" \"pnpm dev:fe\"",
     "dev:be": "pnpm --filter be dev",
     "dev:fe": "pnpm --filter fe dev",
+    "dev:v2": "pnpm --filter fe-v2 dev",
     "build:fe": "pnpm --filter fe build",
     "typecheck": "pnpm --filter be typecheck",
+    "typecheck:v2": "pnpm --filter fe-v2 typecheck",
     "lint": "pnpm --filter fe lint"
   },
   "devDependencies": {

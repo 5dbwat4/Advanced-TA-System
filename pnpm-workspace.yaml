@@ -1,6 +1,7 @@
 packages:
   - be
   - fe
+  - fe-v2
   - 3rd-party-packages/avatars
 
 onlyBuiltDependencies:
