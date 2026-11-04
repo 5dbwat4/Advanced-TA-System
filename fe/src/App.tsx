@@ -21,6 +21,7 @@ const Changelog = lazy(() => import('@/pages/public/Changelog'))
 const Checkin = lazy(() => import('@/pages/checkin/Checkin'))
 const CheckinSession = lazy(() => import('@/pages/checkin/CheckinSession'))
 const Checkoff = lazy(() => import('@/pages/console/checkoff/Checkoff'))
+const CheckoffMulti = lazy(() => import('@/pages/console/checkoff/CheckoffMulti'))
 const Checkpoints = lazy(() => import('@/pages/console/courses/Checkpoints'))
 const CourseSettings = lazy(() => import('@/pages/console/courses/CourseSettings'))
 const CriteriaManage = lazy(() => import('@/pages/console/reports/CriteriaManage'))
@@ -110,6 +111,7 @@ export default function App() {
           <Route element={<RequireStaff />}>
             <Route path="/console/reports/:id" element={<ReportGrade />} />
             <Route path="/console/checkoff" element={<Checkoff />} />
+            <Route path="/console/checkoff-multi" element={<CheckoffMulti />} />
             <Route path="/console/checkoff/special" element={<SpecialDrawEditor />} />
             <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
             <Route path="/console/criteria/:key/edit" element={<ReportCriteria />} />

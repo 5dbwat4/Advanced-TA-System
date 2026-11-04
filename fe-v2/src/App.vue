@@ -19,6 +19,10 @@ onMounted(() => {
   <UApp>
     <div class="aurora" aria-hidden />
     <div class="grid-overlay" aria-hidden />
-    <RouterView />
+    <RouterView v-slot="{ Component }">
+      <Transition name="page" mode="out-in">
+        <component :is="Component" />
+      </Transition>
+    </RouterView>
   </UApp>
 </template>

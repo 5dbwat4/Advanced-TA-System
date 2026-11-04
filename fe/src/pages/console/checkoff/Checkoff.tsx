@@ -12,12 +12,12 @@ import {
 } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import ArrowLeft from '~icons/lucide/arrow-left'
 import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
+import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
@@ -94,34 +94,6 @@ const TYPE_LABELS = new Map<number, string>(
 
 /** 「跟随实验设置」在题目集下拉中的哨兵值 */
 const FOLLOW_BANK = '__follow__'
-
-function CheckoffLayout({
-  children,
-  actions,
-}: {
-  children: ReactNode
-  actions?: ReactNode
-}) {
-  return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-elevated/60 px-4 backdrop-blur-xl">
-        <Link
-          to="/console"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-fg-subtle transition-colors hover:text-fg"
-        >
-          <ArrowLeft width={14} height={14} className="shrink-0" />
-          返回
-        </Link>
-        <div className="h-5 w-px bg-line" />
-        <div className="min-w-0 flex-1 truncate text-sm font-bold">验收</div>
-        {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-4xl px-4 py-6">{children}</div>
-      </div>
-    </div>
-  )
-}
 
 export default function Checkoff() {
   const currentClass = useCurrentClass()
@@ -653,6 +625,7 @@ export default function Checkoff() {
                     if (key === 'presence') openPresence()
                     else if (key === 'bank') openBankPicker()
                     else if (key === 'special') openSpecialDrawIntro()
+                    else if (key === 'multi') navigate('/console/checkoff-multi')
                     else if (key === 'master-panel') setMasterPanelVisible((visible) => !visible)
                   }}
                 >
@@ -667,6 +640,10 @@ export default function Checkoff() {
                   <Dropdown.Item id="special" textValue="特殊的抽题方式">
                     <Dices width={15} height={15} className="shrink-0 text-fg-muted" />
                     <Label>特殊的抽题方式</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item id="multi" textValue="群面（多学生并行）">
+                    <Users width={15} height={15} className="shrink-0 text-fg-muted" />
+                    <Label>群面（多学生并行）</Label>
                   </Dropdown.Item>
                   {isMulti && (
                     <Dropdown.Item

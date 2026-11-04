@@ -85,7 +85,10 @@ function segmentStyle(index: number): CSSProperties {
         :disabled="disabled"
         :aria-label="`${item.label}权重`"
         :model-value="drafts[index] ?? '0'"
-        class="tabular w-full rounded-xl border border-line bg-elevated px-2 py-1.5 text-center text-sm outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+        class="tabular w-full"
+        :ui="{
+          base: 'w-full rounded-xl px-2 py-1.5 text-center text-sm transition-all focus:ring-2 focus:ring-brand-500/15',
+        }"
         @update:model-value="(value) => setAt(index, value as string | number)"
       />
     </div>

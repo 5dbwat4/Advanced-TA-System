@@ -104,6 +104,7 @@ function goFocusStudents() {
       </div>
 
       <UAlert
+        variant="subtle"
         v-if="rollbackFailed"
         color="error"
         description="设置保存失败且无法恢复，请刷新页面"

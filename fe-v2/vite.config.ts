@@ -4,9 +4,12 @@ import ui from '@nuxt/ui/vite'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
+import { buildInfo } from './plugins/build-info.ts'
+
 export default defineConfig({
   plugins: [
     vue(),
+    buildInfo(),
     ui({
       dts: false,
       autoImport: false,
@@ -21,6 +24,13 @@ export default defineConfig({
         colors: {
           primary: 'brand',
           neutral: 'slate',
+        },
+        input: {
+          variants: {
+            variant: {
+              outline: 'text-highlighted bg-elevated ring ring-inset ring-accented',
+            },
+          },
         },
       },
     }),

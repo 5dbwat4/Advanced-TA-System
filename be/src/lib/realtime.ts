@@ -173,6 +173,8 @@ function readCheckoffPerson(value: unknown): CheckoffPerson | null {
 
 type CheckoffSession = {
   token: string
+  /** 同一用户下区分多个并发会话的槽位（群面每个 tab 一个） */
+  slot: string
   /** TOTP 密钥（base32），配对码每分钟由其推导 */
   secret: string
   /** 配对码刷新周期（秒） */
@@ -190,17 +192,40 @@ type CheckoffSession = {
 }
 
 const SESSION_TTL = 1000 * 60 * 60 * 4
+/** 无任何连接时保留一段时间，允许群面页面刷新 / 短暂断线后重新 attach */
+const EMPTY_SESSION_GRACE = 1000 * 60 * 2
 /** 配对码刷新周期：60 秒 */
 const CODE_PERIOD = 60
 const checkoffSessions = new Map<string, CheckoffSession>()
-/** 每个用户至多一个会话：userId → token */
+/** 每个用户每个槽位至多一个会话：`userId:slot` → token */
 const userSessions = new Map<string, string>()
+
+function userSessionKey(userId: string, slot: string): string {
+  return `${userId}:${slot}`
+}
+
+const DEFAULT_SLOT = 'default'
+const MAX_SLOT_LENGTH = 128
+
+/** 读取用户指定槽位的存活会话 */
+function sessionForUser(userId: string, slot: string): CheckoffSession | undefined {
+  const key = userSessionKey(userId, slot)
+  const token = userSessions.get(key)
+  if (!token) return undefined
+  const session = checkoffSessions.get(token)
+  if (!session) {
+    userSessions.delete(key)
+    return undefined
+  }
+  return session
+}
 
 /** 删除会话：踢出房间并通知 slave */
 function purgeSession(session: CheckoffSession): void {
   checkoffSessions.delete(session.token)
-  if (userSessions.get(session.masterUserId) === session.token) {
-    userSessions.delete(session.masterUserId)
+  const key = userSessionKey(session.masterUserId, session.slot)
+  if (userSessions.get(key) === session.token) {
+    userSessions.delete(key)
   }
   const room = checkoffRoom(session.token)
   io?.to(room).emit('slave:closed')
@@ -212,20 +237,9 @@ function gcCheckoffSessions(): void {
   for (const session of [...checkoffSessions.values()]) {
     const expired = now - session.updatedAt > SESSION_TTL
     const empty = session.masters.size === 0 && session.slaves.size === 0
-    if (expired || empty) purgeSession(session)
+    const abandoned = empty && now - session.updatedAt > EMPTY_SESSION_GRACE
+    if (expired || abandoned) purgeSession(session)
   }
-}
-
-/** 读取用户当前存活的会话 */
-function sessionForUser(userId: string): CheckoffSession | undefined {
-  const token = userSessions.get(userId)
-  if (!token) return undefined
-  const session = checkoffSessions.get(token)
-  if (!session) {
-    userSessions.delete(userId)
-    return undefined
-  }
-  return session
 }
 
 /** socket 离开会话：清空标记；若 master 与 slave 均已离场则删除会话 */
@@ -241,7 +255,7 @@ function leaveSession(socket: Socket): void {
   if (role === 'master') session.masters.delete(socket.id)
   else if (role === 'slave') session.slaves.delete(socket.id)
   session.updatedAt = Date.now()
-  if (session.masters.size === 0 && session.slaves.size === 0) purgeSession(session)
+  // 不立即删除空会话：给群面刷新 / 断线重连留出 attach 窗口，由 gc 按宽限期清理
 }
 
 /** 6 位配对码无法反查会话，遍历活跃会话用 TOTP 校验（顺带清理过期会话） */
@@ -468,43 +482,54 @@ export function createRealtime(fastify: FastifyInstance): Server {
     })
 
     /* -------- master -------- */
-    socket.on('master:create', async (_payload: unknown, ack?: (res: unknown) => void) => {
-      const user = socket.data.user as { sub?: string } | undefined
-      if (!user?.sub) return ack?.({ error: 'UNAUTHORIZED' })
-      gcCheckoffSessions()
-      // 该用户已有存活会话（如 slave 仍在）时直接加入，避免重复建会话
-      let session = sessionForUser(user.sub)
-      if (!session) {
-        session = {
-          token: randomUUID(),
-          secret: randomSecret(),
-          period: CODE_PERIOD,
-          masterUserId: user.sub,
-          state: { kind: 'idle', experimentMark: '', experimentTitle: '' },
-          meta: { ...DEFAULT_META },
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          masters: new Set(),
-          slaves: new Set(),
+    socket.on(
+      'master:create',
+      async (payload: { key?: unknown } | undefined, ack?: (res: unknown) => void) => {
+        const user = socket.data.user as { sub?: string } | undefined
+        if (!user?.sub) return ack?.({ error: 'UNAUTHORIZED' })
+        const requestedKey = payload?.key
+        const slot =
+          typeof requestedKey === 'string' &&
+          requestedKey.length > 0 &&
+          requestedKey.length <= MAX_SLOT_LENGTH
+            ? requestedKey
+            : DEFAULT_SLOT
+        gcCheckoffSessions()
+        // 该用户该槽位已有存活会话（如 slave 仍在）时直接加入，避免重复建会话
+        let session = sessionForUser(user.sub, slot)
+        if (!session) {
+          session = {
+            token: randomUUID(),
+            slot,
+            secret: randomSecret(),
+            period: CODE_PERIOD,
+            masterUserId: user.sub,
+            state: { kind: 'idle', experimentMark: '', experimentTitle: '' },
+            meta: { ...DEFAULT_META },
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            masters: new Set(),
+            slaves: new Set(),
+          }
+          checkoffSessions.set(session.token, session)
+          userSessions.set(userSessionKey(user.sub, slot), session.token)
         }
-        checkoffSessions.set(session.token, session)
-        userSessions.set(user.sub, session.token)
-      }
-      session.masters.add(socket.id)
-      session.updatedAt = Date.now()
-      socket.data.role = 'master'
-      socket.data.checkoffToken = session.token
-      await socket.join(checkoffRoom(session.token))
-      ack?.({
-        token: session.token,
-        secret: session.secret,
-        period: session.period,
-        serverTime: Date.now(),
-        state: session.state,
-        meta: session.meta,
-        slaveConnected: session.slaves.size > 0,
-      })
-    })
+        session.masters.add(socket.id)
+        session.updatedAt = Date.now()
+        socket.data.role = 'master'
+        socket.data.checkoffToken = session.token
+        await socket.join(checkoffRoom(session.token))
+        ack?.({
+          token: session.token,
+          secret: session.secret,
+          period: session.period,
+          serverTime: Date.now(),
+          state: session.state,
+          meta: session.meta,
+          slaveConnected: session.slaves.size > 0,
+        })
+      },
+    )
 
     socket.on(
       'master:attach',
@@ -591,11 +616,27 @@ export function createRealtime(fastify: FastifyInstance): Server {
       },
     )
 
-    socket.on('master:close', ({ token } = {} as { token?: string }) => {
-      if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) return
-      if (typeof token !== 'string') return
-      leaveSession(socket)
-    })
+    socket.on(
+      'master:close',
+      (
+        { token, destroy } = {} as { token?: string; destroy?: boolean },
+        ack?: (res: unknown) => void,
+      ) => {
+        if (typeof token !== 'string') return ack?.({ error: 'INVALID_TOKEN' })
+        const session = checkoffSessions.get(token)
+        // 显式销毁（关闭群面 tab）：只要是会话拥有者即可，无需占用 master 连接
+        if (destroy) {
+          const user = socket.data.user as { sub?: string } | undefined
+          if (session && user?.sub === session.masterUserId) purgeSession(session)
+          return ack?.({ ok: true })
+        }
+        if (socket.data.role !== 'master' || socket.data.checkoffToken !== token) {
+          return ack?.({ error: 'FORBIDDEN' })
+        }
+        leaveSession(socket)
+        ack?.({ ok: true })
+      },
+    )
 
     /* -------- slave -------- */
     socket.on(

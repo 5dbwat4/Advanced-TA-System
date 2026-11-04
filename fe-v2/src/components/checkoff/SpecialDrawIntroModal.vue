@@ -187,6 +187,7 @@ async function saveImported(apply: boolean) {
     <template #body>
       <div class="flex flex-col gap-4">
         <UAlert
+          variant="subtle"
           color="warning"
           icon="i-lucide-triangle-alert"
           description="我们支持使用状态机进行抽题。请注意，这是不鼓励的且我们认为这不是一个常见需求。该模式下你创建的状态机，不会被保存到云端，你需要自行分享给你的助教朋友或其他设备。"
@@ -322,6 +323,7 @@ async function saveImported(apply: boolean) {
             粘贴后自动预览
           </p>
           <UAlert
+            variant="subtle"
             v-else-if="preview.machine === null"
             color="error"
             icon="i-lucide-circle-alert"

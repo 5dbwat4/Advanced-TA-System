@@ -60,7 +60,7 @@ onMounted(() => {
       try {
         localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ at: Date.now(), ...next }))
       } catch {
-        // storage unavailable 鈥?keep in-memory only
+        // storage unavailable - keep in-memory only
       }
     })
     .catch(() => undefined)
@@ -115,11 +115,11 @@ function openChangelog() {
         <div class="flex items-center gap-3 text-xs text-fg-subtle">
           <span class="flex items-center gap-1">
             <UIcon name="i-lucide-star" class="h-3 w-3 shrink-0" />
-            {{ stats ? stats.stars : '鈥? }}
+            {{ stats ? stats.stars : '—' }}
           </span>
           <span class="flex items-center gap-1">
             <UIcon name="i-lucide-git-fork" class="h-3 w-3 shrink-0" />
-            {{ stats ? stats.forks : '鈥? }}
+            {{ stats ? stats.forks : '—' }}
           </span>
         </div>
       </div>

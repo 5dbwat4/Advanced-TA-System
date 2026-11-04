@@ -45,6 +45,12 @@ export function getCheckoffSocket(): Socket {
   return socket
 }
 
+/** 为「群面」单独创建一条连接：一个 tab 一个会话，互不干扰 */
+export function createCheckoffSocket(): Socket {
+  const token = getToken()
+  return io({ auth: token ? { token } : {}, transports: ['websocket', 'polling'] })
+}
+
 /** 订阅验收 Socket 的底层连接状态（socket.io connected / disconnected），与是否已加入会话无关。 */
 export function useCheckoffConnection(): boolean {
   const [online, setOnline] = useState(() => getCheckoffSocket().connected)
@@ -79,72 +85,123 @@ export type MasterSession = {
   ready: boolean
 }
 
+type MasterCreateResponse = {
+  token?: string
+  secret?: string
+  period?: number
+  serverTime?: number
+  slaveConnected?: boolean
+  error?: string
+}
+
+const EMPTY_MASTER_SESSION: MasterSession = {
+  token: null,
+  secret: null,
+  period: 60,
+  serverTime: null,
+  slaveConnected: false,
+  ready: false,
+}
+
+export type CheckoffMasterOptions = {
+  /** 同一用户下区分多个并发会话的槽位（群面每个 tab 一个） */
+  sessionKey?: string
+  /** 为该会话单独建立 socket 连接，避免多个 tab 共用 socket 的会话标记 */
+  dedicated?: boolean
+  /** 持久化 token 的 sessionStorage key，用于刷新后 master:attach 同一会话 */
+  storageKey?: string
+}
+
 /**
  * master 端：进入多设备模式时创建会话，返回 TOTP 密钥与 token，
  * 并提供 pushState / switchQuestion 向 slave 广播状态。
  */
-export function useCheckoffMaster(enabled: boolean, masterUserId: string | undefined) {
-  const [session, setSession] = useState<MasterSession>({
-    token: null,
-    secret: null,
-    period: 60,
-    serverTime: null,
-    slaveConnected: false,
-    ready: false,
-  })
+export function useCheckoffMaster(
+  enabled: boolean,
+  masterUserId: string | undefined,
+  options: CheckoffMasterOptions = {},
+) {
+  const { sessionKey, dedicated = false, storageKey } = options
+  const [session, setSession] = useState<MasterSession>(EMPTY_MASTER_SESSION)
+  const socketRef = useRef<Socket | null>(null)
   const tokenRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!enabled || !masterUserId) return
-    const s = getCheckoffSocket()
+    const s = dedicated ? createCheckoffSocket() : getCheckoffSocket()
+    socketRef.current = s
+    let disposed = false
+
+    const apply = (res: MasterCreateResponse | undefined) => {
+      if (disposed || !res?.token) return
+      tokenRef.current = res.token
+      if (storageKey) {
+        try {
+          sessionStorage.setItem(storageKey, res.token)
+        } catch {
+          // 忽略存储不可用
+        }
+      }
+      setSession({
+        token: res.token,
+        secret: res.secret ?? null,
+        period: res.period ?? 60,
+        serverTime: res.serverTime ?? null,
+        slaveConnected: res.slaveConnected ?? false,
+        ready: true,
+      })
+    }
+
+    const create = () => {
+      s.emit(
+        'master:create',
+        { masterUserId, key: sessionKey },
+        (res: MasterCreateResponse | undefined) => apply(res),
+      )
+    }
+
+    const attachOrCreate = () => {
+      const stored = tokenRef.current ?? readStoredToken(storageKey)
+      if (!stored) {
+        create()
+        return
+      }
+      s.emit('master:attach', { token: stored }, (res: MasterCreateResponse | undefined) => {
+        if (res?.token) apply(res)
+        else create()
+      })
+    }
 
     const onSlaveJoined = () => setSession((prev) => ({ ...prev, slaveConnected: true }))
     s.on('master:slave-joined', onSlaveJoined)
-
-    s.emit(
-      'master:create',
-      { masterUserId },
-      (res: {
-        token?: string
-        secret?: string
-        period?: number
-        serverTime?: number
-        slaveConnected?: boolean
-        error?: string
-      }) => {
-        if (!res?.token) return
-        tokenRef.current = res.token
-        setSession({
-          token: res.token,
-          secret: res.secret ?? null,
-          period: res.period ?? 60,
-          serverTime: res.serverTime ?? null,
-          slaveConnected: res.slaveConnected ?? false,
-          ready: true,
-        })
-      },
-    )
+    s.on('connect', attachOrCreate)
+    if (s.connected) attachOrCreate()
 
     return () => {
+      disposed = true
       s.off('master:slave-joined', onSlaveJoined)
+      s.off('connect', attachOrCreate)
       const token = tokenRef.current
       tokenRef.current = null
+      socketRef.current = null
       if (token) s.emit('master:close', { token })
-      setSession({
-        token: null,
-        secret: null,
-        period: 60,
-        serverTime: null,
-        slaveConnected: false,
-        ready: false,
-      })
+      if (dedicated) s.disconnect()
+      setSession(EMPTY_MASTER_SESSION)
     }
-  }, [enabled, masterUserId])
+  }, [enabled, masterUserId, sessionKey, dedicated, storageKey])
 
-  const pushState = useCallback((state: SlaveCardState, meta?: CheckoffMeta) => {
+  const emitWithToken = useCallback((event: string, payload: Record<string, unknown>) => {
+    const socket = socketRef.current
     const token = tokenRef.current
-    if (token) getCheckoffSocket().emit('master:state', { token, state, meta })
+    if (socket && token) socket.emit(event, { token, ...payload })
   }, [])
+
+  const pushState = useCallback(
+    (state: SlaveCardState, meta?: CheckoffMeta) => {
+      emitWithToken('master:state', { state, meta })
+    },
+    [emitWithToken],
+  )
 
   const switchQuestion = useCallback(
     (payload: {
@@ -156,13 +213,44 @@ export function useCheckoffMaster(enabled: boolean, masterUserId: string | undef
       total: number
       content: string
     }) => {
-      const token = tokenRef.current
-      if (token) getCheckoffSocket().emit('switch_question', { token, ...payload })
+      emitWithToken('switch_question', payload)
     },
-    [],
+    [emitWithToken],
   )
 
   return { session, pushState, switchQuestion }
+}
+
+function readStoredToken(storageKey: string | undefined): string | null {
+  if (!storageKey) return null
+  try {
+    return sessionStorage.getItem(storageKey)
+  } catch {
+    return null
+  }
+}
+
+/** 显式销毁某个会话（关闭群面 tab 时使用）：从机立即显示「会话已结束」 */
+export function destroyCheckoffSession(token: string | null | undefined): void {
+  if (!token) return
+  const socket = createCheckoffSocket()
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
+    socket.disconnect()
+  }
+  const timer = window.setTimeout(finish, 2000)
+  socket.on('connect', () => {
+    socket.emit('master:close', { token, destroy: true }, () => {
+      window.clearTimeout(timer)
+      finish()
+    })
+  })
+  socket.on('connect_error', () => {
+    window.clearTimeout(timer)
+    finish()
+  })
 }
 
 /* ---------------------------- watch room ----------------------------- */

@@ -61,7 +61,7 @@
   --glass-line: rgba(255, 255, 255, 0.08);
 }
 
-@theme inline {
+@theme static {
   --color-brand-50: var(--brand-50);
   --color-brand-100: var(--brand-100);
   --color-brand-200: var(--brand-200);
@@ -140,6 +140,26 @@ body {
 .dark ::selection {
   background: var(--amber-500);
   color: #fff8ec;
+}
+
+/* ---------------------------------- */
+/* Route transitions                   */
+/* ---------------------------------- */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s var(--ease-out-expo);
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active {
+    transition: none;
+  }
 }
 
 /* ---------------------------------- */

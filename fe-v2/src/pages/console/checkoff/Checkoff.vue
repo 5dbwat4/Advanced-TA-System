@@ -743,6 +743,7 @@ function retryQuestions() {
           </div>
 
           <UAlert
+            variant="subtle"
             v-if="ratioError"
             class="mt-4"
             color="warning"

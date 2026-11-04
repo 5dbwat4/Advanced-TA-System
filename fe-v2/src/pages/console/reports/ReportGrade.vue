@@ -505,6 +505,7 @@ function readHashStudent(students: GradeStudent[]): GradeStudent | null {
     </div>
     <div v-else-if="error" class="flex min-h-0 flex-1 items-center justify-center p-6">
       <UAlert
+        variant="subtle"
         color="error"
         icon="i-lucide-circle-alert"
         :description="error ?? ''"

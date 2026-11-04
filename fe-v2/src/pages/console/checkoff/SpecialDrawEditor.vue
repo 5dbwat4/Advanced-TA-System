@@ -343,6 +343,7 @@ function clear() {
           </div>
 
           <UAlert
+            variant="subtle"
             v-if="!banksLoading && banks.length === 0"
             color="warning"
             title="还没有题目集，抽题节点无法配置。"
@@ -350,6 +351,7 @@ function clear() {
           />
 
           <UAlert
+            variant="subtle"
             v-if="validationError"
             color="error"
             :description="validationError"

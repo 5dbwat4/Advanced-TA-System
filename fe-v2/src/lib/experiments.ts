@@ -27,6 +27,16 @@ export type ExperimentTimelineInfo = {
   end: number | null
 }
 
+export type ExperimentGanttItem = {
+  id: string
+  mark: string
+  title: string
+  publishTime: string | null
+  checkoffDeadline: string | null
+  reportDeadline: string | null
+  total?: number | null
+}
+
 function timestamp(value: string | null | undefined): number | null {
   if (!value) return null
   const time = new Date(value).getTime()

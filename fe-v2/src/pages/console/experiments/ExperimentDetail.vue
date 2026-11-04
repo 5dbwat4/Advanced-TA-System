@@ -796,11 +796,6 @@ function changeRatio(next: number[]) {
       <template #body>
         <p class="text-sm text-fg-muted">功能开发中。</p>
       </template>
-      <template #footer>
-        <div class="flex justify-end">
-          <UButton color="neutral" variant="soft" @click="preferencesOpen = false">关闭</UButton>
-        </div>
-      </template>
     </UModal>
 
     <UModal v-model:open="banksOpen" title="选择题目集">

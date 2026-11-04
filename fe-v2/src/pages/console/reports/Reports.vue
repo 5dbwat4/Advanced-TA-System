@@ -314,6 +314,7 @@ watch(
             请选择实验以查看报告提交情况。
           </p>
           <UAlert
+            variant="subtle"
             v-else-if="submissionsError"
             color="error"
             :description="submissionsError"

@@ -37,7 +37,11 @@ function goBack() {
     </div>
 
     <div class="mt-8">
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <Transition name="page" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </Transition>
+      </RouterView>
     </div>
   </div>
 </template>

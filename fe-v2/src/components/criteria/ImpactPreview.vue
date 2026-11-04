@@ -238,7 +238,7 @@ function cardClass(entry: ImpactCardEntry): string {
               v-if="entry.change"
               class="mt-1.5"
               :color="alertColor(entry.change)"
-              variant="soft"
+              variant="subtle"
               :icon="alertIcon(entry.change)"
               :title="entry.change.message"
             />

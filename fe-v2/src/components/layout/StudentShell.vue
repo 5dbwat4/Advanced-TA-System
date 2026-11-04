@@ -130,7 +130,11 @@ async function handleLogout() {
       </header>
 
       <main class="flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
 

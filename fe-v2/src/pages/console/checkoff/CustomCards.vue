@@ -278,6 +278,7 @@ async function save() {
     </PageHeader>
 
     <UAlert
+      variant="subtle"
       class="mb-4"
       color="info"
       icon="i-lucide-info"

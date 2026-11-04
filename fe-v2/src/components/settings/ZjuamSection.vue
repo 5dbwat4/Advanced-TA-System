@@ -240,7 +240,7 @@ async function uploadLocal() {
       </PendingButton>
     </div>
 
-    <UAlert color="info" icon="i-lucide-shield-check">
+    <UAlert variant="subtle" color="info" icon="i-lucide-shield-check">
       <template #description>
         <p class="text-[11px] leading-relaxed">
           我们非常重视您的个人信息安全。除非必要，我们不会收集您的浙大统一身份认证密码。如果您不提供密码，将无法使用我们的部分服务，包括获取和向学在浙大同步实验分数等，但不会影响平台本身功能的使用。选择“密码保存在本地”意味着每次使用学在浙大功能时都会将您的密码发送至远端重新登录；选择“密码保存在远端”则意味着您同意将密码信息于服务器上持久保存。

@@ -328,6 +328,7 @@ function startApply() {
     </PageHeader>
 
     <UAlert
+      variant="subtle"
       class="mb-4"
       color="info"
       icon="i-lucide-info"
@@ -498,6 +499,7 @@ function startApply() {
         </div>
 
         <UAlert
+          variant="subtle"
           v-if="result"
           class="mt-4"
           color="success"

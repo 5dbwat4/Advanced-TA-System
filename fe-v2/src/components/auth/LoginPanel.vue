@@ -15,7 +15,7 @@ import { useAppStore } from '@/lib/store'
 import { useTheme } from '@/lib/theme'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
-import { UButton, UIcon, UInput } from '@/ui'
+import { UButton, UIcon, UInput, UTabs } from '@/ui'
 
 type Method = 'password' | 'zjuam'
 
@@ -56,6 +56,11 @@ const showLastCard = computed(
 )
 const lastIdentifier = computed(() => (lastUser.value ? lastUserIdentifier(lastUser.value) : ''))
 const isZjuam = computed(() => method.value === 'zjuam')
+const methodItems = METHODS.map((item) => ({ value: item.key, icon: item.icon, label: item.label }))
+
+function onMethodTab(value: string | number) {
+  if (value === 'password' || value === 'zjuam') switchMethod(value)
+}
 
 let cancelled = false
 
@@ -387,35 +392,33 @@ async function passkeyLogin(hint?: string) {
       <template v-else>
         <div class="mt-6">
           <div class="mb-1.5 text-xs font-semibold text-fg-muted">登录方式</div>
-          <div class="grid grid-cols-2 gap-1 rounded-2xl border border-line bg-sunken p-1.5">
-            <button
-              v-for="item in METHODS"
-              :key="item.key"
-              type="button"
-              :class="
-                cn(
-                  'relative flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors',
-                  method === item.key ? 'text-fg' : 'text-fg-subtle hover:text-fg-muted',
-                )
-              "
-              @click="switchMethod(item.key)"
-            >
-              <span
-                v-if="method === item.key"
-                class="absolute inset-0 rounded-xl bg-elevated shadow-sm ring-1 ring-line"
-              />
+          <UTabs
+            :model-value="method"
+            :items="methodItems"
+            variant="pill"
+            color="neutral"
+            :content="false"
+            :ui="{
+              root: 'w-full',
+              list: 'w-full gap-1 rounded-2xl border border-line bg-sunken p-1.5',
+              indicator: 'inset-y-1.5 rounded-xl bg-elevated shadow-sm ring-1 ring-line',
+              trigger:
+                'rounded-xl px-3 py-2 text-xs font-semibold data-[state=active]:text-fg data-[state=inactive]:text-fg-subtle hover:data-[state=inactive]:not-disabled:text-fg-muted',
+            }"
+            @update:model-value="onMethodTab"
+          >
+            <template #leading="{ item }">
               <UIcon
                 :name="item.icon"
                 :class="
                   cn(
-                    'relative size-4 shrink-0',
-                    method === item.key && 'text-brand-600 dark:text-brand-300',
+                    'size-4 shrink-0',
+                    item.value === method && 'text-brand-600 dark:text-brand-300',
                   )
                 "
               />
-              <span class="relative">{{ item.label }}</span>
-            </button>
-          </div>
+            </template>
+          </UTabs>
         </div>
 
         <form :key="method" class="mt-6 flex flex-col gap-4" @submit.prevent="submit">

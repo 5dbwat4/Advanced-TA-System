@@ -170,6 +170,7 @@ const busy = computed(() => loading.value || saving.value)
       </UButton>
 
       <UAlert
+        variant="subtle"
         v-if="ratioSave.saveFailed"
         color="warning"
         description="自动保存失败，修改尚未保存"

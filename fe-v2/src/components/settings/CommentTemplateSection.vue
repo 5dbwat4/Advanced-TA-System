@@ -120,6 +120,7 @@ function updateReport(value: string | number | undefined) {
       </UFormField>
 
       <UAlert
+        variant="subtle"
         v-if="templateSave.saveFailed"
         color="warning"
         description="自动保存失败，修改尚未保存"

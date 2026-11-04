@@ -68,49 +68,6 @@ const classMenuItems = computed<DropdownMenuItem[][]>(() => {
   ]
 })
 
-const userMenuItems = computed<DropdownMenuItem[][]>(() => {
-  const user = auth.user
-  const groups: DropdownMenuItem[][] = [
-    [
-      {
-        label: user?.name ?? '未登录',
-        description: user?.username ? `@${user.username}` : '—',
-        type: 'label',
-      },
-    ],
-  ]
-
-  const actions: DropdownMenuItem[] = [
-    {
-      label: '设置',
-      icon: 'i-lucide-settings-2',
-      onSelect: () => {
-        void router.push('/console/settings')
-      },
-    },
-  ]
-
-  if (user?.role === 'VIEWER') {
-    actions.push({
-      label: '观察者首页',
-      icon: 'i-lucide-eye',
-      onSelect: () => {
-        void router.push('/viewer')
-      },
-    })
-  }
-
-  actions.push({
-    label: '退出登录',
-    icon: 'i-lucide-log-out',
-    color: 'error',
-    onSelect: handleLogout,
-  })
-
-  groups.push(actions)
-  return groups
-})
-
 watch(
   () => auth.user?.id,
   (_id, _previousId, onCleanup) => {
@@ -256,44 +213,35 @@ function handleLogout() {
 
       <div :class="cn('border-t border-line', app.sidebarCollapsed ? 'p-2' : 'p-3')">
         <div v-if="app.sidebarCollapsed" class="flex flex-col items-center gap-1">
-          <UDropdownMenu :items="userMenuItems" :content="{ side: 'right', align: 'start' }">
-            <button
-              type="button"
-              aria-label="账号菜单"
-              class="cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            >
-              <AvatarImage :id="auth.user?.avatar ?? null" :size="36">
-                <template #fallback>{{ auth.user?.username?.slice(0, 1) ?? '·' }}</template>
-              </AvatarImage>
-            </button>
-          </UDropdownMenu>
-          <span @click="handleLogout">
-            <IconAction label="退出登录" placement="right">
-              <UIcon name="i-lucide-log-out" class="size-4 shrink-0 text-fg-muted" />
-            </IconAction>
-          </span>
-        </div>
-        <UDropdownMenu
-          v-else
-          :items="userMenuItems"
-          :content="{ side: 'right', align: 'end' }"
-        >
-          <button
-            type="button"
-            class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-sunken outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          >
+          <UTooltip arrow :content="{ side: 'right' }">
             <AvatarImage :id="auth.user?.avatar ?? null" :size="36">
               <template #fallback>{{ auth.user?.username?.slice(0, 1) ?? '·' }}</template>
             </AvatarImage>
-            <div class="min-w-0 flex-1 leading-tight">
-              <div class="truncate text-sm font-semibold">{{ auth.user?.name ?? '未登录' }}</div>
-              <div class="truncate text-xs text-fg-subtle">
-                {{ auth.user?.username ? `@${auth.user.username}` : '—' }}
+            <template #content>
+              <div class="text-xs font-semibold">{{ auth.user?.name ?? '未登录' }}</div>
+              <div v-if="auth.user?.username" class="text-[10px] opacity-70">
+                @{{ auth.user.username }}
               </div>
+            </template>
+          </UTooltip>
+          <IconAction label="退出登录" placement="right" @click="handleLogout">
+            <UIcon name="i-lucide-log-out" class="size-4 shrink-0 text-fg-muted" />
+          </IconAction>
+        </div>
+        <div v-else class="flex items-center gap-3 rounded-xl px-2 py-2">
+          <AvatarImage :id="auth.user?.avatar ?? null" :size="36">
+            <template #fallback>{{ auth.user?.username?.slice(0, 1) ?? '·' }}</template>
+          </AvatarImage>
+          <div class="min-w-0 flex-1 leading-tight">
+            <div class="truncate text-sm font-semibold">{{ auth.user?.name ?? '未登录' }}</div>
+            <div class="truncate text-xs text-fg-subtle">
+              {{ auth.user?.username ? `@${auth.user.username}` : '—' }}
             </div>
-            <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 text-fg-subtle" />
-          </button>
-        </UDropdownMenu>
+          </div>
+          <IconAction label="退出登录" @click="handleLogout">
+            <UIcon name="i-lucide-log-out" class="size-4 shrink-0 text-fg-muted" />
+          </IconAction>
+        </div>
       </div>
     </aside>
 
@@ -414,7 +362,11 @@ function handleLogout() {
       </nav>
 
       <main class="flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
   </div>

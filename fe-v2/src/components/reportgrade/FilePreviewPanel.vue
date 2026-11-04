@@ -523,7 +523,7 @@ function visualizeControlCharacters(root: HTMLElement): void {
         正在获取提交附件…
       </div>
       <div v-else-if="error" class="p-4">
-        <UAlert color="error" :description="error" icon="i-lucide-circle-alert" />
+        <UAlert variant="subtle" color="error" :description="error" icon="i-lucide-circle-alert" />
       </div>
       <div
         v-else-if="!active"
@@ -533,6 +533,7 @@ function visualizeControlCharacters(root: HTMLElement): void {
       </div>
       <div v-else-if="!activeUrl" class="p-4">
         <UAlert
+          variant="subtle"
           color="error"
           description="未获取到下载链接"
           icon="i-lucide-circle-alert"
@@ -540,6 +541,7 @@ function visualizeControlCharacters(root: HTMLElement): void {
       </div>
       <div v-else-if="currentFile?.error" class="p-4">
         <UAlert
+          variant="subtle"
           color="error"
           :description="currentFile?.error ?? ''"
           icon="i-lucide-circle-alert"

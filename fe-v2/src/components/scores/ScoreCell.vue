@@ -112,13 +112,12 @@ function onKeyDown(event: KeyboardEvent) {
       :min="-SCORE_LIMIT"
       :max="SCORE_LIMIT"
       step="1"
+      variant="none"
       aria-label="分数"
-      :class="
-        cn(
-          'tabular w-16 rounded-lg border border-line bg-elevated px-2 py-1 text-center text-sm outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15',
-          saving && 'opacity-50',
-        )
-      "
+      :class="cn('w-16', saving && 'opacity-50')"
+      :ui="{
+        base: 'tabular rounded-lg border border-line bg-elevated px-2 py-1 text-center text-sm outline-none transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15',
+      }"
       @blur="commit"
       @keydown="onKeyDown"
     />

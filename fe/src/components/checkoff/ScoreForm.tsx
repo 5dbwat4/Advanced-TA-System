@@ -36,6 +36,8 @@ export function ScoreForm({
   existingScores,
   ratio,
   onSaved,
+  active = true,
+  saveLabel = '保存并下一位',
 }: {
   experimentId: string
   student: CheckoffStudent
@@ -44,6 +46,10 @@ export function ScoreForm({
   existingScores: Score[]
   ratio: number[]
   onSaved: () => void
+  /** 群面中只有当前激活的 tab 响应全局快捷键 */
+  active?: boolean
+  /** 保存按钮 / 快捷键提示文案（群面保存后关闭 tab） */
+  saveLabel?: string
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
   const [saving, setSaving] = useState(false)
@@ -93,6 +99,7 @@ export function ScoreForm({
   }, [values, experimentId, student, onSaved])
 
   useEffect(() => {
+    if (!active) return
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault()
@@ -101,7 +108,7 @@ export function ScoreForm({
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [save])
+  }, [save, active])
 
   return (
     <div>
@@ -201,7 +208,7 @@ export function ScoreForm({
         <span className="hidden items-center gap-1.5 text-xs text-fg-subtle sm:flex">
           <kbd className="rounded-md border border-line bg-sunken px-1.5 py-0.5 font-mono text-[10px]">Ctrl</kbd>
           <kbd className="rounded-md border border-line bg-sunken px-1.5 py-0.5 font-mono text-[10px]">↵</kbd>
-          保存并继续
+          {saveLabel}
         </span>
         <PendingButton
           size="lg"
@@ -210,7 +217,7 @@ export function ScoreForm({
           className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 shadow-lg shadow-emerald-600/25 sm:w-auto sm:min-w-64"
           icon={Check}
         >
-          保存并下一位
+          {saveLabel}
         </PendingButton>
       </div>
     </div>

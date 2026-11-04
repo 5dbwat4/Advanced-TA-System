@@ -157,11 +157,13 @@ function requestPermission() {
     </div>
 
     <UAlert
+      variant="subtle"
       v-if="!supported"
       color="warning"
       description="当前浏览器不支持系统通知。"
     />
     <UAlert
+      variant="subtle"
       v-else-if="permission === 'denied'"
       color="warning"
       description="浏览器已禁止本站通知，请在地址栏的站点设置中允许后重试。"

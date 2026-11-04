@@ -96,6 +96,11 @@ function goBack() {
   void router.push(auth.user?.role === 'VIEWER' ? '/viewer' : '/home')
 }
 
+function closePasswordPanel() {
+  passwordOpen.value = false
+  password.value = ''
+}
+
 async function savePassword() {
   savingPassword.value = true
   try {
@@ -246,10 +251,7 @@ async function saveName() {
                   <UButton
                     size="sm"
                     variant="ghost"
-                    @click="
-                      passwordOpen = false
-                      password = ''
-                    "
+                    @click="closePasswordPanel"
                   >
                     取消
                   </UButton>

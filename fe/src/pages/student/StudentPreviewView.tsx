@@ -105,10 +105,29 @@ export default function StudentPreviewView() {
             <Spinner size="lg" />
           </div>
         ) : error ? (
-          <div className="rounded-3xl border border-line bg-elevated/80 p-8 text-center shadow-2xl backdrop-blur-xl">
-            <div className="text-lg font-bold text-fg">无法查看</div>
-            <div className="mt-2 text-sm text-fg-subtle">{error}</div>
-          </div>
+          <>
+            <div className="rounded-3xl border border-line bg-elevated/80 p-8 text-center shadow-2xl backdrop-blur-xl">
+              <div className="text-lg font-bold text-fg">无法查看</div>
+              <div className="mt-2 text-sm text-fg-subtle">{error}</div>
+            </div>
+            <div className="mt-4 rounded-3xl border border-line bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl">
+              <div className="text-sm font-bold text-fg">链接打不开？</div>
+              <ol className="mt-3 list-decimal space-y-2 ps-5 text-sm text-fg-subtle">
+                <li>
+                  如果你从学在浙大上获得了这个链接，请确保你完整地复制了它，没有丢失字符，不要使用 OCR 来提取链接。
+                </li>
+                <li>
+                  如果仍然不行，请及时联系助教或项目作者{' '}
+                  <a
+                    className="text-brand-600 underline underline-offset-2 dark:text-brand-300"
+                    href="mailto:me@5dbwat4.top"
+                  >
+                    me@5dbwat4.top
+                  </a>
+                </li>
+              </ol>
+            </div>
+          </>
         ) : data ? (
           <>
             <StudentPreviewContent data={data} />

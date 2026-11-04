@@ -304,6 +304,7 @@ function startAssemble() {
     </PageHeader>
 
     <UAlert
+      variant="subtle"
       class="mb-4"
       color="warning"
       icon="i-lucide-triangle-alert"
@@ -347,13 +348,14 @@ function startAssemble() {
 
       <div class="mt-4 flex flex-col gap-6">
         <UAlert
+          variant="subtle"
           color="warning"
           icon="i-lucide-triangle-alert"
           description="继续推送将会覆盖上游已有数据。"
         />
 
         <template v-if="error">
-          <UAlert color="error" icon="i-lucide-circle-alert">
+          <UAlert variant="subtle" color="error" icon="i-lucide-circle-alert">
             <template #description>
               <div class="flex flex-col gap-2">
                 <span>{{ error }}</span>
@@ -664,6 +666,7 @@ function startAssemble() {
       </div>
 
       <UAlert
+        variant="subtle"
         v-if="pushError"
         class="mt-4"
         color="error"

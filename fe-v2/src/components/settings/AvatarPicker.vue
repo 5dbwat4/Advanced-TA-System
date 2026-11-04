@@ -130,8 +130,5 @@ async function select(avatar: number | null) {
         </template>
       </div>
     </template>
-    <template #footer>
-      <UButton color="neutral" variant="soft" @click="open = false">关闭</UButton>
-    </template>
   </UModal>
 </template>

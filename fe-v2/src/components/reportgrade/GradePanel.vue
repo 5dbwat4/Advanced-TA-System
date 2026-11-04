@@ -503,6 +503,7 @@ onBeforeUnmount(() => {
       </div>
 
       <UAlert
+        variant="subtle"
         v-if="userId == null"
         color="warning"
         icon="i-lucide-triangle-alert"

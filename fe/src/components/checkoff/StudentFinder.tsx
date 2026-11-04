@@ -33,6 +33,7 @@ export function StudentFinder({
   onLoadError,
   onSearchFocus,
   onSearchBlur,
+  autoFocus = true,
 }: {
   classId: string
   experimentId: string
@@ -43,6 +44,8 @@ export function StudentFinder({
   onLoadError?: (message: string) => void
   onSearchFocus?: () => void
   onSearchBlur?: () => void
+  /** 群面中非激活 tab 不应抢占输入焦点 */
+  autoFocus?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [students, setStudents] = useState<CheckoffStudent[]>([])
@@ -59,8 +62,8 @@ export function StudentFinder({
   }, [onQuestionsLoaded, onLoadError])
 
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (autoFocus) inputRef.current?.focus()
+  }, [autoFocus])
 
   // 班级人数不多，一次加载完整名单（可选同请求内嵌题目），检索（含拼音）在前端完成
   useEffect(() => {

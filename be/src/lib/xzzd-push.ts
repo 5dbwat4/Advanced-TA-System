@@ -98,13 +98,16 @@ export function resolvePushScore(
   scores: { function: number | null; answer: number | null; report: number | null },
   ratio: number[],
 ): number | null {
-  if (kind === 'report') return scores.report
-
-  const values = [scores.function, scores.answer]
-  const weights = [ratio[0] ?? 0, ratio[1] ?? 0]
-  const weighted = weightedTotal(values, weights)
-  if (weighted != null) return weighted
-  return weightedTotal(values, [1, 1])
+  const raw =
+    kind === 'report'
+      ? scores.report
+      : (weightedTotal(
+          [scores.function, scores.answer],
+          [ratio[0] ?? 0, ratio[1] ?? 0],
+        ) ?? weightedTotal([scores.function, scores.answer], [1, 1]))
+  // 本地允许超出 [0, 100]，但学在浙大只接受该区间，推送前钳制。
+  if (raw == null || !Number.isFinite(raw)) return null
+  return Math.min(100, Math.max(0, raw))
 }
 
 /**

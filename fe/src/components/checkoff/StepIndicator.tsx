@@ -23,11 +23,13 @@ export function StepIndicator({
   onStep,
   hasExperiment,
   hasStudent,
+  layoutId = 'checkoff-step-pill',
 }: {
   step: number
   onStep: (step: number) => void
   hasExperiment: boolean
   hasStudent: boolean
+  layoutId?: string
 }) {
   const canGo = (target: number) => {
     if (target === 0) return true
@@ -61,7 +63,7 @@ export function StepIndicator({
           >
             {active && (
               <motion.span
-                layoutId="checkoff-step-pill"
+                layoutId={layoutId}
                 className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 shadow-md shadow-brand-600/25"
                 transition={{ type: 'spring', stiffness: 450, damping: 35 }}
               />

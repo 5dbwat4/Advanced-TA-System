@@ -483,6 +483,7 @@ function setPendingRange(student: Student, type: number, indId: string, next: nu
       </div>
 
       <UAlert
+        variant="subtle"
         v-if="ratioError"
         class="mb-4"
         color="warning"
@@ -564,7 +565,6 @@ function setPendingRange(student: Student, type: number, indId: string, next: nu
                   </button>
                 </th>
                 <th
-                  :key="`${exp.id}:total`"
                   class="min-w-[5.5rem] border-b border-r border-line bg-elevated px-2 py-2 text-center text-xs font-medium text-fg-muted"
                 >
                   总评
@@ -626,7 +626,6 @@ function setPendingRange(student: Student, type: number, indId: string, next: nu
                   />
                 </td>
                 <td
-                  :key="`${exp.id}:total`"
                   class="tabular min-w-[5.5rem] border-b border-r border-line px-2 py-1.5 text-center font-bold"
                 >
                   <span

@@ -100,6 +100,7 @@ function goSetup() {
       </div>
 
       <UAlert
+        variant="subtle"
         v-else-if="error"
         color="error"
         :title="error"
