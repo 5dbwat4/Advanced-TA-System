@@ -17,6 +17,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
+import { CheckoffQueuePanel } from '@/components/checkoff/CheckoffQueuePanel'
+import { CheckoffTimer, formatElapsed } from '@/components/checkoff/CheckoffTimer'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
@@ -30,6 +32,7 @@ import { StudentFinder } from '@/components/checkoff/StudentFinder'
 import Dices from '~icons/lucide/dices'
 import Eye from '~icons/lucide/eye'
 import EyeOff from '~icons/lucide/eye-off'
+import ListOrdered from '~icons/lucide/list-ordered'
 import MoreHorizontal from '~icons/lucide/more-horizontal'
 import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
@@ -47,6 +50,7 @@ import {
   listBanks,
   type CheckoffExperiment,
   type CheckoffQuestion,
+  type CheckoffQueueEntry,
   type CheckoffRecord,
   type CheckoffStudent,
   type ClassSettings,
@@ -60,6 +64,7 @@ import {
   clearCheckoffPresence,
   notifyCheckoffStarted,
   useCheckoffMaster,
+  useCheckoffQueue,
   useCheckoffWatch,
   type CheckoffMeta,
   type CheckoffStartedEvent,
@@ -160,9 +165,14 @@ export default function Checkoff() {
   const [selectedCustomCard, setSelectedCustomCard] = useState<CustomCard | null>(null)
   const [activeCustomCardSlotId, setActiveCustomCardSlotId] = useState<string | null>(null)
   const [cardRailOpen, setCardRailOpen] = useState(false)
+  // 答题计时：选中学生时置为 Date.now()，换实验 / 保存后清零
+  const [answerStartedAt, setAnswerStartedAt] = useState<number | null>(null)
+  // 排队面板点击某条后，把该学生学号预填进「定位学生」的搜索框
+  const [finderPresetQuery, setFinderPresetQuery] = useState('')
 
   const prefsState = useOverlayState()
   const presenceState = useOverlayState()
+  const queueState = useOverlayState()
   const bankState = useOverlayState()
   const specialDrawState = useOverlayState()
   const customCardState = useOverlayState()
@@ -219,6 +229,27 @@ export default function Checkoff() {
   }, [])
 
   const peers = useCheckoffWatch(classId, handleCheckoffStarted)
+
+  // 排队快照：REST 初始 + checkoff:queue 实时替换
+  const {
+    entries: queueEntries,
+    loading: queueLoading,
+    reload: reloadQueue,
+  } = useCheckoffQueue(classId)
+
+  // 徽标优先显示当前实验的排队人数；未选实验时显示全班人数
+  const queueCount = useMemo(
+    () =>
+      experiment
+        ? queueEntries.filter((entry) => entry.experimentId === experiment.id).length
+        : queueEntries.length,
+    [queueEntries, experiment],
+  )
+
+  const openQueue = useCallback(() => {
+    queueState.open()
+    reloadQueue()
+  }, [queueState, reloadQueue])
 
   const openPresence = useCallback(() => {
     presenceState.open()
@@ -421,6 +452,7 @@ export default function Checkoff() {
     setQuestionIndex(0)
     setSearching(false)
     setStep(1)
+    setAnswerStartedAt(null)
   }, [])
 
   useEffect(() => {
@@ -438,6 +470,7 @@ export default function Checkoff() {
       setQuestionIndex(0)
       setSearching(false)
       setStep(2)
+      setAnswerStartedAt(Date.now())
       if (classId) notifyCheckoffStarted({ classId, studentName: next.name })
     },
     [classId],
@@ -455,13 +488,37 @@ export default function Checkoff() {
     setQuestionIndex(0)
     setSearching(false)
     setStep(1)
+    setAnswerStartedAt(null)
+    setFinderPresetQuery('')
     if (classId) clearCheckoffPresence(classId)
   }, [classId])
+
+  // 排队面板点击某条：先切到对应实验，再把学号预填进「定位学生」搜索框。
+  // 不自动选中学生——助教仍需线下叫人并自行点选，避免误保存。
+  const handlePickQueueEntry = useCallback(
+    (entry: CheckoffQueueEntry) => {
+      queueState.close()
+      if (entry.experimentId !== experiment?.id) {
+        const match = experiments.find((item) => item.id === entry.experimentId)
+        if (match) void selectExperiment(match)
+      } else if (step !== 1) {
+        // 当前已在验收别的学生：回到「定位学生」才能看到预填结果（当前学生未保存的录入会被放弃）
+        setAnswerStartedAt(null)
+        setSearching(false)
+        setStep(1)
+      }
+      setFinderPresetQuery(entry.studentId)
+      toast.success(`已定位到 ${entry.name}`)
+    },
+    [experiment, experiments, queueState, selectExperiment, step],
+  )
 
   const handleStep = useCallback(
     (next: number) => {
       if (questionsError && next === 3) return
       if (next === 1) setSearching(false)
+      // 回到「选择实验 / 定位学生」视为重新选人，答题计时清零
+      if (next <= 1) setAnswerStartedAt(null)
       setStep(next)
     },
     [questionsError],
@@ -627,6 +684,17 @@ export default function Checkoff() {
     <CheckoffLayout
       actions={
         <>
+            <div className="relative">
+              <IconAction label="排队情况" onPress={openQueue}>
+                <ListOrdered width={15} height={15} className="shrink-0" />
+              </IconAction>
+              {queueCount > 0 && (
+                <span className="tabular pointer-events-none absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                  {queueCount > 99 ? '99+' : queueCount}
+                </span>
+              )}
+            </div>
+            {step >= 2 && <CheckoffTimer startedAt={answerStartedAt} />}
             <IconAction label="偏好" onPress={prefsState.open}>
               <Settings2 width={15} height={15} className="shrink-0" />
             </IconAction>
@@ -785,6 +853,7 @@ export default function Checkoff() {
                 experimentId={experiment.id}
                 reloadKey={finderReloadKey}
                 includeQuestions={!bankOverrideId}
+                presetQuery={finderPresetQuery}
                 onSelect={selectStudent}
                 onQuestionsLoaded={(loaded) => {
                   setQuestions(loaded)
@@ -849,6 +918,7 @@ export default function Checkoff() {
                 marks={marks}
                 existingScores={existingScores}
                 ratio={scoreRatio}
+                answerStartedAt={answerStartedAt}
                 onSaved={handleSaved}
               />
             )}
@@ -985,12 +1055,38 @@ export default function Checkoff() {
                           <div className="tabular text-sm font-bold text-fg">{record.score}</div>
                           <div className="text-[11px] text-fg-subtle">
                             {record.graderName ?? '—'} · {formatLocaleDateTime(record.updatedAt)}
+                            {record.durationMs != null &&
+                              ` · 用时 ${formatElapsed(record.durationMs)}`}
                           </div>
                         </div>
                       </div>
                     ))
                   )}
                 </section>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+      <Modal state={queueState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-lg">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <ListOrdered width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>排队情况</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <CheckoffQueuePanel
+                  entries={queueEntries}
+                  loading={queueLoading}
+                  currentExperimentId={experiment?.id ?? null}
+                  onPick={handlePickQueueEntry}
+                  onRefresh={reloadQueue}
+                />
               </Modal.Body>
             </Modal.Dialog>
           </Modal.Container>

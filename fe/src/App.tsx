@@ -49,6 +49,7 @@ const Setup = lazy(() => import('@/pages/Setup'))
 const SpecialDrawEditor = lazy(() => import('@/pages/SpecialDrawEditor'))
 const StudentExperiment = lazy(() => import('@/pages/StudentExperiment'))
 const StudentOverview = lazy(() => import('@/pages/StudentOverview'))
+const StudentQueue = lazy(() => import('@/pages/StudentQueue'))
 const StudentScores = lazy(() => import('@/pages/StudentScores'))
 const StudentSettings = lazy(() => import('@/pages/StudentSettings'))
 const StudentUnlock = lazy(() => import('@/pages/StudentUnlock'))
@@ -83,6 +84,7 @@ export default function App() {
           <Route element={<RequireStudent />}>
             <Route path="/student-console" element={<StudentShell />}>
               <Route index element={<StudentOverview />} />
+              <Route path="queue" element={<StudentQueue />} />
               <Route path="scores" element={<StudentScores />} />
               <Route path="experiments/:id" element={<StudentExperiment />} />
               <Route path="settings" element={<StudentSettings />} />

@@ -2,6 +2,11 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { compareExperimentMark, parseBankQuestions } from '../lib/banks.js'
+import {
+  broadcastCheckoffQueue,
+  loadCheckoffQueue,
+  removeCheckoffQueueEntry,
+} from '../lib/checkoff-queue.js'
 import { myClassIds, requireStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { describeScoreChange, sendPushToUser } from '../lib/push.js'
@@ -19,6 +24,10 @@ const submitSchema = z.object({
       }),
     )
     .max(3),
+  /** 答题用时（毫秒，可选；旧客户端不传也能保存） */
+  durationMs: z.number().int().min(0).max(86_400_000).optional(),
+  /** 开始答题时间（ISO，可选） */
+  startedAt: z.string().datetime().optional(),
 })
 
 export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
@@ -120,6 +129,21 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     return { experiments, students, scores: scores.map(toScoreDto), questions }
   })
 
+  /** 排队快照（助教端排队面板：REST 首次加载 / socket 断线重连兜底） */
+  fastify.get('/queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const query = request.query as { classId?: unknown }
+    const classId = typeof query.classId === 'string' ? query.classId : ''
+
+    const classIds = await myClassIds(request)
+    if (!classId || !classIds.includes(classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+    }
+
+    return { entries: await loadCheckoffQueue(classId), serverTime: Date.now() }
+  })
+
   /** 实验题目列表（含答案） */
   fastify.get('/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!requireStaff(request, reply)) return reply
@@ -198,6 +222,24 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     })
     const expById = new Map(experiments.map((e) => [e.id, e]))
 
+    // 每条记录附「该学生该实验最近一次验收保存的答题用时」
+    const userIds = [...new Set(scores.map((score) => score.userId))]
+    const experimentIds = [...new Set(scores.map((score) => score.indId))]
+    const sessions =
+      userIds.length > 0 && experimentIds.length > 0
+        ? await prisma.checkoffSession.findMany({
+            where: { userId: { in: userIds }, experimentId: { in: experimentIds } },
+            orderBy: { createdAt: 'desc' },
+            select: { userId: true, experimentId: true, durationMs: true },
+          })
+        : []
+    const durationByKey = new Map<string, number>()
+    for (const session of sessions) {
+      const key = `${session.userId}:${session.experimentId}`
+      // 已按 createdAt 倒序：每对 (userId, experimentId) 取第一条即最新
+      if (!durationByKey.has(key)) durationByKey.set(key, session.durationMs)
+    }
+
     const records = scores.map((score) => {
       const experiment = expById.get(score.indId)
       return {
@@ -209,6 +251,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         experimentMark: experiment?.mark ?? '',
         experimentTitle: experiment?.title ?? '',
         graderName: score.grader?.name ?? null,
+        durationMs: durationByKey.get(`${score.userId}:${score.indId}`) ?? null,
         updatedAt: score.updatedAt,
       }
     })
@@ -226,7 +269,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { experimentId, userId, scores } = parsed.data
+    const { experimentId, userId, scores, durationMs, startedAt } = parsed.data
 
     const student = await prisma.user.findFirst({
       where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
@@ -291,6 +334,31 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         events.push({ action: 'upsert', classId, score: toScoreDto(saved) })
       }
     })
+
+    // 本轮是否真的写入了分数（只删除旧分数不算）
+    const scored = scores.some((item) => item.score !== null)
+
+    // 答题用时：仅在写入分数且传了 durationMs 时记录一条验收会话
+    // startedAt 缺失或解析失败则以「保存时刻 - 用时」回推
+    if (scored && durationMs !== undefined) {
+      const parsedStartedAt = startedAt ? new Date(startedAt) : null
+      const validStartedAt =
+        parsedStartedAt && !Number.isNaN(parsedStartedAt.getTime()) ? parsedStartedAt : null
+      await prisma.checkoffSession.create({
+        data: {
+          classId,
+          experimentId,
+          userId,
+          graderId: sub,
+          durationMs,
+          startedAt: validStartedAt ?? new Date(Date.now() - durationMs),
+        },
+      })
+    }
+
+    // 保存验收成绩后自动移出排队（任意助教保存均可触发）；删除成功才广播
+    const removed = await removeCheckoffQueueEntry(experimentId, userId)
+    if (removed > 0) await broadcastCheckoffQueue(classId)
 
     for (const event of events) {
       emitScoreChange(student.classId, event)

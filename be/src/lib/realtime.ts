@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 
+import type { CheckoffQueueEntryDto } from './checkoff-queue.js'
 import { prisma } from './prisma.js'
 import { isStaff } from './roles.js'
 import type { ScoreDto } from './score.js'
@@ -637,6 +638,11 @@ export function createRealtime(fastify: FastifyInstance): Server {
 /** 向指定班级广播成绩变更 */
 export function emitScoreChange(classId: string, payload: ScoreChangeEvent): void {
   io?.to(roomName(classId)).emit('score:change', payload)
+}
+
+/** 向班级验收房间广播完整排队快照（仅打开验收页 / 加入验收房间的 staff 收到） */
+export function emitCheckoffQueue(classId: string, entries: CheckoffQueueEntryDto[]): void {
+  io?.to(watchRoom(classId)).emit('checkoff:queue', { classId, entries, at: Date.now() })
 }
 
 /** 报告成绩保存/删除事件（按实验广播：左侧列表刷新 + 同人「同步」提示） */

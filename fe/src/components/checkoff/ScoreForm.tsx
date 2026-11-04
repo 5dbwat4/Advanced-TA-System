@@ -6,6 +6,7 @@ import Check from '~icons/lucide/check'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Info from '~icons/lucide/info'
 import MessageCircleQuestion from '~icons/lucide/message-circle-question'
+import { CheckoffTimer, formatElapsed } from '@/components/checkoff/CheckoffTimer'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { AvatarImage } from '@/components/ui/AvatarImage'
@@ -34,6 +35,7 @@ export function ScoreForm({
   marks,
   existingScores,
   ratio,
+  answerStartedAt,
   onSaved,
 }: {
   experimentId: string
@@ -41,6 +43,8 @@ export function ScoreForm({
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
   ratio: number[]
+  /** 选中学生时的时间戳（答题计时起点）；null 表示不计时 */
+  answerStartedAt: number | null
   onSaved: () => void
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
@@ -71,17 +75,26 @@ export function ScoreForm({
 
   const save = useCallback(async () => {
     const scores = SCORED_TYPES.map((type) => ({ type: type.value, score: values[type.value] }))
+    // 计时从「定位学生」选中该学生开始；未计时时两个字段都不传（兼容旧行为）
+    const durationMs = answerStartedAt != null ? Date.now() - answerStartedAt : undefined
     setSaving(true)
     try {
-      await submitCheckoff({ experimentId, userId: student.userId, scores })
-      toast.success(`已保存 · ${student.name}`)
+      await submitCheckoff({
+        experimentId,
+        userId: student.userId,
+        scores,
+        durationMs,
+        startedAt: answerStartedAt != null ? new Date(answerStartedAt).toISOString() : undefined,
+      })
+      const durationLabel = durationMs != null ? ` · 用时 ${formatElapsed(durationMs)}` : ''
+      toast.success(`已保存 · ${student.name}${durationLabel}`)
       onSaved()
     } catch (error) {
       toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
-  }, [values, experimentId, student, onSaved])
+  }, [values, experimentId, student, answerStartedAt, onSaved])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -106,7 +119,8 @@ export function ScoreForm({
           <span className="font-semibold text-fg">{student.name}</span>
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
-        <span className="text-xs text-fg-subtle">默认 100，可按需下调</span>
+        <span className="hidden text-xs text-fg-subtle sm:inline">默认 100，可按需下调</span>
+        <CheckoffTimer startedAt={answerStartedAt} compact />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">

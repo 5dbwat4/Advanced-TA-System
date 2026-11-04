@@ -73,6 +73,7 @@
 | 个人设置 | `/console/settings` |
 | 学生端概览 | `/student-console` |
 | 学生端成绩 | `/student-console/scores` |
+| 学生排队验收 | `/student-console/queue` |
 | 验收从机 | `/checkin` |
 
 ## 12.5 常见问题

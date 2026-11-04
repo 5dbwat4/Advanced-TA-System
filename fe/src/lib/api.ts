@@ -728,6 +728,52 @@ export function fetchStudentExperiment(id: string): Promise<StudentPreviewData> 
   return apiFetch<StudentPreviewData>(`/api/student/experiments/${encodeURIComponent(id)}`)
 }
 
+/** 学生端排队验收：当前开放验收的实验 + 我的排队状态 */
+export type StudentQueueExperiment = {
+  id: string
+  mark: string
+  title: string
+  publishTime: string | null
+  checkoffDeadline: string | null
+  /** 该实验当前排队人数（含自己） */
+  queueLength: number
+  /** 是否已有验收成绩（功能测试 / 验收问答任一） */
+  checkedOff: boolean
+  myEntry: {
+    id: string
+    joinedAt: string
+    /** 1-based 位次 */
+    position: number
+    /** 前面还有几人 */
+    ahead: number
+  } | null
+}
+
+export function fetchStudentCheckoffQueue(): Promise<{
+  serverTime: string
+  experiments: StudentQueueExperiment[]
+}> {
+  return apiFetch<{ serverTime: string; experiments: StudentQueueExperiment[] }>(
+    '/api/student/checkoff-queue',
+  )
+}
+
+/** 学生加入某实验的排队（幂等：已排队时保持原加入时间） */
+export function joinStudentCheckoffQueue(experimentId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/student/checkoff-queue', {
+    method: 'POST',
+    body: JSON.stringify({ experimentId }),
+  })
+}
+
+/** 学生取消本人的排队 */
+export function cancelStudentCheckoffQueue(experimentId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(
+    `/api/student/checkoff-queue/${encodeURIComponent(experimentId)}`,
+    { method: 'DELETE' },
+  )
+}
+
 export function unlockStudent(body: {
   username: string
   password?: string
@@ -945,6 +991,10 @@ export function submitCheckoff(body: {
   experimentId: string
   userId: string
   scores: { type: number; score: number | null }[]
+  /** 答题用时（毫秒）：从选中学生开始计时；旧客户端可不传 */
+  durationMs?: number
+  /** 开始答题时间（ISO）；不传时服务端按 durationMs 倒推 */
+  startedAt?: string
 }): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>('/api/checkoff', {
     method: 'POST',
@@ -962,6 +1012,31 @@ export type CheckoffRecord = {
   experimentTitle: string
   graderName: string | null
   updatedAt: string
+  /** 该次验收的答题用时（毫秒）；无记录时为 null */
+  durationMs: number | null
+}
+
+/** 排队条目（助教端排队面板使用；队列按实验、全班共享） */
+export type CheckoffQueueEntry = {
+  id: string
+  userId: string
+  name: string
+  studentId: string
+  avatar: number | null
+  experimentId: string
+  experimentMark: string
+  experimentTitle: string
+  /** ISO 字符串 */
+  joinedAt: string
+}
+
+/** 本班全部排队条目（按加入时间升序） */
+export function fetchCheckoffQueue(
+  classId: string,
+): Promise<{ entries: CheckoffQueueEntry[] }> {
+  return apiFetch<{ entries: CheckoffQueueEntry[] }>(
+    `/api/checkoff/queue?classId=${encodeURIComponent(classId)}`,
+  )
 }
 
 /** 最近验收提交的成绩（本班，最多 10 条） */
