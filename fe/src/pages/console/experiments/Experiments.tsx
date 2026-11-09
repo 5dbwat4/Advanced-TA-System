@@ -1,7 +1,7 @@
 import { Button, Input } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -10,6 +10,7 @@ import FlaskConical from '~icons/lucide/flask-conical'
 import GraduationCap from '~icons/lucide/graduation-cap'
 import Plus from '~icons/lucide/plus'
 import X from '~icons/lucide/x'
+import { ExperimentGantt } from '@/components/experiments/ExperimentGantt'
 import { ExperimentStatusChip } from '@/components/experiments/ExperimentTimeline'
 import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
@@ -22,6 +23,7 @@ import { useCurrentClass } from '@/lib/store'
 
 export default function Experiments() {
   const currentClass = useCurrentClass()
+  const navigate = useNavigate()
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -113,6 +115,17 @@ export default function Experiments() {
           </Button>
         }
       />
+
+      {!loading && visible.length > 0 && (
+        <div className="mb-6">
+          <ExperimentGantt
+            experiments={visible}
+            showBuffer
+            clickable
+            onSelect={(id) => navigate(`/console/experiments/${id}`)}
+          />
+        </div>
+      )}
 
       <AnimatePresence>
         {creating && (

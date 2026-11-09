@@ -556,7 +556,6 @@ export default function Scores() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <span className="text-sm font-semibold text-fg">{currentClass.name}</span>
             <span className="tabular text-xs text-fg-subtle">{visibleStudents.length} 人</span>
             <span className="text-xs text-fg-subtle">
               {currentClass.lastRosterSyncAt

@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 
+import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { prisma } from '../lib/prisma.js'
 import { buildStudentReport } from '../lib/student-report.js'
 import type { StudentViewPayload } from '../lib/student-view.js'
 
@@ -33,4 +35,41 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
 
     return report
   })
+
+  /** 助教 / 观察者查看某学生在某实验下的成绩详情（只读） */
+  fastify.get(
+    '/experiment',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const { role } = request.user as { role?: string }
+      if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
+
+      const { userId, experimentId } = request.query as {
+        userId?: string
+        experimentId?: string
+      }
+      if (!userId || !experimentId) {
+        return reply.code(400).send({ error: 'INVALID_QUERY', message: '缺少用户或实验参数' })
+      }
+
+      const experiment = await prisma.experiment.findUnique({
+        where: { id: experimentId },
+        select: { classId: true },
+      })
+      if (!experiment) {
+        return reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
+      }
+
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(experiment.classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级的实验' })
+      }
+
+      const report = await buildStudentReport(userId, experimentId)
+      if (!report) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: '未能找到该学生的实验成绩' })
+      }
+      return reply.send(report)
+    },
+  )
 }

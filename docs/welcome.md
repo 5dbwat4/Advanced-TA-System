@@ -1,4 +1,6 @@
-# Advanced TA System
+---
+title: Advanced TA System
+---
 
 这个项目主要目的是优化【计算机系统贯通实验】中的验收、报告批改体验（考虑到学在浙大体验确实不怎么样）。
 

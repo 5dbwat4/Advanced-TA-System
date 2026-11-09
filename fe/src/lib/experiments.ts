@@ -1,5 +1,16 @@
 import type { Experiment } from '@/lib/api'
 
+/** 甘特图所需的实验字段（学生总评可选） */
+export type ExperimentGanttItem = {
+  id: string
+  mark: string
+  title: string
+  publishTime: string | null
+  checkoffDeadline: string | null
+  reportDeadline: string | null
+  total?: number | null
+}
+
 /** 截止后的缓冲展示期（天） */
 export const TIMELINE_BUFFER_DAYS = 5
 

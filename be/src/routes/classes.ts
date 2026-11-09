@@ -531,9 +531,10 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     },
   )
 
-  /** 读取课程设置 */
+  /** 读取课程设置（观察者只读可见） */
   fastify.get('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+    const { role } = request.user as { role?: string }
+    if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
 
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
@@ -699,12 +700,13 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
     },
   )
 
-  /** 重点关注学生名单 */
+  /** 重点关注学生名单（观察者只读可见） */
   fastify.get(
     '/:id/focus-students',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
+      const { role } = request.user as { role?: string }
+      if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
 
       const parsed = classParamsSchema.safeParse(request.params)
       if (!parsed.success) {

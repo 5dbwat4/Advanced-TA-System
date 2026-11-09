@@ -96,6 +96,8 @@ export type User = {
   zjuamAccount: string | null
   hasZjuamPassword: boolean
   preferences: UserPreferences | null
+  /** 观察者账号：nav 是否展示「重点关注对象列表」 */
+  viewerFocusNavVisible: boolean
 }
 
 export type Experiment = {
@@ -746,6 +748,16 @@ export function fetchStudentPreview(token: string): Promise<StudentPreviewData> 
   )
 }
 
+/** 助教 / 观察者查看某学生在某实验下的成绩详情 */
+export function fetchStudentExperimentReport(
+  userId: string,
+  experimentId: string,
+): Promise<StudentPreviewData> {
+  return apiFetch<StudentPreviewData>(
+    `/api/student-preview/experiment?userId=${encodeURIComponent(userId)}&experimentId=${encodeURIComponent(experimentId)}`,
+  )
+}
+
 export type StudentOverviewExperiment = {
   id: string
   mark: string
@@ -888,6 +900,16 @@ export function updateClassSettings(
 ): Promise<{ settings: ClassSettings }> {
   return apiFetch<{ settings: ClassSettings }>(`/api/classes/${classId}/settings`, {
     method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 观察者可修改的课程设置（目前仅 nav 展示开关） */
+export function updateViewerPreferences(body: {
+  focusNavVisible: boolean
+}): Promise<{ user: User }> {
+  return apiFetch<{ user: User }>('/api/settings/viewer-preferences', {
+    method: 'PUT',
     body: JSON.stringify(body),
   })
 }

@@ -1,4 +1,4 @@
-import { Button, Spinner } from '@heroui/react'
+import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -7,6 +7,7 @@ import AlertTriangle from '~icons/lucide/alert-triangle'
 import ArrowLeft from '~icons/lucide/arrow-left'
 import Award from '~icons/lucide/award'
 import CheckCircle2 from '~icons/lucide/check-circle-2'
+import ChevronRight from '~icons/lucide/chevron-right'
 import Minus from '~icons/lucide/minus'
 import Sparkles from '~icons/lucide/sparkles'
 import Target from '~icons/lucide/target'
@@ -20,6 +21,7 @@ import {
   generateLearningReport,
   type LearningReport,
 } from '@/lib/ai-learning-report'
+import { fetchStudentExperimentReport, type StudentPreviewData } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
@@ -27,6 +29,7 @@ import { SCORE_TYPES } from '@/lib/scores'
 import { loadStudentCases, type StudentCaseSet } from '@/lib/student-cases'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { StudentPreviewContent } from '@/pages/student/StudentPreviewView'
 
 const TREND_META = {
   up: {
@@ -74,13 +77,14 @@ function readCachedReport(userId: string): { report: LearningReport; savedAt: nu
   }
 }
 
-export default function StudentReport() {
+export default function StudentReport({ readonly = false }: { readonly?: boolean }) {
   const { userId } = useParams<{ userId: string }>()
   const currentClass = useCurrentClass()
   const classId = currentClass?.id ?? null
   const navigate = useNavigate()
   const { user } = useAuth()
   const aiConfig = useAiConfig(user?.id)
+  const backPath = readonly ? '/viewer/scores' : '/console/scores'
 
   const [data, setData] = useState<StudentCaseSet | null>(null)
   const [loading, setLoading] = useState(true)
@@ -88,6 +92,20 @@ export default function StudentReport() {
   const [report, setReport] = useState<LearningReport | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [generating, setGenerating] = useState(false)
+
+  const previewState = useOverlayState({
+    onOpenChange: (open) => {
+      if (!open) {
+        setPreviewExperimentId(null)
+        setPreviewData(null)
+        setPreviewError(null)
+      }
+    },
+  })
+  const [previewExperimentId, setPreviewExperimentId] = useState<string | null>(null)
+  const [previewData, setPreviewData] = useState<StudentPreviewData | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   useEffect(() => {
     if (!classId || !userId) return
@@ -146,6 +164,23 @@ export default function StudentReport() {
     }
   }
 
+  const openPreview = async (experimentId: string) => {
+    if (!userId) return
+    setPreviewExperimentId(experimentId)
+    setPreviewData(null)
+    setPreviewError(null)
+    setPreviewLoading(true)
+    previewState.open()
+    try {
+      const result = await fetchStudentExperimentReport(userId, experimentId)
+      setPreviewData(result)
+    } catch (err) {
+      setPreviewError(getErrorMessage(err, '加载实验详情失败'))
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center gap-2 text-xs text-fg-subtle">
@@ -158,9 +193,9 @@ export default function StudentReport() {
   if (error || !data) {
     return (
       <div className="mx-auto max-w-4xl">
-        <Button variant="ghost" size="sm" className="mb-3" onPress={() => navigate('/console/scores')}>
+        <Button variant="ghost" size="sm" className="mb-3" onPress={() => navigate(backPath)}>
           <ArrowLeft width={15} height={15} className="shrink-0" />
-          返回分数和名单
+          {readonly ? '返回分数列表' : '返回分数和名单'}
         </Button>
         <div className="rounded-2xl border border-dashed border-danger/40 p-10 text-center text-sm text-danger">
           {error ?? '未找到该学生'}
@@ -169,11 +204,18 @@ export default function StudentReport() {
     )
   }
 
+  const previewExperiment = previewExperimentId
+    ? (data.cases.find((item) => item.experiment.id === previewExperimentId)?.experiment ?? null)
+    : null
+  const previewTitle = previewExperiment
+    ? `${previewExperiment.mark} · ${previewExperiment.title}`
+    : '实验详情'
+
   return (
     <div className="mx-auto max-w-4xl">
-      <Button variant="ghost" size="sm" className="mb-3" onPress={() => navigate('/console/scores')}>
+      <Button variant="ghost" size="sm" className="mb-3" onPress={() => navigate(backPath)}>
         <ArrowLeft width={15} height={15} className="shrink-0" />
-        返回分数和名单
+        {readonly ? '返回分数列表' : '返回分数和名单'}
       </Button>
       <PageHeader title={`${data.student.name} · 学情报告`} />
 
@@ -196,7 +238,7 @@ export default function StudentReport() {
               {reportAverage ?? '—'}
             </div>
           </div>
-          {AI_ENABLED && (
+          {AI_ENABLED && !readonly && (
             <PendingButton
               isPending={generating}
               onPress={() => void generate()}
@@ -216,100 +258,44 @@ export default function StudentReport() {
           ) : (
             data.cases.map((item) => {
               const reportScore = item.scores.find((score) => score.type === 2)?.score ?? null
-              const deductions = item.report?.groups.flatMap((group) =>
-                group.kind === 'card'
-                  ? [{ rule: group.card.rule, detail: group.card.detail, score: group.card.score, appendix: group.card.appendix, section: '' }]
-                  : group.cards.map((card) => ({
-                      rule: card.rule,
-                      detail: card.detail,
-                      score: card.score,
-                      appendix: card.appendix,
-                      section: group.title,
-                    })),
-              ) ?? []
               return (
-                <div
+                <button
                   key={item.experiment.id}
-                  className="rounded-2xl border border-line bg-elevated p-4"
+                  type="button"
+                  onClick={() => void openPreview(item.experiment.id)}
+                  className="flex w-full flex-wrap items-center gap-3 rounded-2xl border border-line bg-elevated p-4 text-left transition-colors hover:border-brand-500/40 hover:bg-sunken/40"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-md bg-sunken px-2 py-0.5 text-[11px] font-semibold text-fg-muted">
-                      {item.experiment.mark}
-                    </span>
-                    <span className="text-sm font-bold">{item.experiment.title}</span>
-                    <div className="ms-auto flex flex-wrap items-center gap-1.5">
-                      {SCORE_TYPES.map((type) => {
-                        const score = item.scores.find((entry) => entry.type === type.value)
-                        return (
-                          <span
-                            key={type.value}
-                            className={cn(
-                              'tabular rounded-md px-2 py-0.5 text-[11px] font-semibold',
-                              score
-                                ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
-                                : 'bg-sunken text-fg-subtle',
-                            )}
-                          >
-                            {type.label} {score?.score ?? '—'}
-                          </span>
-                        )
-                      })}
-                      {reportScore == null && (
-                        <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
-                          未评报告
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {deductions.length > 0 && (
-                    <div className="mt-3 flex flex-col gap-1.5">
-                      <div className="text-[11px] font-semibold text-fg-subtle">扣分项</div>
-                      {deductions.map((deduction, index) => (
-                        <div
-                          key={`${deduction.rule}-${index}`}
-                          className="rounded-xl border border-line bg-sunken px-3 py-2 text-xs"
-                        >
-                          <span className="font-semibold text-fg">
-                            {deduction.section ? `${deduction.section} · ` : ''}
-                            {deduction.rule || deduction.detail}
-                          </span>
-                          <span className="tabular ms-2 font-semibold text-danger">
-                            -{Math.abs(deduction.score)}
-                          </span>
-                          {deduction.appendix && (
-                            <div className="mt-1 text-[11px] text-fg-muted">{deduction.appendix}</div>
+                  <span className="rounded-md bg-sunken px-2 py-0.5 text-[11px] font-semibold text-fg-muted">
+                    {item.experiment.mark}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold">
+                    {item.experiment.title}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {SCORE_TYPES.map((type) => {
+                      const score = item.scores.find((entry) => entry.type === type.value)
+                      return (
+                        <span
+                          key={type.value}
+                          className={cn(
+                            'tabular rounded-md px-2 py-0.5 text-[11px] font-semibold',
+                            score
+                              ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
+                              : 'bg-sunken text-fg-subtle',
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {(item.reportRemark?.text || item.checkoffRemark?.text) && (
-                    <div className="mt-3 flex flex-col gap-2 text-xs">
-                      {item.reportRemark?.text && (
-                        <div className="rounded-xl border border-line bg-sunken px-3 py-2">
-                          <div className="mb-0.5 text-[11px] font-semibold text-fg-subtle">
-                            报告评语
-                          </div>
-                          <div className="whitespace-pre-wrap text-fg-muted">
-                            {item.reportRemark.text}
-                          </div>
-                        </div>
-                      )}
-                      {item.checkoffRemark?.text && (
-                        <div className="rounded-xl border border-line bg-sunken px-3 py-2">
-                          <div className="mb-0.5 text-[11px] font-semibold text-fg-subtle">
-                            验收评语
-                          </div>
-                          <div className="whitespace-pre-wrap text-fg-muted">
-                            {item.checkoffRemark.text}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        >
+                          {type.label} {score?.score ?? '—'}
+                        </span>
+                      )
+                    })}
+                    {reportScore == null && (
+                      <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
+                        未评报告
+                      </span>
+                    )}
+                  </div>
+                  <ChevronRight width={16} height={16} className="shrink-0 text-fg-subtle" />
+                </button>
               )
             })
           )}
@@ -424,7 +410,7 @@ export default function StudentReport() {
               {report.closing}
             </p>
           </section>
-        ) : AI_ENABLED ? (
+        ) : AI_ENABLED && !readonly ? (
           <div className="rounded-2xl border border-dashed border-line p-10 text-center">
             <Sparkles width={22} height={22} className="mx-auto shrink-0 text-fg-subtle" />
             <div className="mt-2 text-sm font-semibold">还没有学情报告</div>
@@ -434,6 +420,32 @@ export default function StudentReport() {
           </div>
         ) : null}
       </div>
+
+      <Modal state={previewState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-3xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{previewTitle}</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="max-h-[72vh] overflow-y-auto">
+                {previewLoading ? (
+                  <div className="flex justify-center py-12">
+                    <Spinner size="lg" />
+                  </div>
+                ) : previewError ? (
+                  <div className="rounded-2xl border border-dashed border-danger/40 p-8 text-center text-sm text-danger">
+                    {previewError}
+                  </div>
+                ) : previewData ? (
+                  <StudentPreviewContent data={previewData} />
+                ) : null}
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   )
 }

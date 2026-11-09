@@ -17,9 +17,10 @@ const saveSchema = z.object({
 })
 
 export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 读取某学生某实验的报告批阅记录 */
+  /** 读取某学生某实验的报告批阅记录（观察者只读可见） */
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+    const { role } = request.user as { role?: string }
+    if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
 
     const parsed = listQuerySchema.safeParse(request.query)
     if (!parsed.success) {

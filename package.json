@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "dev": "concurrently -n be,fe -c blue,magenta \"pnpm dev:be\" \"pnpm dev:v2\"",
+    "dev": "concurrently -n be,fe -c blue,magenta \"pnpm dev:be\" \"pnpm dev:fe\"",
     "dev:be": "pnpm --filter be dev",
     "dev:fe": "pnpm --filter fe dev",
     "dev:v2": "pnpm --filter fe-v2 dev",

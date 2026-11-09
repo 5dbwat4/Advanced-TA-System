@@ -346,7 +346,7 @@ export default function ScoreEntry() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="录入分数"
-        subtitle={currentClass ? `${currentClass.name} · 独立计分项目` : undefined}
+        subtitle="独立计分项目"
         actions={
           <>
             <Select

@@ -19,9 +19,10 @@ const saveSchema = z.object({
 })
 
 export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 读取某学生某实验某类型的备注 */
+  /** 读取某学生某实验某类型的备注（观察者只读可见） */
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+    const { role } = request.user as { role?: string }
+    if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
 
     const parsed = querySchema.safeParse(request.query)
     if (!parsed.success) {
@@ -40,12 +41,13 @@ export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ remark: toRemarkDto(remark) })
   })
 
-  /** 读取某实验下所有学生的附言（含全部类型），供「查看评语」页批量展示 */
+  /** 读取某实验下所有学生的附言（含全部类型），供「查看评语」页批量展示（观察者只读可见） */
   fastify.get(
     '/experiment/:experimentId',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
+      const { role } = request.user as { role?: string }
+      if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
 
       const { experimentId } = request.params as { experimentId: string }
       const experiment = await prisma.experiment.findUnique({

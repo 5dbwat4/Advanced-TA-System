@@ -182,6 +182,17 @@ export function parsePreferences(raw: string | null | undefined): UserPreference
   }
 }
 
+/** 观察者 nav 是否展示「重点关注对象列表」 */
+function readViewerFocusNavVisible(raw: string | null | undefined): boolean {
+  if (!raw) return false
+  try {
+    const value = JSON.parse(raw) as { viewerFocusNavVisible?: unknown }
+    return value?.viewerFocusNavVisible === true
+  } catch {
+    return false
+  }
+}
+
 /** 对外暴露的安全用户信息（不含密码 / 凭据） */
 export function publicUser(user: User & { klass?: Class | null }) {
   const credentials = parseCredentials(user)
@@ -208,6 +219,7 @@ export function publicUser(user: User & { klass?: Class | null }) {
     status: user.status,
     hasPassword: Boolean(user.password),
     preferences: parsePreferences(user.preferences),
+    viewerFocusNavVisible: readViewerFocusNavVisible(user.preferences),
     zjuamAccount: user.zjuamAccount,
     hasZjuamPassword: Boolean(user.zjuamPassword),
     hasWebauthn: credentials.length > 0,

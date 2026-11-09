@@ -5,7 +5,7 @@ export function studentHomePath(user: Pick<User, 'role' | 'username'>): string {
   return user.username ? '/student-console' : '/setup'
 }
 
-/** 观察者登录后的落点：独立面板尚未开放，先进入占位页 */
+/** 观察者登录后的落点：只读面板 */
 export function viewerHomePath(): string {
   return '/viewer'
 }

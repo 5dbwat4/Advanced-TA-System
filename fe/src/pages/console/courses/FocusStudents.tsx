@@ -16,9 +16,11 @@ import {
   type Key,
 } from '@heroui/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
+import Download from '~icons/lucide/download'
 import FlipHorizontal2 from '~icons/lucide/flip-horizontal-2'
 import Import from '~icons/lucide/import'
 import Pen from '~icons/lucide/pen'
@@ -42,6 +44,7 @@ import {
   updateFocusStudent,
   type FocusStudent,
 } from '@/lib/api'
+import { downloadMarkdown } from '@/lib/download'
 import { getErrorMessage } from '@/lib/error'
 import { matchStudent } from '@/lib/pinyin'
 import { useAsyncData } from '@/lib/request'
@@ -65,6 +68,23 @@ function focusStatus(): FocusStatus {
 }
 
 type DeleteTarget = { kind: 'single'; target: FocusStudent } | { kind: 'bulk' }
+
+type ExportFormat = 'xlsx' | 'markdown'
+
+type ExcelJSModule = typeof import('exceljs')
+
+async function loadExcelJS(): Promise<ExcelJSModule> {
+  const mod = (await import('exceljs')) as unknown as { default?: ExcelJSModule } & ExcelJSModule
+  return mod.default ?? mod
+}
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[\\/:*?"<>|]/g, '_')
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
+}
 
 const TH = 'border-b border-r border-line bg-elevated px-4 py-2'
 const TH_LEFT = `${TH} text-left font-semibold`
@@ -304,6 +324,115 @@ export default function FocusStudents() {
   const hasActions = tab === 'actions' || tab === 'all'
   const constantRowSpan = hasScoreCols ? 2 : 1
 
+  // 导出弹窗
+  const exportState = useOverlayState({
+    onOpenChange: (open) => {
+      if (open) setExportFormat('xlsx')
+    },
+  })
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('xlsx')
+  const [exporting, setExporting] = useState(false)
+
+  const exportColumns = useMemo(() => {
+    const columns = ['姓名', '学号', '重点关注原因', '当前状态']
+    if (hasScoreCols) {
+      for (const experiment of classExperiments) {
+        for (const type of SCORE_TYPES) {
+          columns.push(`${experiment.mark} · ${experiment.title} ${type.label}`)
+        }
+      }
+    }
+    return columns
+  }, [hasScoreCols, classExperiments])
+
+  const exportRows = useMemo(() => {
+    return rows.map((item) => {
+      const status = focusStatus()
+      const base = [
+        item.student?.name ?? '',
+        item.student?.studentId ?? '',
+        item.reason ?? '',
+        status.label,
+      ]
+      if (!hasScoreCols) return base
+      const scoreCells = classExperiments.flatMap((experiment) =>
+        SCORE_TYPES.map((type) => {
+          const value = scores.get(scoreKey(item.userId, type.value, experiment.id))
+          return value == null ? '' : String(value)
+        }),
+      )
+      return [...base, ...scoreCells]
+    })
+  }, [rows, hasScoreCols, classExperiments, scores])
+
+  const exportBaseName = `${sanitizeFilename(currentClass?.name ?? '课程')}-重点关注学生`
+
+  const buildMarkdown = () => {
+    const header = `| ${exportColumns.map(markdownCell).join(' | ')} |`
+    const separator = `| ${exportColumns.map(() => '---').join(' | ')} |`
+    const body = exportRows.map(
+      (row) => `| ${row.map((cell) => markdownCell(cell)).join(' | ')} |`,
+    )
+    const lines = [...body]
+    if (lines.length === 0) lines.push(`| ${exportColumns.map(() => '—').join(' | ')} |`)
+    return [
+      `# ${currentClass?.name ?? '课程'} · 重点关注学生名单`,
+      '',
+      header,
+      separator,
+      ...lines,
+      '',
+    ].join('\n')
+  }
+
+  const exportXlsx = async () => {
+    const ExcelJS = await loadExcelJS()
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('重点关注学生')
+    const header = sheet.addRow(exportColumns)
+    header.font = { bold: true }
+    for (const row of exportRows) sheet.addRow(row)
+    exportColumns.forEach((name, index) => {
+      const contentWidth = Math.max(
+        ...exportRows.map((row) => [...(row[index] ?? '')].length),
+        [...name].length,
+      )
+      sheet.getColumn(index + 1).width = Math.min(Math.max(contentWidth + 4, 12), 48)
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${exportBaseName}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const runExport = async () => {
+    if (exportRows.length === 0) {
+      toast.error('暂无可导出的重点关注学生')
+      return
+    }
+    setExporting(true)
+    try {
+      if (exportFormat === 'markdown') {
+        downloadMarkdown(`${exportBaseName}.md`, buildMarkdown())
+      } else {
+        await exportXlsx()
+      }
+      toast.success(exportFormat === 'xlsx' ? '已导出为 xlsx' : '已导出为 Markdown')
+      exportState.close()
+    } catch (error) {
+      toast.error(getErrorMessage(error, '导出失败'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const searchBox = (
     <SearchInput
       value={query}
@@ -380,6 +509,10 @@ export default function FocusStudents() {
                   >
                     <Import width={15} height={15} className="shrink-0" />
                   </IconAction>
+                  <Button size="sm" variant="secondary" onPress={exportState.open}>
+                    <Download width={15} height={15} className="shrink-0" />
+                    导出
+                  </Button>
                   <Button size="sm" variant="primary" onPress={addState.open}>
                     <Plus width={15} height={15} className="shrink-0" />
                     添加
@@ -535,7 +668,13 @@ export default function FocusStudents() {
                               editing ? 'left-12' : 'left-0',
                             )}
                           >
-                            <div className="font-bold">{name}</div>
+                            <Link
+                              to={`/console/scores/students/${item.userId}`}
+                              className="block font-bold transition-colors hover:text-brand-600 dark:hover:text-brand-300"
+                              title="查看学情报告"
+                            >
+                              {name}
+                            </Link>
                           </td>
                           <td className="tabular border-b border-r border-line px-4 py-2 text-fg-muted">
                             {studentId || '—'}
@@ -745,6 +884,57 @@ export default function FocusStudents() {
                   onPress={() => void submitAdd()}
                 >
                   添加
+                </PendingButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal state={exportState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <Download width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>导出重点关注学生</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <div className="text-xs font-semibold text-fg-muted">导出为……格式</div>
+                  <ToggleButtonGroup
+                    selectionMode="single"
+                    disallowEmptySelection
+                    size="sm"
+                    selectedKeys={new Set([exportFormat])}
+                    onSelectionChange={(keys) => {
+                      const first = keys.values().next().value
+                      if (first != null) setExportFormat(String(first) as ExportFormat)
+                    }}
+                  >
+                    <ToggleButton id="xlsx">xlsx</ToggleButton>
+                    <ToggleButton id="markdown">
+                      <ToggleButtonGroup.Separator />
+                      Markdown
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  取消
+                </Button>
+                <PendingButton
+                  variant="primary"
+                  icon={Download}
+                  pendingLabel="导出中"
+                  isPending={exporting}
+                  onPress={() => void runExport()}
+                >
+                  导出
                 </PendingButton>
               </Modal.Footer>
             </Modal.Dialog>

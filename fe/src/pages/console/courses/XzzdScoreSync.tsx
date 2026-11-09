@@ -266,12 +266,7 @@ export default function XzzdScoreSync() {
         返回课程设置
       </Link>
 
-      <PageHeader
-        title="从学在浙大同步成绩"
-        actions={
-          currentClass && <span className="text-xs text-fg-subtle">{currentClass.name}</span>
-        }
-      />
+      <PageHeader title="从学在浙大同步成绩" />
 
       <Alert className="mb-4" status="accent">
         <Alert.Indicator />

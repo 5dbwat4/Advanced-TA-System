@@ -158,4 +158,44 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     })
     return reply.send({ user: publicUser(updated) })
   })
+
+  const viewerPreferencesSchema = z.object({
+    focusNavVisible: z.boolean(),
+  })
+
+  /** 更新观察者专属偏好（nav 展示开关，随账号存储） */
+  fastify.put(
+    '/viewer-preferences',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      const parsed = viewerPreferencesSchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const { sub } = request.user as { sub: string }
+      const current = await prisma.user.findUnique({
+        where: { id: sub },
+        select: { preferences: true },
+      })
+      const raw: Record<string, unknown> = {}
+      if (current?.preferences) {
+        try {
+          const value = JSON.parse(current.preferences)
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            Object.assign(raw, value as Record<string, unknown>)
+          }
+        } catch {
+          // 忽略损坏的旧偏好
+        }
+      }
+      raw.viewerFocusNavVisible = parsed.data.focusNavVisible
+      const updated = await prisma.user.update({
+        where: { id: sub },
+        data: { preferences: JSON.stringify(raw) },
+        include: { klass: true },
+      })
+      return reply.send({ user: publicUser(updated) })
+    },
+  )
 }

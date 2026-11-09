@@ -13,6 +13,7 @@ import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   apiFetch,
   fetchCheckoff,
+  fetchClassTables,
   fetchExperimentRemarks,
   REMARK_TYPE_CHECKOFF,
   REMARK_TYPE_REPORT,
@@ -91,8 +92,17 @@ function RemarkCell({
   )
 }
 
+/** 只读评语展示 */
+function RemarkText({ text }: { text: string }) {
+  return (
+    <div className="min-h-[2.5rem] whitespace-pre-wrap break-words text-sm text-fg-muted">
+      {text || <span className="text-fg-subtle">—</span>}
+    </div>
+  )
+}
+
 /** 某实验全部学生的两种评语：批量展示 + 可就地修改。 */
-export default function ExperimentRemarks() {
+export default function ExperimentRemarks({ readonly = false }: { readonly?: boolean }) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const experimentId = id ?? ''
@@ -110,6 +120,27 @@ export default function ExperimentRemarks() {
         const { experiment: exp } = await apiFetch<{ experiment: Experiment }>(
           `/api/experiments/${experimentId}`,
         )
+        if (readonly) {
+          const [tables, remarkList] = await Promise.all([
+            fetchClassTables(exp.classId),
+            fetchExperimentRemarks(experimentId),
+          ])
+          if (cancelled) return
+          setExperiment(exp)
+          setStudents(
+            tables.students.map((student) => ({
+              userId: student.userId,
+              name: student.name,
+              studentId: student.studentId,
+              avatar: null,
+            })),
+          )
+          setRemarks(
+            new Map(remarkList.map((item) => [remarkKey(item.userId, item.type), item.text])),
+          )
+          return
+        }
+
         const [checkoff, remarkList] = await Promise.all([
           fetchCheckoff({ classId: exp.classId, experimentId }),
           fetchExperimentRemarks(experimentId),
@@ -128,7 +159,7 @@ export default function ExperimentRemarks() {
     return () => {
       cancelled = true
     }
-  }, [experimentId])
+  }, [experimentId, readonly])
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -146,7 +177,15 @@ export default function ExperimentRemarks() {
           <IconAction
             label="返回实验"
             onPress={() =>
-              navigate(experimentId ? `/console/experiments/${experimentId}` : '/console/experiments')
+              navigate(
+                experimentId
+                  ? readonly
+                    ? `/viewer/experiments/${experimentId}`
+                    : `/console/experiments/${experimentId}`
+                  : readonly
+                    ? '/viewer/experiments'
+                    : '/console/experiments',
+              )
             }
           >
             <ArrowLeft width={15} height={15} className="shrink-0" />
@@ -185,12 +224,16 @@ export default function ExperimentRemarks() {
                   </td>
                   {REMARK_COLUMNS.map((col) => (
                     <td key={col.type} className="border-b border-r border-line p-2 last:border-r-0">
-                      <RemarkCell
-                        userId={student.userId}
-                        experimentId={experimentId}
-                        type={col.type}
-                        initial={remarks.get(remarkKey(student.userId, col.type)) ?? ''}
-                      />
+                      {readonly ? (
+                        <RemarkText text={remarks.get(remarkKey(student.userId, col.type)) ?? ''} />
+                      ) : (
+                        <RemarkCell
+                          userId={student.userId}
+                          experimentId={experimentId}
+                          type={col.type}
+                          initial={remarks.get(remarkKey(student.userId, col.type)) ?? ''}
+                        />
+                      )}
                     </td>
                   ))}
                 </tr>

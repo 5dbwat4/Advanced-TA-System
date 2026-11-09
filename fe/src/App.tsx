@@ -11,6 +11,7 @@ import { RequireViewer } from '@/components/auth/RequireViewer'
 import { AppShell } from '@/components/layout/AppShell'
 import { PublicLayout } from '@/components/layout/PublicLayout'
 import { StudentShell } from '@/components/layout/StudentShell'
+import { ViewerShell } from '@/components/layout/ViewerShell'
 
 const AddCourseUser = lazy(() => import('@/pages/console/courses/AddCourseUser'))
 const BankDetail = lazy(() => import('@/pages/console/questions/BankDetail'))
@@ -27,6 +28,9 @@ const CourseSettings = lazy(() => import('@/pages/console/courses/CourseSettings
 const CriteriaManage = lazy(() => import('@/pages/console/reports/CriteriaManage'))
 const CustomCards = lazy(() => import('@/pages/console/checkoff/CustomCards'))
 const Dashboard = lazy(() => import('@/pages/console/Dashboard'))
+const DocArticle = lazy(() => import('@/pages/docs/DocArticle'))
+const DocsIndex = lazy(() => import('@/pages/docs/DocsIndex'))
+const DocsLayout = lazy(() => import('@/pages/docs/DocsLayout'))
 const ExperimentDetail = lazy(() => import('@/pages/console/experiments/ExperimentDetail'))
 const ExperimentRemarks = lazy(() => import('@/pages/console/experiments/ExperimentRemarks'))
 const Experiments = lazy(() => import('@/pages/console/experiments/Experiments'))
@@ -60,7 +64,10 @@ const StudentUnlock = lazy(() => import('@/pages/student/StudentUnlock'))
 const StudentPreviewView = lazy(() => import('@/pages/student/StudentPreviewView'))
 const StudentReport = lazy(() => import('@/pages/console/scores/StudentReport'))
 const Terms = lazy(() => import('@/pages/public/Terms'))
-const ViewerHome = lazy(() => import('@/pages/viewer/ViewerHome'))
+const ViewerCourseSettings = lazy(() => import('@/pages/viewer/ViewerCourseSettings'))
+const ViewerExperiments = lazy(() => import('@/pages/viewer/ViewerExperiments'))
+const ViewerFocusStudents = lazy(() => import('@/pages/viewer/ViewerFocusStudents'))
+const ViewerScores = lazy(() => import('@/pages/viewer/ViewerScores'))
 const XzzdPush = lazy(() => import('@/pages/console/experiments/XzzdPush'))
 const XzzdScoreSync = lazy(() => import('@/pages/console/courses/XzzdScoreSync'))
 
@@ -106,7 +113,17 @@ export default function App() {
             </Route>
           </Route>
           <Route element={<RequireViewer />}>
-            <Route path="/viewer" element={<ViewerHome />} />
+            <Route path="/viewer" element={<ViewerShell />}>
+              <Route index element={<Navigate to="/viewer/experiments" replace />} />
+              <Route path="experiments" element={<ViewerExperiments />} />
+              <Route path="experiments/:id" element={<ExperimentDetail readonly />} />
+              <Route path="experiments/:id/remarks" element={<ExperimentRemarks readonly />} />
+              <Route path="scores" element={<ViewerScores />} />
+              <Route path="scores/students/:userId" element={<StudentReport readonly />} />
+              <Route path="focus-students" element={<ViewerFocusStudents />} />
+              <Route path="courses/settings" element={<ViewerCourseSettings />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
           </Route>
           <Route element={<RequireStaff />}>
             <Route path="/console/reports/:id" element={<ReportGrade />} />
@@ -145,6 +162,10 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
           </Route>
           </Route>
+        </Route>
+        <Route path="/docs" element={<DocsLayout />}>
+          <Route index element={<DocsIndex />} />
+          <Route path=":slug" element={<DocArticle />} />
         </Route>
         <Route element={<PublicLayout />}>
           <Route path="/changelog" element={<Changelog />} />

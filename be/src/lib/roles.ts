@@ -16,7 +16,7 @@ export function isStaff(role: string): boolean {
   return role === 'TA' || role === 'TEACHER'
 }
 
-/** 观察者角色：拥有账号但独立面板尚未开放 */
+/** 观察者角色：只读查看课程数据 */
 export function isViewer(role: string): boolean {
   return role === 'VIEWER'
 }

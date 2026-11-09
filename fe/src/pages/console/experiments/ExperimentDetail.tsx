@@ -40,6 +40,7 @@ import {
   apiFetch,
   fetchCheckoff,
   fetchClassSettings,
+  fetchClassTables,
   fetchExperimentHomeworks,
   listBanks,
   updateClassSettings,
@@ -70,7 +71,7 @@ function TimeStat({ label, value }: { label: string; value: string | null }) {
   )
 }
 
-export default function ExperimentDetail() {
+export default function ExperimentDetail({ readonly = false }: { readonly?: boolean }) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [experiment, setExperiment] = useState<Experiment | null>(null)
@@ -116,6 +117,31 @@ export default function ExperimentDetail() {
   }, [id])
 
   const load = useCallback(async (experimentId: string) => {
+    if (readonly) {
+      const detail = await apiFetch<{ experiment: Experiment }>(`/api/experiments/${experimentId}`)
+      const [settingsRes, tables] = await Promise.all([
+        fetchClassSettings(detail.experiment.classId),
+        fetchClassTables(detail.experiment.classId),
+      ])
+      setExperiment(detail.experiment)
+      setSettings(settingsRes.settings)
+      setRatio(resolveScoreRatio(settingsRes.settings, experimentId))
+      setStudents(
+        tables.students.map((student) => ({
+          userId: student.userId,
+          name: student.name,
+          studentId: student.studentId,
+          avatar: null,
+        })),
+      )
+      setScores(
+        new Map(
+          tables.scores.map((item) => [scoreKey(item.userId, item.type, item.indId), item.score]),
+        ),
+      )
+      return
+    }
+
     const [detail, bankData] = await Promise.all([
       apiFetch<{ experiment: Experiment }>(`/api/experiments/${experimentId}`),
       listBanks(),
@@ -136,7 +162,7 @@ export default function ExperimentDetail() {
     setScores(
       new Map(checkoff.scores.map((item) => [scoreKey(item.userId, item.type, item.indId), item.score])),
     )
-  }, [])
+  }, [readonly])
 
   useEffect(() => {
     if (!id) return
@@ -279,7 +305,7 @@ export default function ExperimentDetail() {
     experiment !== null &&
     Boolean(experiment.publishTime || experiment.checkoffDeadline || experiment.reportDeadline)
 
-  const showTimelineEditor = editingTimeline || !hasTimeline
+  const showTimelineEditor = !readonly && (editingTimeline || !hasTimeline)
 
   const cancelEditTimeline = () => {
     if (experiment) {
@@ -320,7 +346,7 @@ export default function ExperimentDetail() {
   return (
     <div className="mx-auto max-w-4xl">
       <Link
-        to="/console/experiments"
+        to={readonly ? '/viewer/experiments' : '/console/experiments'}
         className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-fg-subtle transition-colors hover:text-fg-muted"
       >
         <ArrowLeft width={14} height={14} className="shrink-0" />
@@ -330,17 +356,20 @@ export default function ExperimentDetail() {
       <PageHeader
         title={`${experiment.mark} · ${experiment.title}`}
         actions={
-          <Button
-            size="sm"
-            onPress={() => navigate(`/console/checkoff?experiment=${experiment.id}`)}
-          >
-            <ClipboardCheck width={15} height={15} className="shrink-0" />
-            去验收
-          </Button>
+          readonly ? undefined : (
+            <Button
+              size="sm"
+              onPress={() => navigate(`/console/checkoff?experiment=${experiment.id}`)}
+            >
+              <ClipboardCheck width={15} height={15} className="shrink-0" />
+              去验收
+            </Button>
+          )
         }
       />
 
-      <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
+      {!readonly && (
+        <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <NotebookText
@@ -404,7 +433,8 @@ export default function ExperimentDetail() {
             未绑定题目集时，验收抽题将没有题目。
           </p>
         )}
-      </div>
+        </div>
+      )}
 
       <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
         <div className="flex flex-wrap items-center gap-3">
@@ -416,6 +446,7 @@ export default function ExperimentDetail() {
             />
             <span className="text-sm font-bold">时间线</span>
           </div>
+          {!readonly && (
           <div className="ml-auto flex items-center gap-2">
             {showTimelineEditor ? (
               <>
@@ -454,6 +485,7 @@ export default function ExperimentDetail() {
               </IconAction>
             )}
           </div>
+          )}
         </div>
         {showTimelineEditor ? (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -495,22 +527,30 @@ export default function ExperimentDetail() {
             />
             <span className="text-sm font-bold">实验计分方式</span>
           </div>
-          {savingRatio && <Spinner size="sm" />}
+          {!readonly && savingRatio && <Spinner size="sm" />}
           {unifiedRatio && (
             <span className="text-xs text-fg-subtle">
               已启用课程统一评分占比，
-              <Link
-                to="/console/courses/settings#scoring"
-                className="font-semibold text-brand-600 transition-colors hover:underline dark:text-brand-300"
-              >
-                前往设置修改
-              </Link>
+              {readonly ? (
+                '以课程设置为准'
+              ) : (
+                <Link
+                  to="/console/courses/settings#scoring"
+                  className="font-semibold text-brand-600 transition-colors hover:underline dark:text-brand-300"
+                >
+                  前往设置修改
+                </Link>
+              )}
             </span>
           )}
         </div>
         <div className="mt-4">
-          <ScoreRatioEditor value={ratio} onChange={changeRatio} disabled={unifiedRatio} />
-          {ratioSave.saveFailed && (
+          <ScoreRatioEditor
+            value={ratio}
+            onChange={changeRatio}
+            disabled={readonly || unifiedRatio}
+          />
+          {!readonly && ratioSave.saveFailed && (
             <Alert className="mt-3" status="warning">
               <Alert.Indicator />
               <Alert.Content>
@@ -521,7 +561,8 @@ export default function ExperimentDetail() {
         </div>
       </div>
 
-      <div className="mb-4 rounded-2xl border border-line bg-elevated">
+      {!readonly && (
+        <div className="mb-4 rounded-2xl border border-line bg-elevated">
         <div className="flex w-full items-center gap-3 rounded-2xl p-5 text-left">
           <GraduationCap
             width={16}
@@ -581,7 +622,8 @@ export default function ExperimentDetail() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-bold">
@@ -594,7 +636,12 @@ export default function ExperimentDetail() {
           variant="secondary"
           isDisabled={!id}
           onPress={() => {
-            if (id) navigate(`/console/remarks/experiments/${id}`)
+            if (!id) return
+            navigate(
+              readonly
+                ? `/viewer/experiments/${id}/remarks`
+                : `/console/remarks/experiments/${id}`,
+            )
           }}
         >
           <MessageSquareText width={15} height={15} className="shrink-0" />

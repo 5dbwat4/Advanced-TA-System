@@ -133,7 +133,7 @@ export default function AddCourseUser() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="为本课程添加用户"
-        subtitle={currentClass?.name ? `当前班级：${currentClass.name}` : '请先选择课程'}
+        subtitle={currentClass ? undefined : '请先选择课程'}
         actions={
           <Button variant="ghost" size="sm" onPress={() => navigate(-1)}>
             <ArrowLeft width={16} height={16} className="shrink-0" />

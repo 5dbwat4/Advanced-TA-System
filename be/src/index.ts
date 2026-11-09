@@ -95,17 +95,35 @@ const STUDENT_ALLOWED_ROUTES = new Set([
   '/api/invites/accept',
 ])
 
-/** 观察者可访问的接口白名单（独立面板开发完成前仅开放账号基础能力） */
+/** 观察者可访问的接口白名单（账号基础能力，不限请求方法） */
 const VIEWER_ALLOWED_ROUTES = new Set([
   '/api/auth/me',
   '/api/auth/setup',
   '/api/auth/logout',
   '/api/auth/passkey/registration-options',
   '/api/auth/passkey/registration-verify',
+  '/api/auth/accounts',
+  '/api/auth/accounts/switch',
   '/api/settings',
+  '/api/settings/viewer-preferences',
   '/api/settings/preferences',
   '/api/invites/info',
   '/api/invites/accept',
+])
+
+/** 观察者可只读访问的数据接口（仅 GET） */
+const VIEWER_READONLY_ROUTES = new Set([
+  '/api/experiments',
+  '/api/experiments/:id',
+  '/api/classes/:id/settings',
+  '/api/classes/:id/focus-students',
+  '/api/students',
+  '/api/scores',
+  '/api/remarks',
+  '/api/remarks/experiment/:experimentId',
+  '/api/report-reviews',
+  '/api/criteria/:key',
+  '/api/student-preview/experiment',
 ])
 
 fastify.addHook('preHandler', async (request, reply) => {
@@ -117,7 +135,8 @@ fastify.addHook('preHandler', async (request, reply) => {
   if (role === 'STUDENT' && !STUDENT_ALLOWED_ROUTES.has(url)) {
     return reply.code(403).send({ error: 'FORBIDDEN', message: '学生账号无权访问该接口' })
   }
-  if (role === 'VIEWER' && !VIEWER_ALLOWED_ROUTES.has(url)) {
+  const viewerReadonly = request.method === 'GET' && VIEWER_READONLY_ROUTES.has(url)
+  if (role === 'VIEWER' && !VIEWER_ALLOWED_ROUTES.has(url) && !viewerReadonly) {
     return reply.code(403).send({ error: 'FORBIDDEN', message: '观察者账号无权访问该接口' })
   }
 })

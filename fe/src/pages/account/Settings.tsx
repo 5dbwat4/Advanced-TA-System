@@ -82,7 +82,10 @@ export default function Settings() {
 
   const hasPassword = user?.hasPassword ?? false
   const isBasic = user?.role === 'STUDENT' || user?.role === 'VIEWER'
-  const sections = isBasic ? BASIC_SECTIONS : SECTIONS
+  const showPreferences = user?.role !== 'VIEWER'
+  const sections = isBasic
+    ? BASIC_SECTIONS.filter((item) => showPreferences || item.id !== 'preferences')
+    : SECTIONS
   const passkeys = user?.passkeys ?? []
   const roleLabel =
     user?.role === 'TEACHER'
@@ -188,7 +191,7 @@ export default function Settings() {
               </div>
               <div className="mt-1 flex items-center gap-1.5">
                 <div className="min-w-0 flex-1 truncate text-sm text-fg">{user?.name ?? '—'}</div>
-                {!isBasic && (
+                {user?.role !== 'STUDENT' && (
                   <IconAction label="修改用户名" onPress={openNameEdit}>
                     <Pencil width={14} height={14} className="shrink-0" />
                   </IconAction>
@@ -376,9 +379,11 @@ export default function Settings() {
           </section>
         )}
 
-        <section id="preferences" className={sectionClass('preferences')}>
-          <PreferenceSection index={2} />
-        </section>
+        {showPreferences && (
+          <section id="preferences" className={sectionClass('preferences')}>
+            <PreferenceSection index={2} />
+          </section>
+        )}
 
         {!isBasic && AI_ENABLED && (
           <section id="ai" className={sectionClass('ai')}>

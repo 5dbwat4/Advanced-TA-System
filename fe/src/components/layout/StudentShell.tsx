@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import BookOpen from '~icons/lucide/book-open'
+import BookOpenText from '~icons/lucide/book-open-text'
 import ClipboardList from '~icons/lucide/clipboard-list'
 import LayoutDashboard from '~icons/lucide/layout-dashboard'
 import LogOut from '~icons/lucide/log-out'
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { to: '/student-console', label: '概览', icon: LayoutDashboard, end: true },
   { to: '/student-console/scores', label: '实验成绩', icon: ClipboardList, end: false },
   { to: '/student-console/settings', label: '设置', icon: SettingsIcon, end: false },
+  { to: '/docs', label: '文档', icon: BookOpenText, end: false },
 ]
 
 export function StudentShell() {

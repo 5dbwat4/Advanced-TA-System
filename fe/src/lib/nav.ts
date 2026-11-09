@@ -1,6 +1,7 @@
 import type { IconComponent } from '@/lib/icon'
 
 import BookOpen from '~icons/lucide/book-open'
+import BookOpenText from '~icons/lucide/book-open-text'
 import Bot from '~icons/lucide/bot'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import FileText from '~icons/lucide/file-text'
@@ -31,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/console/reports', label: '实验报告', icon: FileText, mobile: true, description: '报告批阅与查看' },
   { to: '/console/scores', label: '分数和名单', icon: Table, mobile: true, description: '成绩录入与学生名单同步' },
   { to: '/console/llm-connect', label: 'MCP & Skills', icon: Bot, description: '连接你的 Agent' },
+  { to: '/docs', label: '使用文档', icon: BookOpenText, description: '完整使用手册与操作指南' },
   { to: '/console/courses/settings', label: '课程设置', icon: BookOpen, description: '课程信息与 Checkpoint 设置' },
   { to: '/console/settings', label: '设置', icon: Settings2, description: '账号、偏好与系统设置' },
 ]
