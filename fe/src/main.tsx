@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { Toast } from '@heroui/react'
 import { ThemeProvider } from 'next-themes'
 
@@ -9,6 +10,7 @@ import App from '@/App'
 import { ServiceWorkerUpdate } from '@/components/ui/ServiceWorkerUpdate'
 import { Toaster } from '@/components/ui/Toaster'
 import { AuthProvider } from '@/lib/auth'
+import { queryClient } from '@/lib/query'
 import { initSentry } from '@/lib/sentry'
 import '@/index.css'
 import '@uiw/react-md-editor/markdown-editor.css'
@@ -44,14 +46,16 @@ createRoot(document.getElementById('root')!).render(
     >
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         <BrowserRouter>
-          <AuthProvider>
-            <div className="aurora" aria-hidden />
-            <div className="grid-overlay" aria-hidden />
-            <App />
-            <Toaster />
-            <ServiceWorkerUpdate />
-            <Toast.Provider placement="top" />
-          </AuthProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <div className="aurora" aria-hidden />
+              <div className="grid-overlay" aria-hidden />
+              <App />
+              <Toaster />
+              <ServiceWorkerUpdate />
+              <Toast.Provider placement="top" />
+            </AuthProvider>
+          </QueryClientProvider>
         </BrowserRouter>
       </ThemeProvider>
     </Sentry.ErrorBoundary>

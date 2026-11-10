@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { ApiError, apiFetch, getToken, isClassSelection, isLoginSelection, selectZjuamClass, setToken, type LoginResult, type User, type UserPreferences } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
+import { queryClient } from '@/lib/query'
 import { setSentryUser } from '@/lib/sentry'
 
 type AuthContextValue = {
@@ -169,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         void apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+        queryClient.clear()
         setToken(null)
         setUser(null)
       },

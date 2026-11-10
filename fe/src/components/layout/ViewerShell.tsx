@@ -24,7 +24,6 @@ const VIEWER_NAV_ITEMS: ViewerNavItem[] = [
   { to: '/viewer/scores', label: '分数列表', icon: Table },
   { to: '/viewer/courses/settings', label: '课程设置', icon: Settings2 },
   { to: '/viewer/settings', label: '个人设置', icon: UserRound },
-  { to: '/docs', label: '使用文档', icon: BookOpenText },
 ]
 
 const FOCUS_NAV_ITEM: ViewerNavItem = {
@@ -122,6 +121,9 @@ export function ViewerShell() {
           </div>
           <div className="ms-auto flex items-center gap-2">
             <ClassAccountMenu />
+            <IconAction label="使用文档" placement="bottom" onPress={() => navigate('/docs')}>
+              <BookOpenText width={16} height={16} className="shrink-0 text-fg-muted" />
+            </IconAction>
             <ThemeToggle />
             <div className="md:hidden">
               <IconAction label="退出登录" onPress={handleLogout}>

@@ -12,6 +12,7 @@ import { ConvenienceToolsSection } from '@/components/settings/ConvenienceToolsS
 import { DevBoardsSection } from '@/components/settings/DevBoardsSection'
 import { ExperimentScoringSection } from '@/components/settings/ExperimentScoringSection'
 import { FocusStudentsSection } from '@/components/settings/FocusStudentsSection'
+import { StaffRosterSection } from '@/components/settings/StaffRosterSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
@@ -35,7 +36,7 @@ const SECTIONS: TocItem[] = [
   { id: 'tools', label: '便捷工具' },
   { id: 'basic', label: '基本信息' },
   { id: 'roster', label: '学生名单' },
-  { id: 'tas', label: '助教' },
+  { id: 'staff', label: 'Staff 名单' },
   { id: 'xzzd', label: '学在浙大' },
 ]
 
@@ -47,6 +48,7 @@ const IMPLEMENTED_SECTIONS = new Set([
   'comment',
   'tools',
   'basic',
+  'staff',
 ])
 
 const PLACEHOLDER_SECTIONS = SECTIONS.filter((section) => !IMPLEMENTED_SECTIONS.has(section.id))
@@ -104,9 +106,13 @@ export default function CourseSettings() {
             <BasicInfoSection index={6} />
           </section>
 
+          <section id="staff" className={sectionClass('staff')}>
+            <StaffRosterSection index={7} />
+          </section>
+
           {PLACEHOLDER_SECTIONS.map((section, index) => (
             <section key={section.id} id={section.id} className={sectionClass(section.id)}>
-              <Card index={index + 7}>
+              <Card index={index + 8}>
                 <h2 className="text-sm font-bold">{section.label}</h2>
                 <p className="mt-2 text-xs text-fg-subtle">此部分内容待补充。</p>
               </Card>

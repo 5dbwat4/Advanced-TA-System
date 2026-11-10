@@ -19,6 +19,7 @@ import { SkeletonList } from '@/components/ui/SkeletonList'
 import { createTag, deleteTag, listTags, renameTag, type Tag } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatDateTime } from '@/lib/format'
+import { invalidateTags } from '@/lib/query'
 import { useAsyncData } from '@/lib/request'
 
 export default function Tags() {
@@ -52,6 +53,7 @@ export default function Tags() {
       toast.success('已创建标签')
       setName('')
       reload()
+      invalidateTags()
     } catch (err) {
       toast.error(getErrorMessage(err, '创建失败'))
     } finally {
@@ -76,6 +78,7 @@ export default function Tags() {
       toast.success('已重命名')
       setRenamingId(null)
       reload()
+      invalidateTags()
     } catch (err) {
       toast.error(getErrorMessage(err, '重命名失败'))
     } finally {
@@ -91,6 +94,7 @@ export default function Tags() {
       toast.success('已删除标签')
       confirmState.close()
       reload()
+      invalidateTags()
     } catch (err) {
       toast.error(getErrorMessage(err, '删除失败'))
     } finally {

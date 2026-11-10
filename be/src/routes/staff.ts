@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { requireStaff } from '../lib/class-access.js'
 import { hashPassword } from '../lib/password.js'
 import { prisma } from '../lib/prisma.js'
-import { INVITABLE_ROLES } from '../lib/roles.js'
+import { INVITABLE_ROLES, isStaff, isViewer } from '../lib/roles.js'
 
 const createTaSchema = z.object({
   /** 学号 */
@@ -18,6 +18,43 @@ const createMemberSchema = z.object({
   studentId: z.string().trim().min(1).max(32),
   role: z.enum(INVITABLE_ROLES),
 })
+
+const listMembersQuerySchema = z.object({
+  classId: z.string().trim().min(1).optional(),
+})
+
+/** Staff 名单显示顺序：教师 → 助教 → 观察者 */
+const STAFF_ROLE_ORDER: Record<string, number> = { TEACHER: 0, TA: 1, VIEWER: 2 }
+
+const staffMemberSelect = {
+  id: true,
+  name: true,
+  role: true,
+  studentId: true,
+  username: true,
+  avatar: true,
+} as const
+
+type StaffMemberRow = {
+  id: string
+  name: string
+  role: string
+  studentId: string | null
+  username: string | null
+  avatar: number | null
+}
+
+/** Staff 名单项的安全输出结构 */
+function toStaffMember(user: StaffMemberRow) {
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    studentId: user.studentId ?? '',
+    username: user.username,
+    avatar: user.avatar,
+  }
+}
 
 type TaWithClass = User & { klass: Class | null }
 
@@ -52,6 +89,46 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
     })
 
     return { tas: tas.map(toTa) }
+  })
+
+  /** 当前课程的 Staff 名单（教师 / 助教 / 观察者） */
+  fastify.get('/members', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { role } = request.user as { role?: string }
+    if (typeof role !== 'string' || (!isStaff(role) && !isViewer(role))) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权查看 Staff 名单' })
+    }
+
+    const parsed = listMembersQuerySchema.safeParse(request.query)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_QUERY', message: '课程参数无效' })
+    }
+
+    const { sub } = request.user as { sub: string }
+    const me = await prisma.user.findUnique({
+      where: { id: sub },
+      select: { classId: true },
+    })
+    const classId = parsed.data.classId ?? me?.classId ?? null
+    if (!classId) {
+      return reply
+        .code(400)
+        .send({ error: 'CLASS_REQUIRED', message: '当前账号未绑定班级，无法查看 Staff 名单' })
+    }
+    if (me?.classId !== classId) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权查看该课程的 Staff 名单' })
+    }
+
+    const members = await prisma.user.findMany({
+      where: { classId, role: { in: [...INVITABLE_ROLES] } },
+      select: staffMemberSelect,
+      orderBy: { createdAt: 'asc' },
+    })
+
+    members.sort(
+      (a, b) => (STAFF_ROLE_ORDER[a.role] ?? 99) - (STAFF_ROLE_ORDER[b.role] ?? 99),
+    )
+
+    return { members: members.map(toStaffMember) }
   })
 
   /**

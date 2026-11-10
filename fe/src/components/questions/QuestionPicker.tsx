@@ -1,6 +1,5 @@
 import { Button, Checkbox, Skeleton } from '@heroui/react'
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { toast } from 'sonner'
+import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 
 import ChevronDown from '~icons/lucide/chevron-down'
 import ListChecks from '~icons/lucide/list-checks'
@@ -9,8 +8,9 @@ import X from '~icons/lucide/x'
 import { IconAction } from '@/components/ui/IconAction'
 import { Markdown } from '@/components/ui/Markdown'
 import { SearchInput } from '@/components/ui/SearchInput'
-import { listQuestions, type Question } from '@/lib/api'
+import type { Question } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
+import { useInfiniteQuestions, useQuestionsByIds } from '@/lib/query'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
@@ -47,15 +47,21 @@ export function QuestionPicker({
     return () => window.clearTimeout(timer)
   }, [keyword])
 
-  const [results, setResults] = useState<Question[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [retryNonce, setRetryNonce] = useState(0)
-
-  const seqRef = useRef(0)
   const query = debouncedKeyword.trim()
+
+  const {
+    questions: results,
+    total,
+    isLoading: loading,
+    isFetchingNextPage: loadingMore,
+    isError,
+    error: queryError,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useInfiniteQuestions({ q: debouncedKeyword, pageSize: PAGE_SIZE })
+
+  const error = isError ? getErrorMessage(queryError, '加载失败') : null
 
   const register = useCallback((items: Question[]) => {
     if (items.length === 0) return
@@ -72,46 +78,31 @@ export function QuestionPicker({
     })
   }, [])
 
-  // 预置题目对象
+  // 搜索结果 / 预置题目对象
+  useEffect(() => {
+    register(results)
+  }, [results, register])
+
   useEffect(() => {
     if (initialQuestions && initialQuestions.length > 0) register(initialQuestions)
   }, [initialQuestions, register])
 
-  // 搜索（首屏 / 关键词变化 / 重试）
+  // 已选但还没有内容的题目，按 id 批量补全
+  const missingIds = useMemo(
+    () => selected.filter((id) => !known.has(id)),
+    [selected, known],
+  )
+  const { data: hydrated } = useQuestionsByIds(missingIds)
   useEffect(() => {
-    const seq = ++seqRef.current
-    setLoading(true)
-    setError(null)
-    listQuestions({ q: query, limit: PAGE_SIZE, offset: 0 })
-      .then((data) => {
-        if (seq !== seqRef.current) return
-        setResults(data.questions)
-        setTotal(data.total)
-        register(data.questions)
-      })
-      .catch((err) => {
-        if (seq !== seqRef.current) return
-        setError(getErrorMessage(err, '加载失败'))
-      })
-      .finally(() => {
-        if (seq === seqRef.current) setLoading(false)
-      })
-  }, [query, retryNonce, register])
+    if (hydrated && hydrated.length > 0) register(hydrated)
+  }, [hydrated, register])
 
-  const loadMore = async () => {
-    const seq = seqRef.current
-    setLoadingMore(true)
-    try {
-      const data = await listQuestions({ q: query, limit: PAGE_SIZE, offset: results.length })
-      if (seq !== seqRef.current) return
-      setResults((prev) => [...prev, ...data.questions])
-      setTotal(data.total)
-      register(data.questions)
-    } catch (err) {
-      if (seq === seqRef.current) toast.error(getErrorMessage(err, '加载失败'))
-    } finally {
-      if (seq === seqRef.current) setLoadingMore(false)
-    }
+  const loadMore = () => {
+    if (!loadingMore && hasNextPage) void fetchNextPage()
+  }
+
+  const retry = () => {
+    void refetch()
   }
 
   const toggle = useCallback(
@@ -168,11 +159,7 @@ export function QuestionPicker({
           {error ? (
             <div className="flex flex-col items-start gap-2 rounded-xl border border-danger/30 bg-danger/5 px-3 py-3">
               <p className="text-xs text-danger">{error}</p>
-              <Button
-                size="sm"
-                variant="secondary"
-                onPress={() => setRetryNonce((n) => n + 1)}
-              >
+              <Button size="sm" variant="secondary" onPress={retry}>
                 <RotateCcw width={14} height={14} className="shrink-0" />
                 重试
               </Button>
@@ -202,7 +189,7 @@ export function QuestionPicker({
           )}
         </div>
 
-        {!loading && !error && results.length < total && (
+        {!loading && !error && hasNextPage && (
           <Button
             size="sm"
             variant="ghost"

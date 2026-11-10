@@ -1,5 +1,5 @@
 import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -131,15 +131,6 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
     }
   }, [classId, userId])
 
-  const reportAverage = useMemo(() => {
-    if (!data) return null
-    const values = data.cases
-      .map((item) => item.scores.find((score) => score.type === 2)?.score)
-      .filter((score): score is number => score != null)
-    if (values.length === 0) return null
-    return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
-  }, [data])
-
   const generate = async () => {
     if (!data || !userId) return
     setGenerating(true)
@@ -228,14 +219,6 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
             <div className="text-lg font-bold">{data.student.name}</div>
             <div className="tabular text-xs text-fg-subtle">
               {data.student.studentId} · {currentClass?.name ?? '当前班级'}
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-sunken px-4 py-2 text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">
-              报告平均
-            </div>
-            <div className="tabular text-xl font-bold text-brand-600 dark:text-brand-300">
-              {reportAverage ?? '—'}
             </div>
           </div>
           {AI_ENABLED && !readonly && (

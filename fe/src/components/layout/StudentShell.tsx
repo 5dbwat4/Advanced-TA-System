@@ -10,6 +10,7 @@ import LogOut from '~icons/lucide/log-out'
 import SettingsIcon from '~icons/lucide/settings'
 import { GradeNotificationWatcher } from '@/components/student/GradeNotificationWatcher'
 import { AvatarImage } from '@/components/ui/AvatarImage'
+import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
@@ -20,7 +21,6 @@ const NAV_ITEMS = [
   { to: '/student-console', label: '概览', icon: LayoutDashboard, end: true },
   { to: '/student-console/scores', label: '实验成绩', icon: ClipboardList, end: false },
   { to: '/student-console/settings', label: '设置', icon: SettingsIcon, end: false },
-  { to: '/docs', label: '文档', icon: BookOpenText, end: false },
 ]
 
 export function StudentShell() {
@@ -109,6 +109,9 @@ export function StudentShell() {
             <span className="truncate text-sm font-semibold">{klass?.name ?? '未绑定班级'}</span>
           </div>
           <div className="flex items-center gap-1">
+            <IconAction label="使用文档" placement="bottom" onPress={() => navigate('/docs')}>
+              <BookOpenText width={16} height={16} className="shrink-0 text-fg-muted" />
+            </IconAction>
             <ThemeToggle />
             <Button
               aria-label="退出登录"

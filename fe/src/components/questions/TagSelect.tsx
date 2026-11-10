@@ -3,8 +3,7 @@ import { useState } from 'react'
 
 import Check from '~icons/lucide/check'
 import ChevronDown from '~icons/lucide/chevron-down'
-import { listTags } from '@/lib/api'
-import { useAsyncData } from '@/lib/request'
+import { useTags } from '@/lib/query'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 10
@@ -18,8 +17,7 @@ export function TagSelect({
   onChange: (value: string[]) => void
   placeholder?: string
 }) {
-  const { data } = useAsyncData(() => listTags(), [])
-  const tags = data?.tags ?? []
+  const { data: tags = [] } = useTags()
 
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')

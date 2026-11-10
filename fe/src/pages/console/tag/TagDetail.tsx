@@ -26,12 +26,12 @@ import {
   createQuestion,
   getTag,
   listBanks,
-  listQuestions,
   type Question,
   type QuestionBank,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { useQuestionBasket } from '@/lib/question-basket'
+import { fetchAllQuestionsByTag, invalidateQuestions } from '@/lib/query'
 import { useAsyncData } from '@/lib/request'
 
 export default function TagDetail() {
@@ -60,14 +60,7 @@ export default function TagDetail() {
       return { questions: [] as Question[], banks: res.banks }
     }
 
-    const questions: Question[] = []
-    let offset = 0
-    while (true) {
-      const res = await listQuestions({ tagId: id, limit: 100, offset })
-      questions.push(...res.questions)
-      offset += res.questions.length
-      if (res.questions.length === 0 || offset >= res.total) break
-    }
+    const questions = await fetchAllQuestionsByTag(id)
     return { questions, banks: [] as QuestionBank[] }
   }, [id, showBanks])
 
@@ -106,6 +99,7 @@ export default function TagDetail() {
       toast.success('已添加题目')
       formState.close()
       reload()
+      invalidateQuestions()
     } catch (err) {
       toast.error(getErrorMessage(err, '创建失败'))
     } finally {
@@ -132,6 +126,7 @@ export default function TagDetail() {
       toast.success('已创建题目并加入试题篮')
       formState.close()
       reload()
+      invalidateQuestions()
     } catch (err) {
       toast.error(getErrorMessage(err, '创建失败'))
     } finally {

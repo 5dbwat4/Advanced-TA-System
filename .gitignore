@@ -7,3 +7,8 @@ deploy.bat
 /avatars/
 MIGRATION_PLAN.md
 docs0/
+
+backups/
+*.db
+*.sqlite
+*.sqlite3

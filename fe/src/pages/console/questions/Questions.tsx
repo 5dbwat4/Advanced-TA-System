@@ -8,6 +8,7 @@ import {
   Tabs,
   useOverlayState,
 } from '@heroui/react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import copyToClipboard from 'copy-to-clipboard'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
@@ -53,7 +54,6 @@ import {
   fetchBankQuestions,
   listBanks,
   listQuestions,
-  listTags,
   renameBank,
   updateQuestion,
   type Question,
@@ -64,6 +64,7 @@ import { useAuth } from '@/lib/auth'
 import { bankFilename, bankQuestionsToMarkdown, downloadMarkdown } from '@/lib/download'
 import { getErrorMessage } from '@/lib/error'
 import { useQuestionBasket } from '@/lib/question-basket'
+import { invalidateQuestions, useTags } from '@/lib/query'
 import { useAsyncData } from '@/lib/request'
 
 const PAGE_SIZE = 20
@@ -79,14 +80,10 @@ function QuestionsPanel({ tags }: { tags: Tag[] }) {
   const { user } = useAuth()
   const addToBasket = useQuestionBasket((state) => state.add)
   const navigate = useNavigate()
-  const [items, setItems] = useState<Question[]>([])
-  const [total, setTotal] = useState(0)
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
   const [tagFilter, setTagFilter] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
-  const [refreshKey, setRefreshKey] = useState(0)
   const formState = useOverlayState()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
@@ -111,38 +108,35 @@ function QuestionsPanel({ tags }: { tags: Tag[] }) {
     [query],
   )
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    const run = async () => {
-      try {
-        const data = await listQuestions({
-          q: applied,
-          tagId: tagFilter ?? undefined,
-          limit: PAGE_SIZE,
-          offset: (page - 1) * PAGE_SIZE,
-        })
-        if (cancelled) return
-        const maxPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
-        if (page > maxPage) {
-          setPage(maxPage)
-          return
-        }
-        setItems(data.questions)
-        setTotal(data.total)
-      } catch (error) {
-        if (!cancelled) toast.error(getErrorMessage(error, '加载失败'))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    run()
-    return () => {
-      cancelled = true
-    }
-  }, [applied, tagFilter, refreshKey, page])
+  const {
+    data: questionPage,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['questions', 'page', applied, tagFilter ?? '', page, PAGE_SIZE],
+    queryFn: () =>
+      listQuestions({
+        q: applied,
+        tagId: tagFilter ?? undefined,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      }),
+    placeholderData: keepPreviousData,
+  })
 
-  const refresh = () => setRefreshKey((key) => key + 1)
+  useEffect(() => {
+    if (isError) toast.error(getErrorMessage(queryError, '加载失败'))
+  }, [isError, queryError])
+
+  const items = questionPage?.questions ?? []
+  const total = questionPage?.total ?? 0
+
+  useEffect(() => {
+    if (!questionPage) return
+    const maxPage = Math.max(1, Math.ceil(questionPage.total / PAGE_SIZE))
+    if (page > maxPage) setPage(maxPage)
+  }, [page, questionPage])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -199,7 +193,7 @@ function QuestionsPanel({ tags }: { tags: Tag[] }) {
         toast.success('已添加题目')
       }
       resetForm()
-      refresh()
+      invalidateQuestions()
     } catch (error) {
       toast.error(getErrorMessage(error, editingId ? '保存失败' : '创建失败'))
     } finally {
@@ -224,7 +218,7 @@ function QuestionsPanel({ tags }: { tags: Tag[] }) {
       })
       toast.success('已创建题目并加入试题篮')
       resetForm()
-      refresh()
+      invalidateQuestions()
     } catch (error) {
       toast.error(getErrorMessage(error, '创建失败'))
     } finally {
@@ -237,7 +231,7 @@ function QuestionsPanel({ tags }: { tags: Tag[] }) {
     try {
       await duplicateQuestion(id)
       toast.success('已复制题目，你现在可以编辑副本')
-      refresh()
+      invalidateQuestions()
     } catch (error) {
       toast.error(getErrorMessage(error, '复制失败'))
     } finally {
@@ -251,7 +245,7 @@ function QuestionsPanel({ tags }: { tags: Tag[] }) {
       await deleteQuestion(id)
       toast.success('已删除题目')
       confirmState.close()
-      refresh()
+      invalidateQuestions()
     } catch (error) {
       toast.error(getErrorMessage(error, '删除失败'))
     } finally {
@@ -826,11 +820,10 @@ export default function Questions() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const tab = params.get('tab') === 'sets' ? 'sets' : 'questions'
-  const { data: tagData, error: tagError } = useAsyncData(() => listTags(), [])
-  const tags = tagData?.tags ?? []
+  const { data: tags = [], error: tagError } = useTags()
 
   useEffect(() => {
-    if (tagError) toast.error(tagError)
+    if (tagError) toast.error(getErrorMessage(tagError, '加载标签失败'))
   }, [tagError])
 
   return (

@@ -11,9 +11,10 @@ import Trash2 from '~icons/lucide/trash-2'
 import { Markdown } from '@/components/ui/Markdown'
 import { MarkdownEditor } from '@/components/ui/MarkdownEditor'
 import { PendingButton } from '@/components/ui/PendingButton'
-import { listQuestions, updateQuestion } from '@/lib/api'
+import { updateQuestion } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { useQuestionBasket, type BasketQuestion } from '@/lib/question-basket'
+import { fetchQuestionsByIds, invalidateQuestions } from '@/lib/query'
 
 export function QuestionBasket() {
   const { pathname } = useLocation()
@@ -47,15 +48,9 @@ export function QuestionBasket() {
       (item) => item.author === undefined || item.tags === undefined,
     )
     if (missing.length > 0) {
-      void listQuestions({
-        ids: missing.map((item) => item.id),
-        limit: Math.min(100, Math.max(1, missing.length)),
-      })
-        .then((res) => {
-          const byId = new Map(res.questions.map((question) => [question.id, question]))
-          for (const item of missing) {
-            const question = byId.get(item.id)
-            if (!question) continue
+      void fetchQuestionsByIds(missing.map((item) => item.id))
+        .then((questions) => {
+          for (const question of questions) {
             updateItem({
               id: question.id,
               question: question.question,
@@ -99,6 +94,7 @@ export function QuestionBasket() {
         answer: res.question.answer,
       })
       toast.success('已保存修改')
+      invalidateQuestions()
       setEditing(false)
     } catch (error) {
       toast.error(getErrorMessage(error, '保存失败'))
@@ -125,7 +121,7 @@ export function QuestionBasket() {
   const goCreate = () => {
     if (selectedIds.length === 0) return
     state.close()
-    navigate(`/console/questions/banks/new?questionIds=${selectedIds.join(',')}`)
+    navigate(`/console/questions/banks/new?from=basket&questionIds=${selectedIds.join(',')}`)
   }
 
   return (
@@ -277,7 +273,7 @@ export function QuestionBasket() {
                       </Button>
                       <Button size="sm" variant="primary" onPress={startEdit}>
                         <Pen width={14} height={14} className="shrink-0" />
-                        修改
+                        编辑
                       </Button>
                     </div>
                     {showAnswer && (

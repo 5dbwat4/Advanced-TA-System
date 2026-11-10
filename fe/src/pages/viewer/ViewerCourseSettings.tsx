@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import ListChecks from '~icons/lucide/list-checks'
 import UserSearch from '~icons/lucide/user-search'
+import { StaffRosterSection } from '@/components/settings/StaffRosterSection'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -81,6 +82,10 @@ export default function ViewerCourseSettings() {
           </div>
         </div>
       </Card>
+
+      <div className="mt-4">
+        <StaffRosterSection index={1} />
+      </div>
     </div>
   )
 }
