@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 
-import { getToken, type MarkdownStyleId } from '@/lib/api'
+import {
+  fetchCheckoffQueue,
+  getToken,
+  type CheckoffQueueEntry,
+  type MarkdownStyleId,
+} from '@/lib/api'
 
 /** slave 卡片状态（master 推送 / slave 只读） */
 export type SlaveCardState =
@@ -234,14 +239,100 @@ export function useCheckoffWatch(
   return peers
 }
 
-/** 通知当前班级的验收房间：本助教开始验收某学生 */
-export function notifyCheckoffStarted(payload: { classId: string; studentName: string }): void {
+/**
+ * 通知当前班级的验收房间：本助教开始验收某学生。
+ * `studentId` / `experimentId` 用于后端把该学生（该实验）的排队记录精确置为「验收中」；
+ * 同一学生可能同时排了多个实验，因此需要实验 id 才能定位到唯一记录。两者均可选，兼容旧版后端。
+ */
+export function notifyCheckoffStarted(payload: {
+  classId: string
+  studentName: string
+  /** 学生 userId：精确匹配排队记录（可选，旧版后端按姓名唯一匹配） */
+  studentId?: string
+  /** 实验 id：同一学生排了多个实验时用于消歧（可选，旧版后端忽略） */
+  experimentId?: string
+}): void {
   getCheckoffSocket().emit('checkoff:notify', payload)
 }
 
-/** 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场） */
-export function clearCheckoffPresence(classId: string): void {
-  getCheckoffSocket().emit('checkoff:clear', { classId })
+/**
+ * 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场）。
+ * `studentId` 可选：传则只把该学生的排队记录恢复为「已叫号 / 排队中」，
+ * 不传则恢复本助教在本班全部「验收中」的记录（兼容旧版）。
+ */
+export function clearCheckoffPresence(classId: string, studentId?: string): void {
+  getCheckoffSocket().emit('checkoff:clear', { classId, studentId })
+}
+
+/* ------------------------------- queue ------------------------------- */
+
+/**
+ * 订阅当前班级的排队快照：首次/断线重连时通过 REST 拉取，
+ * 之后由 `checkoff:queue` 事件实时替换；返回 entries/loading/reload。
+ * 前提：同一页面已调用 useCheckoffWatch 加入验收房间（Checkoff 页面始终满足）。
+ */
+export function useCheckoffQueue(classId: string | undefined): {
+  entries: CheckoffQueueEntry[]
+  loading: boolean
+  reload: () => void
+} {
+  const [entries, setEntries] = useState<CheckoffQueueEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  // 手动刷新复用订阅 effect 里的拉取函数：不重建 socket 订阅，也不清空已有快照（避免闪烁）
+  const loadRef = useRef<(() => void) | null>(null)
+
+  const reload = useCallback(() => loadRef.current?.(), [])
+
+  useEffect(() => {
+    if (!classId) {
+      loadRef.current = null
+      setEntries([])
+      setLoading(false)
+      return
+    }
+
+    const s = getCheckoffSocket()
+    let cancelled = false
+
+    const load = () => {
+      setLoading(true)
+      fetchCheckoffQueue(classId)
+        .then((res) => {
+          if (!cancelled) setEntries(res.entries)
+        })
+        .catch(() => {
+          // 排队信息是辅助数据，加载失败不打断现场验收流程
+          if (!cancelled) setEntries([])
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }
+
+    // 只接受当前班级的广播：切换班级后旧房间的残留事件直接忽略
+    const onQueue = (payload: { classId?: string; entries?: CheckoffQueueEntry[] }) => {
+      if (cancelled || payload?.classId !== classId) return
+      setEntries(payload.entries ?? [])
+      setLoading(false)
+    }
+    // 断线重连期间可能错过广播，重连后重新拉一次完整快照
+    const onConnect = () => load()
+
+    setEntries([])
+    loadRef.current = load
+    s.on('checkoff:queue', onQueue)
+    s.on('connect', onConnect)
+    load()
+
+    return () => {
+      cancelled = true
+      loadRef.current = null
+      s.off('checkoff:queue', onQueue)
+      s.off('connect', onConnect)
+    }
+  }, [classId])
+
+  return { entries, loading, reload }
 }
 
 /* ------------------------------- slave ------------------------------- */

@@ -28,6 +28,7 @@ export function StudentFinder({
   experimentId,
   reloadKey = 0,
   includeQuestions = false,
+  presetQuery,
   onSelect,
   onQuestionsLoaded,
   onLoadError,
@@ -38,13 +39,15 @@ export function StudentFinder({
   experimentId: string
   reloadKey?: number
   includeQuestions?: boolean
+  /** 预填搜索词（如排队面板点击后定位到某学号） */
+  presetQuery?: string
   onSelect: (student: CheckoffStudent, scores: Score[]) => void
   onQuestionsLoaded?: (questions: CheckoffQuestion[]) => void
   onLoadError?: (message: string) => void
   onSearchFocus?: () => void
   onSearchBlur?: () => void
 }) {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(presetQuery ?? '')
   const [students, setStudents] = useState<CheckoffStudent[]>([])
   const [scores, setScores] = useState<Score[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,6 +64,11 @@ export function StudentFinder({
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // 父组件在排队面板点击后更新预填词时同步到搜索框
+  useEffect(() => {
+    if (presetQuery != null) setQuery(presetQuery)
+  }, [presetQuery])
 
   // 班级人数不多，一次加载完整名单（可选同请求内嵌题目），检索（含拼音）在前端完成
   useEffect(() => {

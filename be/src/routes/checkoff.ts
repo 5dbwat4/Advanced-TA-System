@@ -1,11 +1,19 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import { compareExperimentMark, parseBankQuestions } from '../lib/banks.js'
+import {
+  cancelCheckoffQueueNotifyById,
+  insertCheckoffQueueEntry,
+  loadCheckoffQueue,
+  notifyCheckoffQueueEntryById,
+  removeCheckoffQueueEntry,
+  reorderCheckoffQueue,
+} from '../lib/checkoff-queue.js'
 import { myClassIds, requireStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { describeScoreChange, sendPushToUser } from '../lib/push.js'
-import { emitScoreChange, type ScoreChangeEvent } from '../lib/realtime.js'
+import { broadcastCheckoffQueue, emitScoreChange, type ScoreChangeEvent } from '../lib/realtime.js'
 import { toScoreDto } from '../lib/score.js'
 
 const submitSchema = z.object({
@@ -19,7 +27,48 @@ const submitSchema = z.object({
       }),
     )
     .max(3),
+  /** 答题用时（毫秒，可选；旧客户端不传也能保存） */
+  durationMs: z.number().int().min(0).max(86_400_000).optional(),
+  /** 开始答题时间（ISO，可选） */
+  startedAt: z.string().datetime().optional(),
 })
+
+/** 助教手动加入队列 */
+const insertQueueSchema = z.object({
+  experimentId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
+})
+
+/** 助教调整队列顺序（entryIds 为该实验全部条目的完整顺序） */
+const reorderQueueSchema = z.object({
+  experimentId: z.string().trim().min(1),
+  entryIds: z.array(z.string().trim().min(1)).min(1).max(500),
+})
+
+/**
+ * 读取排队条目并校验当前 staff 可管理该班级。
+ * 失败时已发送响应并返回 null（调用方直接 return reply）。
+ */
+async function loadStaffQueueEntry(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  entryId: string,
+): Promise<{ id: string; userId: string; experimentId: string; classId: string } | null> {
+  const classIds = await myClassIds(request)
+  const entry = await prisma.checkoffQueueEntry.findUnique({
+    where: { id: entryId },
+    select: { id: true, userId: true, experimentId: true, classId: true },
+  })
+  if (!entry) {
+    reply.code(404).send({ error: 'ENTRY_NOT_FOUND', message: '排队记录不存在' })
+    return null
+  }
+  if (!classIds.includes(entry.classId)) {
+    reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+    return null
+  }
+  return entry
+}
 
 export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
   /** 验收面板数据（实验 / 学生 / 已有分数，可内嵌指定实验的题目） */
@@ -120,6 +169,165 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     return { experiments, students, scores: scores.map(toScoreDto), questions }
   })
 
+  /** 排队快照（助教端排队面板：REST 首次加载 / socket 断线重连兜底） */
+  fastify.get('/queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const query = request.query as { classId?: unknown }
+    const classId = typeof query.classId === 'string' ? query.classId : ''
+
+    const classIds = await myClassIds(request)
+    if (!classId || !classIds.includes(classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+    }
+
+    return { entries: await loadCheckoffQueue(classId), serverTime: Date.now() }
+  })
+
+  /** 助教手动把学生加入队列（插队 / 补录；已存在时不改变原记录） */
+  fastify.post('/queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const parsed = insertQueueSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+    const { experimentId, userId } = parsed.data
+
+    const classIds = await myClassIds(request)
+    const experiment = await prisma.experiment.findUnique({
+      where: { id: experimentId },
+      select: { id: true, classId: true },
+    })
+    if (!experiment) {
+      return reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
+    }
+    if (!classIds.includes(experiment.classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+    }
+
+    const student = await prisma.user.findFirst({
+      where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
+      select: { id: true, classId: true },
+    })
+    if (!student) {
+      return reply.code(404).send({ error: 'STUDENT_NOT_FOUND', message: '学生不存在' })
+    }
+    if (student.classId !== experiment.classId) {
+      return reply.code(400).send({ error: 'CLASS_MISMATCH', message: '实验与学生不属于同一班级' })
+    }
+
+    const inserted = await insertCheckoffQueueEntry({
+      classId: experiment.classId,
+      experimentId,
+      userId,
+    })
+    if (inserted) await broadcastCheckoffQueue(experiment.classId)
+    return reply.send({ ok: true, already: !inserted })
+  })
+
+  /** 助教调整某实验的队列顺序（entryIds 必须与该实验现有条目集合完全一致） */
+  fastify.patch('/queue/order', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (!requireStaff(request, reply)) return reply
+
+    const parsed = reorderQueueSchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+    }
+    const { experimentId, entryIds } = parsed.data
+
+    const classIds = await myClassIds(request)
+    const experiment = await prisma.experiment.findUnique({
+      where: { id: experimentId },
+      select: { id: true, classId: true },
+    })
+    if (!experiment) {
+      return reply.code(404).send({ error: 'EXPERIMENT_NOT_FOUND', message: '实验不存在' })
+    }
+    if (!classIds.includes(experiment.classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+    }
+
+    const rows = await prisma.checkoffQueueEntry.findMany({
+      where: { experimentId },
+      select: { id: true },
+    })
+    const submittedIds = new Set(entryIds)
+    // 集合必须完全一致：数量相等 + 无重复 + 两边互为子集
+    const sameSet =
+      entryIds.length === rows.length &&
+      submittedIds.size === entryIds.length &&
+      rows.every((row) => submittedIds.has(row.id))
+    if (!sameSet) {
+      return reply.code(400).send({ error: 'INVALID_ORDER', message: '队列顺序已变化，请刷新后重试' })
+    }
+
+    await reorderCheckoffQueue(experimentId, entryIds)
+    await broadcastCheckoffQueue(experiment.classId)
+    return reply.send({ ok: true })
+  })
+
+  /** 叫号：提醒学生准备验收（记录叫号助教并推送 Web Push） */
+  fastify.post(
+    '/queue/:entryId/notify',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request, reply)) return reply
+      const { sub } = request.user as { sub: string }
+      const { entryId } = request.params as { entryId: string }
+
+      const entry = await loadStaffQueueEntry(request, reply, entryId)
+      if (!entry) return reply
+
+      const notified = await notifyCheckoffQueueEntryById(entryId, sub)
+      // 正在验收中：不允许再次叫号
+      if (!notified) {
+        return reply.code(409).send({ error: 'CHECKING', message: '该学生正在验收中' })
+      }
+
+      await broadcastCheckoffQueue(entry.classId)
+
+      const [experiment, ta] = await Promise.all([
+        prisma.experiment.findUnique({
+          where: { id: entry.experimentId },
+          select: { mark: true, title: true },
+        }),
+        prisma.user.findUnique({ where: { id: sub }, select: { name: true } }),
+      ])
+      if (experiment && ta) {
+        // 推送失败不影响接口（sendPushToUser 内部静默）
+        void sendPushToUser(entry.userId, {
+          title: '准备验收',
+          body: `助教 ${ta.name} 提醒你准备验收 ${experiment.mark} ${experiment.title}`,
+          url: '/student-console/queue',
+        })
+      }
+
+      return reply.send({ ok: true })
+    },
+  )
+
+  /** 撤回叫号（恢复为「排队中」；正在验收中不允许） */
+  fastify.delete(
+    '/queue/:entryId/notify',
+    { onRequest: [fastify.authenticate] },
+    async (request, reply) => {
+      if (!requireStaff(request, reply)) return reply
+      const { entryId } = request.params as { entryId: string }
+
+      const entry = await loadStaffQueueEntry(request, reply, entryId)
+      if (!entry) return reply
+
+      const cancelled = await cancelCheckoffQueueNotifyById(entryId)
+      if (!cancelled) {
+        return reply.code(409).send({ error: 'CHECKING', message: '该学生正在验收中' })
+      }
+
+      await broadcastCheckoffQueue(entry.classId)
+      return reply.send({ ok: true })
+    },
+  )
+
   /** 实验题目列表（含答案） */
   fastify.get('/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!requireStaff(request, reply)) return reply
@@ -198,6 +406,24 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     })
     const expById = new Map(experiments.map((e) => [e.id, e]))
 
+    // 每条记录附「该学生该实验最近一次验收保存的答题用时」
+    const userIds = [...new Set(scores.map((score) => score.userId))]
+    const experimentIds = [...new Set(scores.map((score) => score.indId))]
+    const sessions =
+      userIds.length > 0 && experimentIds.length > 0
+        ? await prisma.checkoffSession.findMany({
+            where: { userId: { in: userIds }, experimentId: { in: experimentIds } },
+            orderBy: { createdAt: 'desc' },
+            select: { userId: true, experimentId: true, durationMs: true },
+          })
+        : []
+    const durationByKey = new Map<string, number>()
+    for (const session of sessions) {
+      const key = `${session.userId}:${session.experimentId}`
+      // 已按 createdAt 倒序：每对 (userId, experimentId) 取第一条即最新
+      if (!durationByKey.has(key)) durationByKey.set(key, session.durationMs)
+    }
+
     const records = scores.map((score) => {
       const experiment = expById.get(score.indId)
       return {
@@ -209,6 +435,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         experimentMark: experiment?.mark ?? '',
         experimentTitle: experiment?.title ?? '',
         graderName: score.grader?.name ?? null,
+        durationMs: durationByKey.get(`${score.userId}:${score.indId}`) ?? null,
         updatedAt: score.updatedAt,
       }
     })
@@ -226,7 +453,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
-    const { experimentId, userId, scores } = parsed.data
+    const { experimentId, userId, scores, durationMs, startedAt } = parsed.data
 
     const student = await prisma.user.findFirst({
       where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
@@ -291,6 +518,31 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
         events.push({ action: 'upsert', classId, score: toScoreDto(saved) })
       }
     })
+
+    // 本轮是否真的写入了分数（只删除旧分数不算）
+    const scored = scores.some((item) => item.score !== null)
+
+    // 答题用时：仅在写入分数且传了 durationMs 时记录一条验收会话
+    // startedAt 缺失或解析失败则以「保存时刻 - 用时」回推
+    if (scored && durationMs !== undefined) {
+      const parsedStartedAt = startedAt ? new Date(startedAt) : null
+      const validStartedAt =
+        parsedStartedAt && !Number.isNaN(parsedStartedAt.getTime()) ? parsedStartedAt : null
+      await prisma.checkoffSession.create({
+        data: {
+          classId,
+          experimentId,
+          userId,
+          graderId: sub,
+          durationMs,
+          startedAt: validStartedAt ?? new Date(Date.now() - durationMs),
+        },
+      })
+    }
+
+    // 保存验收成绩后自动移出排队（任意助教保存均可触发）；删除成功才广播
+    const removed = await removeCheckoffQueueEntry(experimentId, userId)
+    if (removed > 0) await broadcastCheckoffQueue(classId)
 
     for (const event of events) {
       emitScoreChange(student.classId, event)

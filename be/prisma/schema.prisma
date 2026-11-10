@@ -395,6 +395,62 @@ model Criteria {
   @@index([creatorId])
 }
 
+/// 验收排队：学生预约排队验收（按实验、全班共享；学生不能选择助教）
+model CheckoffQueueEntry {
+  id           String   @id @default(uuid(4))
+  /// 班级
+  classId      String
+  /// 实验
+  experimentId String
+  /// 学生（User.id）
+  userId       String
+
+  /// 队列状态：WAITING=排队中（未被叫号）| NOTIFIED=排队中（已被叫号）| CHECKING=验收中
+  state String @default("WAITING")
+
+  /// 提醒准备验收的助教（User.id）
+  notifiedBy String?
+  /// 提醒时间
+  notifiedAt DateTime?
+
+  /// 正在验收的助教（User.id）
+  checkingBy String?
+  /// 开始验收时间
+  checkingAt DateTime?
+
+  /// 队内排序（越小越靠前；同值按加入时间）
+  position Int @default(0)
+
+  /// 加入队列时间
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([experimentId, userId])
+  @@index([classId, experimentId, position, joinedAt])
+  @@index([userId])
+  @@index([notifiedBy])
+  @@index([checkingBy])
+}
+
+/// 验收答题记录：一次「保存并下一位」写入一条，记录答题用时
+model CheckoffSession {
+  id           String   @id @default(uuid(4))
+  classId      String
+  experimentId String
+  /// 学生（User.id）
+  userId       String
+  /// 保存成绩的助教 / 教师（User.id，可为空）
+  graderId     String?
+  /// 答题用时（毫秒）
+  durationMs   Int
+  /// 开始答题时间
+  startedAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([experimentId, userId, createdAt])
+  @@index([classId])
+}
+
 /// MCP 工具调用审计日志
 model McpAuditLog {
   id        String   @id @default(uuid(4))

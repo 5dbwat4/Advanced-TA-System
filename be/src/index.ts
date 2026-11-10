@@ -85,6 +85,8 @@ const STUDENT_ALLOWED_ROUTES = new Set([
   '/api/auth/passkey/registration-verify',
   '/api/student/overview',
   '/api/student/experiments/:id',
+  '/api/student/checkoff-queue',
+  '/api/student/checkoff-queue/:experimentId',
   '/api/push/public-key',
   '/api/push/subscribe',
   '/api/push/unsubscribe',

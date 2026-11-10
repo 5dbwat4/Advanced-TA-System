@@ -3,6 +3,12 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 
+import {
+  clearCheckoffQueueChecking,
+  loadCheckoffQueue,
+  markCheckoffQueueChecking,
+  type CheckoffQueueEntryDto,
+} from './checkoff-queue.js'
 import { prisma } from './prisma.js'
 import { isStaff } from './roles.js'
 import type { ScoreDto } from './score.js'
@@ -67,15 +73,29 @@ function broadcastCheckoffPresence(classId: string): void {
   io?.to(watchRoom(classId)).emit('checkoff:presence', { classId, peers: checkoffPeers(classId) })
 }
 
-/** socket 离开验收房间：移除在场并广播（幂等） */
+/**
+ * 断线 / 离开验收房间时，清理该助教遗留的「验收中」队列状态并广播。
+ * fire-and-forget：不阻塞 socket 清理流程，异常只吞掉。
+ */
+function clearCheckoffCheckingSilently(socket: Socket, classId: string): void {
+  const userId = (socket.data.user as { sub?: string } | undefined)?.sub
+  if (typeof userId !== 'string' || userId.length === 0) return
+  void clearCheckoffQueueChecking({ classId, taUserId: userId })
+    .then((count) => (count > 0 ? broadcastCheckoffQueue(classId) : undefined))
+    .catch(() => {})
+}
+
+/** socket 离开验收房间：移除在场并广播（幂等），同时清理其遗留的「验收中」状态 */
 function removeCheckoffPresence(socket: Socket): void {
   const classId = socket.data.checkoffWatchClassId as string | undefined
   socket.data.checkoffWatchClassId = undefined
   if (typeof classId !== 'string') return
   const room = checkoffPresences.get(classId)
-  if (!room || !room.delete(socket.id)) return
-  if (room.size === 0) checkoffPresences.delete(classId)
-  broadcastCheckoffPresence(classId)
+  if (room?.delete(socket.id)) {
+    if (room.size === 0) checkoffPresences.delete(classId)
+    broadcastCheckoffPresence(classId)
+  }
+  clearCheckoffCheckingSilently(socket, classId)
 }
 
 /** 从握手信息中提取 JWT（auth → Authorization → query） */
@@ -431,11 +451,25 @@ export function createRealtime(fastify: FastifyInstance): Server {
         broadcastCheckoffPresence(classId)
       }
       if (socket.data.checkoffWatchClassId === classId) socket.data.checkoffWatchClassId = undefined
+      // 主动离开验收页同样视为「离开验收」：清理该助教遗留的 CHECKING 状态
+      clearCheckoffCheckingSilently(socket, classId)
     })
 
     socket.on(
       'checkoff:notify',
-      async ({ classId, studentName } = {} as { classId?: string; studentName?: string }) => {
+      async ({
+        classId,
+        studentName,
+        studentId,
+        experimentId,
+      } = {} as {
+        classId?: string
+        studentName?: string
+        /** 学生 (User.id)，可选：用于精确把排队记录置为「验收中」（旧客户端不传） */
+        studentId?: string
+        /** 实验 id，可选：与 studentId 组合精确定位排队记录 */
+        experimentId?: string
+      }) => {
         const user = socket.data.user as { sub?: string } | undefined
         if (!user?.sub || typeof classId !== 'string') return
         const name = (studentName ?? '').trim()
@@ -455,17 +489,41 @@ export function createRealtime(fastify: FastifyInstance): Server {
           entry.at = Date.now()
           broadcastCheckoffPresence(classId)
         }
+
+        // 进入验收：把该学生的排队记录置为「验收中」（有变化才广播）
+        const changed = await markCheckoffQueueChecking({
+          classId,
+          taUserId: user.sub,
+          experimentId: typeof experimentId === 'string' ? experimentId : undefined,
+          studentId: typeof studentId === 'string' ? studentId : undefined,
+          studentName: name,
+        })
+        if (changed) await broadcastCheckoffQueue(classId)
       },
     )
 
-    socket.on('checkoff:clear', ({ classId } = {} as { classId?: string }) => {
-      if (typeof classId !== 'string') return
-      const entry = checkoffPresences.get(classId)?.get(socket.id)
-      if (!entry || entry.studentName === null) return
-      entry.studentName = null
-      entry.at = Date.now()
-      broadcastCheckoffPresence(classId)
-    })
+    socket.on(
+      'checkoff:clear',
+      async ({ classId, studentId } = {} as { classId?: string; studentId?: string }) => {
+        if (typeof classId !== 'string') return
+        const entry = checkoffPresences.get(classId)?.get(socket.id)
+        if (entry && entry.studentName !== null) {
+          entry.studentName = null
+          entry.at = Date.now()
+          broadcastCheckoffPresence(classId)
+        }
+
+        // 离开验收：把该助教置为「验收中」的记录恢复为 NOTIFIED / WAITING
+        const user = socket.data.user as { sub?: string } | undefined
+        if (!user?.sub) return
+        const restored = await clearCheckoffQueueChecking({
+          classId,
+          taUserId: user.sub,
+          studentId: typeof studentId === 'string' ? studentId : undefined,
+        })
+        if (restored > 0) await broadcastCheckoffQueue(classId)
+      },
+    )
 
     /* -------- master -------- */
     socket.on('master:create', async (_payload: unknown, ack?: (res: unknown) => void) => {
@@ -637,6 +695,19 @@ export function createRealtime(fastify: FastifyInstance): Server {
 /** 向指定班级广播成绩变更 */
 export function emitScoreChange(classId: string, payload: ScoreChangeEvent): void {
   io?.to(roomName(classId)).emit('score:change', payload)
+}
+
+/** 向班级验收房间广播完整排队快照（仅打开验收页 / 加入验收房间的 staff 收到） */
+export function emitCheckoffQueue(classId: string, entries: CheckoffQueueEntryDto[]): void {
+  io?.to(watchRoom(classId)).emit('checkoff:queue', { classId, entries, at: Date.now() })
+}
+
+/**
+ * 读取最新排队快照并广播（路由 / socket 处理统一入口）。
+ * 放在 realtime.ts：checkoff-queue.ts 不得反向往这里 import（循环依赖）。
+ */
+export async function broadcastCheckoffQueue(classId: string): Promise<void> {
+  emitCheckoffQueue(classId, await loadCheckoffQueue(classId))
 }
 
 /** 报告成绩保存/删除事件（按实验广播：左侧列表刷新 + 同人「同步」提示） */
