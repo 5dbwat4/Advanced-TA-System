@@ -12,7 +12,7 @@ import {
 } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -261,10 +261,33 @@ export default function Checkoff() {
       .finally(() => setRecordsLoading(false))
   }, [classId, presenceState])
 
+  // 正在验收的学生 userId：student 被清空（保存 / 返回）后仍保留上一次的值，
+  // 用于离开验收时精确解除该学生排队记录的「验收中」状态
+  const checkingStudentRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (student) checkingStudentRef.current = student.userId
+  }, [student])
+
+  /**
+   * 离开验收：把该学生的排队记录恢复为「已叫号 / 排队中」并清空在场信息。
+   * 优先用调用方给的 studentId（即当时的 student?.userId），否则用最近一次验收的学生；
+   * 都没有时清空本助教在本班全部「验收中」记录。
+   */
+  const clearChecking = useCallback(
+    (studentId?: string | null) => {
+      if (!classId) return
+      const target = studentId ?? checkingStudentRef.current ?? undefined
+      checkingStudentRef.current = null
+      clearCheckoffPresence(classId, target)
+    },
+    [classId],
+  )
+
   // 回到「选择实验 / 定位学生」表示不再验收，清空在场信息
   useEffect(() => {
-    if (classId && step <= 1) clearCheckoffPresence(classId)
-  }, [classId, step])
+    if (classId && step <= 1) clearChecking()
+  }, [classId, step, clearChecking])
 
   // 「使用其它题目集」：本地覆盖实验设定的题目集，直接拉取该题库的题目
   useEffect(() => {
@@ -440,20 +463,25 @@ export default function Checkoff() {
     }
   }, [classId])
 
-  const selectExperiment = useCallback(async (next: CheckoffExperiment) => {
-    setExperiment(next)
-    setStudent(null)
-    setDrawn([])
-    setMarks({})
-    setExistingScores([])
-    setQuestions([])
-    setQuestionsLoaded(false)
-    setQuestionsError(null)
-    setQuestionIndex(0)
-    setSearching(false)
-    setStep(1)
-    setAnswerStartedAt(null)
-  }, [])
+  const selectExperiment = useCallback(
+    async (next: CheckoffExperiment) => {
+      setExperiment(next)
+      setStudent(null)
+      setDrawn([])
+      setMarks({})
+      setExistingScores([])
+      setQuestions([])
+      setQuestionsLoaded(false)
+      setQuestionsError(null)
+      setQuestionIndex(0)
+      setSearching(false)
+      setStep(1)
+      setAnswerStartedAt(null)
+      // 切换实验视为不再验收：解除上一个学生的「验收中」状态
+      if (student) clearChecking(student.userId)
+    },
+    [clearChecking, student],
+  )
 
   useEffect(() => {
     if (experiment || !preselectId || experiments.length === 0) return
@@ -471,9 +499,17 @@ export default function Checkoff() {
       setSearching(false)
       setStep(2)
       setAnswerStartedAt(Date.now())
-      if (classId) notifyCheckoffStarted({ classId, studentName: next.name })
+      // 带上学生 userId 与实验 id：后端据此把该学生该实验的排队记录置为「验收中」
+      if (classId) {
+        notifyCheckoffStarted({
+          classId,
+          studentName: next.name,
+          studentId: next.userId,
+          experimentId: experiment?.id,
+        })
+      }
     },
-    [classId],
+    [classId, experiment],
   )
 
   const mark = useCallback((id: string, next: QuestionMark) => {
@@ -481,6 +517,8 @@ export default function Checkoff() {
   }, [])
 
   const handleSaved = useCallback(() => {
+    // 保存后后端已删除该学生的排队记录，这里同步解除在场与「验收中」状态
+    clearChecking(student?.userId)
     setStudent(null)
     setDrawn([])
     setMarks({})
@@ -490,8 +528,7 @@ export default function Checkoff() {
     setStep(1)
     setAnswerStartedAt(null)
     setFinderPresetQuery('')
-    if (classId) clearCheckoffPresence(classId)
-  }, [classId])
+  }, [clearChecking, student])
 
   // 排队面板点击某条：先切到对应实验，再把学号预填进「定位学生」搜索框。
   // 不自动选中学生——助教仍需线下叫人并自行点选，避免误保存。
@@ -1071,7 +1108,7 @@ export default function Checkoff() {
       <Modal state={queueState}>
         <Modal.Backdrop>
           <Modal.Container>
-            <Modal.Dialog className="sm:max-w-lg">
+            <Modal.Dialog className="sm:max-w-xl">
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
@@ -1081,6 +1118,9 @@ export default function Checkoff() {
               </Modal.Header>
               <Modal.Body>
                 <CheckoffQueuePanel
+                  classId={currentClass.id}
+                  currentUserId={user.id}
+                  experiments={experiments}
                   entries={queueEntries}
                   loading={queueLoading}
                   currentExperimentId={experiment?.id ?? null}

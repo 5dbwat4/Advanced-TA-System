@@ -404,13 +404,32 @@ model CheckoffQueueEntry {
   experimentId String
   /// 学生（User.id）
   userId       String
+
+  /// 队列状态：WAITING=排队中（未被叫号）| NOTIFIED=排队中（已被叫号）| CHECKING=验收中
+  state String @default("WAITING")
+
+  /// 提醒准备验收的助教（User.id）
+  notifiedBy String?
+  /// 提醒时间
+  notifiedAt DateTime?
+
+  /// 正在验收的助教（User.id）
+  checkingBy String?
+  /// 开始验收时间
+  checkingAt DateTime?
+
+  /// 队内排序（越小越靠前；同值按加入时间）
+  position Int @default(0)
+
   /// 加入队列时间
-  joinedAt     DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([experimentId, userId])
-  @@index([classId, experimentId, joinedAt])
+  @@index([classId, experimentId, position, joinedAt])
   @@index([userId])
+  @@index([notifiedBy])
+  @@index([checkingBy])
 }
 
 /// 验收答题记录：一次「保存并下一位」写入一条，记录答题用时

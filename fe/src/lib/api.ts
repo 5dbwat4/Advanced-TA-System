@@ -728,24 +728,38 @@ export function fetchStudentExperiment(id: string): Promise<StudentPreviewData> 
   return apiFetch<StudentPreviewData>(`/api/student/experiments/${encodeURIComponent(id)}`)
 }
 
-/** 学生端排队验收：当前开放验收的实验 + 我的排队状态 */
+/** 排队状态：WAITING=排队中（未被叫号） NOTIFIED=排队中（已被叫号） CHECKING=验收中 */
+export type CheckoffQueueState = 'WAITING' | 'NOTIFIED' | 'CHECKING'
+
+/** 学生端排队验收：当前开放验收的实验 + 我的排队状态（学生只能看到自己的信息） */
 export type StudentQueueExperiment = {
   id: string
   mark: string
   title: string
   publishTime: string | null
   checkoffDeadline: string | null
-  /** 该实验当前排队人数（含自己） */
-  queueLength: number
   /** 是否已有验收成绩（功能测试 / 验收问答任一） */
   checkedOff: boolean
   myEntry: {
     id: string
+    state: CheckoffQueueState
     joinedAt: string
-    /** 1-based 位次 */
-    position: number
-    /** 前面还有几人 */
-    ahead: number
+    /** 提醒准备验收的时间 */
+    notifiedAt: string | null
+    /** 提醒准备验收的助教 */
+    notifiedBy: { name: string; avatar: number | null } | null
+    /** 正在验收的助教 */
+    checkingBy: { name: string; avatar: number | null } | null
+  } | null
+  /**
+   * 提醒我准备验收的那位助教的状态（仅 myEntry.notifiedBy 存在时返回）：
+   * 是否正在验收某位同学、还有几位同样被该助教提醒但尚未验收的同学。
+   */
+  taStatus: {
+    name: string
+    avatar: number | null
+    checking: boolean
+    pendingNotifiedCount: number
   } | null
 }
 
@@ -1016,6 +1030,13 @@ export type CheckoffRecord = {
   durationMs: number | null
 }
 
+/** 队列里的助教信息（提醒准备 / 正在验收） */
+export type CheckoffQueuePerson = {
+  id: string
+  name: string
+  avatar: number | null
+}
+
 /** 排队条目（助教端排队面板使用；队列按实验、全班共享） */
 export type CheckoffQueueEntry = {
   id: string
@@ -1026,16 +1047,64 @@ export type CheckoffQueueEntry = {
   experimentId: string
   experimentMark: string
   experimentTitle: string
-  /** ISO 字符串 */
+  /** 队列状态 */
+  state: CheckoffQueueState
+  /** 实验内位次（1-based） */
+  position: number
+  /** 加入队列时间（ISO） */
   joinedAt: string
+  /** 提醒准备验收的助教 */
+  notifiedBy: CheckoffQueuePerson | null
+  notifiedAt: string | null
+  /** 正在验收的助教 */
+  checkingBy: CheckoffQueuePerson | null
+  checkingAt: string | null
 }
 
-/** 本班全部排队条目（按加入时间升序） */
+/** 本班全部排队条目（按实验、位次排序） */
 export function fetchCheckoffQueue(
   classId: string,
 ): Promise<{ entries: CheckoffQueueEntry[] }> {
   return apiFetch<{ entries: CheckoffQueueEntry[] }>(
     `/api/checkoff/queue?classId=${encodeURIComponent(classId)}`,
+  )
+}
+
+/** 助教手动把学生加入队列（插队/新增；已存在时返回 already） */
+export function insertCheckoffQueue(body: {
+  experimentId: string
+  userId: string
+}): Promise<{ ok: true; already?: boolean }> {
+  return apiFetch<{ ok: true; already?: boolean }>('/api/checkoff/queue', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 助教调整某实验的队列顺序（entryIds 为该实验全部条目的完整顺序） */
+export function reorderCheckoffQueue(body: {
+  experimentId: string
+  entryIds: string[]
+}): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/checkoff/queue/order', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 助教提醒学生准备验收（叫号）：记录提醒助教与时间 */
+export function notifyCheckoffQueueEntry(entryId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(
+    `/api/checkoff/queue/${encodeURIComponent(entryId)}/notify`,
+    { method: 'POST' },
+  )
+}
+
+/** 撤回「提醒准备验收」 */
+export function cancelCheckoffQueueNotify(entryId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(
+    `/api/checkoff/queue/${encodeURIComponent(entryId)}/notify`,
+    { method: 'DELETE' },
   )
 }
 

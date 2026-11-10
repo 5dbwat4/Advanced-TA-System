@@ -1,8 +1,14 @@
 import type { FastifyPluginAsync } from 'fastify'
 
-import { broadcastCheckoffQueue } from '../lib/checkoff-queue.js'
+import {
+  countQueuePendingNotified,
+  insertCheckoffQueueEntry,
+  isTaCheckingAny,
+  toCheckoffQueueState,
+} from '../lib/checkoff-queue.js'
 import { requireStudent } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
+import { broadcastCheckoffQueue } from '../lib/realtime.js'
 import { buildStudentReport } from '../lib/student-report.js'
 import { parseClassSettings, resolveScoreRatio, weightedTotal } from '../lib/xzzd-push.js'
 
@@ -101,7 +107,10 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     },
   )
 
-  /** 排队验收：当前开放验收的实验 + 本人在各实验的排队状态 */
+  /**
+   * 排队验收：当前开放验收的实验 + 本人在各实验的排队状态。
+   * 学生端只返回本人信息：不返回队列人数 / 位次 / 前面人数 / 其他人的任何信息。
+   */
   fastify.get('/checkoff-queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!requireStudent(request, reply)) return reply
 
@@ -118,12 +127,13 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     if (!user.classId) {
       return reply.send({ serverTime, experiments: [] })
     }
+    const classId = user.classId
 
     const now = new Date()
     // 只返回「当前开放验收」的实验：已发布（publishTime 为空视为已发布）且验收未截止
     const experiments = await prisma.experiment.findMany({
       where: {
-        classId: user.classId,
+        classId,
         AND: [
           { OR: [{ publishTime: null }, { publishTime: { lte: now } }] },
           { OR: [{ checkoffDeadline: null }, { checkoffDeadline: { gt: now } }] },
@@ -134,50 +144,86 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     })
 
     const ids = experiments.map((experiment) => experiment.id)
-    const [scores, queueEntries] = await Promise.all([
+    const [scores, myEntries] = await Promise.all([
       prisma.score.findMany({
         where: { userId: sub, indId: { in: ids }, type: { in: [0, 1] } },
         select: { indId: true },
       }),
+      // 只查本人条目：学生端看不到别人的排队信息
       prisma.checkoffQueueEntry.findMany({
-        where: { classId: user.classId, experimentId: { in: ids } },
-        orderBy: { joinedAt: 'asc' },
+        where: { classId, userId: sub, experimentId: { in: ids } },
+        select: {
+          id: true,
+          experimentId: true,
+          state: true,
+          joinedAt: true,
+          notifiedBy: true,
+          notifiedAt: true,
+          checkingBy: true,
+        },
       }),
     ])
     const checkedOffIds = new Set(scores.map((row) => row.indId))
-    // 一次查出全部条目后按实验分组，位次由组内加入顺序决定
-    const entriesByExperiment = new Map<string, typeof queueEntries>()
-    for (const entry of queueEntries) {
-      const list = entriesByExperiment.get(entry.experimentId) ?? []
-      list.push(entry)
-      entriesByExperiment.set(entry.experimentId, list)
-    }
+    const entryByExperiment = new Map(myEntries.map((entry) => [entry.experimentId, entry]))
 
-    return reply.send({
-      serverTime,
-      experiments: experiments.map((experiment) => {
-        const entries = entriesByExperiment.get(experiment.id) ?? []
-        const index = entries.findIndex((entry) => entry.userId === sub)
-        const mine = index >= 0 ? entries[index] : null
+    // 叫号助教 / 正在验收的助教：一次批量查出姓名与头像
+    const taIds = [
+      ...new Set(
+        myEntries
+          .flatMap((entry) => [entry.notifiedBy, entry.checkingBy])
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    ]
+    const tas =
+      taIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: taIds } },
+            select: { id: true, name: true, avatar: true },
+          })
+        : []
+    const taById = new Map(tas.map((ta) => [ta.id, ta]))
+
+    const rows = await Promise.all(
+      experiments.map(async (experiment) => {
+        const mine = entryByExperiment.get(experiment.id) ?? null
+        const notifier = mine?.notifiedBy ? taById.get(mine.notifiedBy) : undefined
+        const checker = mine?.checkingBy ? taById.get(mine.checkingBy) : undefined
+        // 提醒我准备验收的那位助教：是否正在验收同学、还有几位被该助教提醒但未验收的同学
+        const taStatus = notifier
+          ? {
+              name: notifier.name,
+              avatar: notifier.avatar,
+              checking: await isTaCheckingAny(classId, notifier.id),
+              pendingNotifiedCount: await countQueuePendingNotified({
+                classId,
+                taUserId: notifier.id,
+                excludeUserId: sub,
+              }),
+            }
+          : null
         return {
           id: experiment.id,
           mark: experiment.mark,
           title: experiment.title,
           publishTime: experiment.publishTime?.toISOString() ?? null,
           checkoffDeadline: experiment.checkoffDeadline?.toISOString() ?? null,
-          queueLength: entries.length,
           checkedOff: checkedOffIds.has(experiment.id),
           myEntry: mine
             ? {
                 id: mine.id,
+                state: toCheckoffQueueState(mine.state),
                 joinedAt: mine.joinedAt.toISOString(),
-                position: index + 1,
-                ahead: index,
+                notifiedAt: mine.notifiedAt?.toISOString() ?? null,
+                notifiedBy: notifier ? { name: notifier.name, avatar: notifier.avatar } : null,
+                checkingBy: checker ? { name: checker.name, avatar: checker.avatar } : null,
               }
             : null,
+          taStatus,
         }
       }),
-    })
+    )
+
+    return reply.send({ serverTime, experiments: rows })
   })
 
   /** 加入排队（幂等：已排队时不改变加入时间） */
@@ -221,12 +267,8 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'CLOSED', message: '该实验验收已截止' })
     }
 
-    await prisma.checkoffQueueEntry.upsert({
-      where: { experimentId_userId: { experimentId, userId: sub } },
-      // 已存在时保持原 joinedAt（不刷新排队位次）
-      update: {},
-      create: { classId, experimentId, userId: sub },
-    })
+    // 加入队列：已存在时保持原记录（幂等，不刷新排队时间与位置），新加入追加到队尾
+    await insertCheckoffQueueEntry({ classId, experimentId, userId: sub })
 
     await broadcastCheckoffQueue(classId)
     return reply.send({ ok: true })

@@ -7,6 +7,7 @@ import ListOrdered from '~icons/lucide/list-ordered'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import Users from '~icons/lucide/users'
 import X from '~icons/lucide/x'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -21,8 +22,8 @@ import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { formatDateTime } from '@/lib/format'
 
-/** 排队状态轮询间隔 */
-const QUEUE_POLL_MS = 15_000
+/** 排队状态轮询间隔（只同步本人状态，10 秒足够及时） */
+const QUEUE_POLL_MS = 10_000
 /** 「已等待 X 分钟」文案的刷新间隔 */
 const WAIT_TEXT_REFRESH_MS = 30_000
 
@@ -39,20 +40,43 @@ export default function StudentQueue() {
   /** 客户端与服务端的时钟偏差（毫秒），避免本机时间不准导致等待时长算错 */
   const [clockOffset, setClockOffset] = useState(0)
 
-  /** 上一轮快照：用于识别「验收完成后被自动移出队列」 */
+  /** 上一轮快照：用于识别「被叫号 / 开始验收 / 验收完成自动移出」等状态变化 */
   const snapshotRef = useRef<StudentQueueExperiment[]>([])
 
   const applySnapshot = useCallback(
-    (next: StudentQueueExperiment[], serverTime: string, detectRemoval: boolean) => {
+    (next: StudentQueueExperiment[], serverTime: string, detectChanges: boolean) => {
       const server = new Date(serverTime).getTime()
       if (!Number.isNaN(server)) setClockOffset(server - Date.now())
 
-      const previous = new Map(snapshotRef.current.map((item) => [item.id, item]))
-      for (const experiment of next) {
-        const before = previous.get(experiment.id)
-        // 上一次还在排队、这一次消失且已出分 → 助教保存成绩后自动移出了队列
-        if (detectRemoval && before?.myEntry && !experiment.myEntry && experiment.checkedOff) {
-          toast.success(`已完成 ${experiment.mark} 验收，已自动移出队列`)
+      if (detectChanges) {
+        const previous = new Map(snapshotRef.current.map((item) => [item.id, item]))
+        for (const experiment of next) {
+          const before = previous.get(experiment.id)
+          if (!before) continue
+
+          const beforeEntry = before.myEntry
+          const entry = experiment.myEntry
+
+          // 1）从未被叫号 → 已被某位助教叫号
+          if (beforeEntry?.state !== 'NOTIFIED' && entry?.state === 'NOTIFIED') {
+            const taName = entry.notifiedBy?.name
+            toast.info(
+              taName
+                ? `助教 ${taName} 提醒你准备 ${experiment.mark} 验收`
+                : `有助教提醒你准备 ${experiment.mark} 验收`,
+            )
+          }
+
+          // 2）助教已进入验收（开始验收你）
+          if (beforeEntry?.state !== 'CHECKING' && entry?.state === 'CHECKING') {
+            const taName = entry.checkingBy?.name ?? entry.notifiedBy?.name
+            toast.success(taName ? `助教 ${taName} 已开始验收你` : '助教已开始验收你')
+          }
+
+          // 3）上一次还在排队、这一次消失且已出分 → 助教保存成绩后自动移出了队列
+          if (beforeEntry && !entry && experiment.checkedOff) {
+            toast.success(`已完成 ${experiment.mark} 验收，已自动移出队列`)
+          }
         }
       }
 
@@ -64,11 +88,11 @@ export default function StudentQueue() {
   )
 
   const reload = useCallback(
-    async (options: { silent?: boolean; detectRemoval?: boolean } = {}) => {
+    async (options: { silent?: boolean; detectChanges?: boolean } = {}) => {
       if (!options.silent) setLoading(true)
       try {
         const result = await fetchStudentCheckoffQueue()
-        applySnapshot(result.experiments, result.serverTime, options.detectRemoval ?? true)
+        applySnapshot(result.experiments, result.serverTime, options.detectChanges ?? true)
         setError(null)
       } catch (err) {
         // 后台轮询失败时保持静默，等下一轮重试，避免页面闪烁
@@ -100,7 +124,7 @@ export default function StudentQueue() {
     }
   }, [applySnapshot])
 
-  // 15 秒轮询一次；页面重新可见时立即刷新
+  // 10 秒轮询一次；页面重新可见时立即刷新
   useEffect(() => {
     const timer = window.setInterval(() => void reload({ silent: true }), QUEUE_POLL_MS)
     const onVisible = () => {
@@ -147,7 +171,7 @@ export default function StudentQueue() {
       await cancelStudentCheckoffQueue(experiment.id)
       toast.success(`已取消 ${experiment.mark} 排队`)
       // 主动取消不应触发「已完成验收」的自动移出提示
-      await reload({ silent: true, detectRemoval: false })
+      await reload({ silent: true, detectChanges: false })
     } catch (err) {
       toast.error(getErrorMessage(err, '取消排队失败'))
     } finally {
@@ -162,7 +186,7 @@ export default function StudentQueue() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="排队验收"
-        subtitle="排队仅用于现场验收顺序；助教会线下叫号，请留意现场。验收结束后会自动移出队列。"
+        subtitle="这里只显示你本人的排队状态；助教会线下叫号，请留意现场。验收结束后会自动移出队列。"
         actions={
           <IconAction
             label="刷新"
@@ -228,7 +252,7 @@ export default function StudentQueue() {
   )
 }
 
-/** 单个实验的排队卡片 */
+/** 单个实验的排队卡片：只展示本人排队状态，不涉及队列人数 / 位次 / 其他人 */
 function QueueCard({
   index,
   experiment,
@@ -247,7 +271,7 @@ function QueueCard({
   onJoin: () => void
   onCancel: () => void
 }) {
-  const myEntry = experiment.myEntry
+  const entry = experiment.myEntry
 
   return (
     <Card index={index} className="flex flex-wrap items-start justify-between gap-4">
@@ -265,57 +289,12 @@ function QueueCard({
               <CalendarClock width={11} height={11} className="shrink-0" />
               验收截止 {formatDateTime(experiment.checkoffDeadline)}
             </span>
-            <span className="inline-flex items-center gap-1">
-              <Users width={11} height={11} className="shrink-0" />
-              当前{' '}
-              <span className="tabular font-semibold text-fg-muted">{experiment.queueLength}</span>{' '}
-              人排队
-            </span>
           </div>
         </div>
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-2">
-        {myEntry ? (
-          <>
-            <Chip size="sm" variant="soft" color="accent" className="tabular">
-              排队中 · 第 {myEntry.position} 位
-            </Chip>
-            <div className="text-right text-xs text-fg-subtle">
-              {myEntry.ahead > 0 ? `前面还有 ${myEntry.ahead} 人` : '已排到最前'} · 已等待{' '}
-              {formatWait(myEntry.joinedAt, now)}
-            </div>
-            <PendingButton
-              size="sm"
-              variant="secondary"
-              icon={X}
-              pendingLabel="取消中"
-              isPending={pending}
-              isDisabled={disabled}
-              onPress={onCancel}
-            >
-              取消排队
-            </PendingButton>
-          </>
-        ) : experiment.checkedOff ? (
-          <>
-            <Chip size="sm" variant="soft" color="success">
-              已完成验收
-            </Chip>
-            <div className="text-right text-xs text-fg-subtle">如需再次验收可重新排队</div>
-            <PendingButton
-              size="sm"
-              variant="secondary"
-              icon={ListOrdered}
-              pendingLabel="加入中"
-              isPending={pending}
-              isDisabled={disabled}
-              onPress={onJoin}
-            >
-              重新排队
-            </PendingButton>
-          </>
-        ) : (
+        {!entry && !experiment.checkedOff && (
           <>
             <Chip size="sm" variant="soft" color="default">
               未排队
@@ -333,8 +312,126 @@ function QueueCard({
             </PendingButton>
           </>
         )}
+
+        {!entry && experiment.checkedOff && (
+          <>
+            <Chip size="sm" variant="soft" color="success">
+              已完成验收
+            </Chip>
+            <div className="text-right text-xs text-fg-subtle">如需再次验收可重新排队</div>
+            <PendingButton
+              size="sm"
+              variant="secondary"
+              icon={ListOrdered}
+              pendingLabel="加入中"
+              isPending={pending}
+              isDisabled={disabled}
+              onPress={onJoin}
+            >
+              重新排队
+            </PendingButton>
+          </>
+        )}
+
+        {entry?.state === 'WAITING' && (
+          <>
+            <Chip size="sm" variant="soft" color="default">
+              排队中（未被叫号）
+            </Chip>
+            <div className="text-right text-xs text-fg-subtle">
+              排队时间 <span className="tabular">{formatDateTime(entry.joinedAt)}</span>
+            </div>
+            <div className="text-right text-xs text-fg-subtle">
+              已等待{' '}
+              <span className="tabular font-semibold text-fg-muted">
+                {formatWait(entry.joinedAt, now)}
+              </span>
+            </div>
+            <PendingButton
+              size="sm"
+              variant="secondary"
+              icon={X}
+              pendingLabel="取消中"
+              isPending={pending}
+              isDisabled={disabled}
+              onPress={onCancel}
+            >
+              取消排队
+            </PendingButton>
+          </>
+        )}
+
+        {entry?.state === 'NOTIFIED' && (
+          <>
+            <Chip size="sm" variant="soft" color="warning">
+              已被 {entry.notifiedBy?.name ?? '助教'} 提醒准备验收
+            </Chip>
+            <div className="text-right text-xs text-fg-subtle">
+              提醒时间{' '}
+              <span className="tabular">{formatClockTime(entry.notifiedAt)}</span>
+            </div>
+            <PendingButton
+              size="sm"
+              variant="secondary"
+              icon={X}
+              pendingLabel="取消中"
+              isPending={pending}
+              isDisabled={disabled}
+              onPress={onCancel}
+            >
+              取消排队
+            </PendingButton>
+          </>
+        )}
+
+        {entry?.state === 'CHECKING' && (
+          <>
+            <Chip size="sm" variant="soft" color="accent">
+              验收中
+            </Chip>
+            <div className="text-right text-xs text-fg-muted">
+              {entry.checkingBy?.name
+                ? `助教 ${entry.checkingBy.name} 正在验收你`
+                : '助教正在验收你'}
+            </div>
+            {/* 正在验收时不能取消排队，由助教保存成绩后自动移出 */}
+          </>
+        )}
       </div>
+
+      {entry?.state === 'NOTIFIED' && experiment.taStatus && (
+        <TaStatusBlock taStatus={experiment.taStatus} />
+      )}
     </Card>
+  )
+}
+
+/** 已被某位助教叫号时，展示该助教当前的验收情况（不涉及队列人数 / 位次） */
+function TaStatusBlock({
+  taStatus,
+}: {
+  taStatus: NonNullable<StudentQueueExperiment['taStatus']>
+}) {
+  const { name, avatar, checking, pendingNotifiedCount } = taStatus
+
+  return (
+    <div className="w-full rounded-xl border border-line bg-sunken px-3.5 py-3">
+      <div className="flex items-start gap-2.5">
+        <AvatarImage id={avatar} size={28} fallback={name.slice(0, 1)} />
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-fg-muted">
+            {checking ? `${name} 正在验收其他同学` : `${name} 暂未开始验收`}
+          </div>
+          {pendingNotifiedCount > 0 && (
+            <div className="mt-1 text-[11px] text-fg-subtle">
+              还有{' '}
+              <span className="tabular font-semibold text-fg-muted">{pendingNotifiedCount}</span>{' '}
+              位同学也被 {name} 提醒、正在等待验收
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -348,4 +445,13 @@ function formatWait(joinedAt: string, now: number): string {
   const hours = Math.floor(minutes / 60)
   const rest = minutes % 60
   return rest === 0 ? `${hours} 小时` : `${hours} 小时 ${rest} 分钟`
+}
+
+/** 叫号时间：只显示时分（HH:mm） */
+function formatClockTime(value: string | null): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }

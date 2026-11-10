@@ -239,14 +239,29 @@ export function useCheckoffWatch(
   return peers
 }
 
-/** 通知当前班级的验收房间：本助教开始验收某学生 */
-export function notifyCheckoffStarted(payload: { classId: string; studentName: string }): void {
+/**
+ * 通知当前班级的验收房间：本助教开始验收某学生。
+ * `studentId` / `experimentId` 用于后端把该学生（该实验）的排队记录精确置为「验收中」；
+ * 同一学生可能同时排了多个实验，因此需要实验 id 才能定位到唯一记录。两者均可选，兼容旧版后端。
+ */
+export function notifyCheckoffStarted(payload: {
+  classId: string
+  studentName: string
+  /** 学生 userId：精确匹配排队记录（可选，旧版后端按姓名唯一匹配） */
+  studentId?: string
+  /** 实验 id：同一学生排了多个实验时用于消歧（可选，旧版后端忽略） */
+  experimentId?: string
+}): void {
   getCheckoffSocket().emit('checkoff:notify', payload)
 }
 
-/** 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场） */
-export function clearCheckoffPresence(classId: string): void {
-  getCheckoffSocket().emit('checkoff:clear', { classId })
+/**
+ * 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场）。
+ * `studentId` 可选：传则只把该学生的排队记录恢复为「已叫号 / 排队中」，
+ * 不传则恢复本助教在本班全部「验收中」的记录（兼容旧版）。
+ */
+export function clearCheckoffPresence(classId: string, studentId?: string): void {
+  getCheckoffSocket().emit('checkoff:clear', { classId, studentId })
 }
 
 /* ------------------------------- queue ------------------------------- */
