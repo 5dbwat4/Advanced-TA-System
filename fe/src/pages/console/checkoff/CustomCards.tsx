@@ -360,7 +360,6 @@ export default function CustomCards() {
       await updatePreferences({
         device: user.preferences?.device ?? 'single',
         draw: user.preferences?.draw ?? 'random',
-        markdownEditor: user.preferences?.markdownEditor ?? 'uiw',
         markdownStyle: user.preferences?.markdownStyle ?? 'github',
         drawCount: user.preferences?.drawCount ?? 3,
         customCards: { slots, cards },

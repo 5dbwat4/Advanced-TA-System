@@ -28,7 +28,13 @@ import NotebookText from '~icons/lucide/notebook-text'
 import Pen from '~icons/lucide/pen'
 import Plus from '~icons/lucide/plus'
 import Settings2 from '~icons/lucide/settings-2'
+import ShoppingCart from '~icons/lucide/shopping-cart'
+import Tags from '~icons/lucide/tags'
 import Trash2 from '~icons/lucide/trash-2'
+import { AddToBasketButton, BasketQuestionText } from '@/components/questions/AddToBasketButton'
+import { TagFilter } from '@/components/questions/TagFilter'
+import { TagLink } from '@/components/questions/TagLink'
+import { TagSelect } from '@/components/questions/TagSelect'
 import { EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconAction } from '@/components/ui/IconAction'
@@ -47,14 +53,17 @@ import {
   fetchBankQuestions,
   listBanks,
   listQuestions,
+  listTags,
   renameBank,
   updateQuestion,
   type Question,
   type QuestionBank,
+  type Tag,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { bankFilename, bankQuestionsToMarkdown, downloadMarkdown } from '@/lib/download'
 import { getErrorMessage } from '@/lib/error'
+import { useQuestionBasket } from '@/lib/question-basket'
 import { useAsyncData } from '@/lib/request'
 
 const PAGE_SIZE = 20
@@ -66,13 +75,15 @@ async function copyText(text: string, label: string) {
   else toast.error('复制失败')
 }
 
-function QuestionsPanel() {
+function QuestionsPanel({ tags }: { tags: Tag[] }) {
   const { user } = useAuth()
+  const addToBasket = useQuestionBasket((state) => state.add)
   const navigate = useNavigate()
   const [items, setItems] = useState<Question[]>([])
   const [total, setTotal] = useState(0)
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -80,6 +91,7 @@ function QuestionsPanel() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
+  const [tagIds, setTagIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [confirmTarget, setConfirmTarget] = useState<Question | null>(null)
@@ -106,6 +118,7 @@ function QuestionsPanel() {
       try {
         const data = await listQuestions({
           q: applied,
+          tagId: tagFilter ?? undefined,
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
         })
@@ -127,7 +140,7 @@ function QuestionsPanel() {
     return () => {
       cancelled = true
     }
-  }, [applied, refreshKey, page])
+  }, [applied, tagFilter, refreshKey, page])
 
   const refresh = () => setRefreshKey((key) => key + 1)
 
@@ -155,12 +168,14 @@ function QuestionsPanel() {
     setEditingId(null)
     setQuestion('')
     setAnswer('')
+    setTagIds([])
   }
 
   const openCreate = () => {
     setEditingId(null)
     setQuestion('')
     setAnswer('')
+    setTagIds([])
     formState.open()
   }
 
@@ -168,13 +183,14 @@ function QuestionsPanel() {
     setEditingId(item.id)
     setQuestion(item.question)
     setAnswer(item.answer)
+    setTagIds(item.tags.map((tag) => tag.id))
     formState.open()
   }
 
   const submit = async () => {
     setSaving(true)
     try {
-      const body = { question: question.trim(), answer: answer.trim() }
+      const body = { question: question.trim(), answer: answer.trim(), tagIds }
       if (editingId) {
         await updateQuestion(editingId, body)
         toast.success('已保存修改')
@@ -186,6 +202,31 @@ function QuestionsPanel() {
       refresh()
     } catch (error) {
       toast.error(getErrorMessage(error, editingId ? '保存失败' : '创建失败'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submitAndAddToBasket = async () => {
+    setSaving(true)
+    try {
+      const { question: created } = await createQuestion({
+        question: question.trim(),
+        answer: answer.trim(),
+        tagIds,
+      })
+      addToBasket({
+        id: created.id,
+        question: created.question,
+        answer: created.answer,
+        author: created.user.username ?? created.user.name,
+        tags: created.tags,
+      })
+      toast.success('已创建题目并加入试题篮')
+      resetForm()
+      refresh()
+    } catch (error) {
+      toast.error(getErrorMessage(error, '创建失败'))
     } finally {
       setSaving(false)
     }
@@ -242,6 +283,20 @@ function QuestionsPanel() {
         </IconAction>
       </div>
 
+      {tags.length > 0 && (
+        <div className="mb-3">
+          <TagFilter
+            tags={tags}
+            value={tagFilter}
+            onChange={(value) => {
+              setTagFilter(value)
+              setPage(1)
+            }}
+            onOpenTag={(id) => navigate(`/console/tag/${id}/questions`)}
+          />
+        </div>
+      )}
+
       {!loading && (
         <div className="mb-3 text-xs text-fg-subtle">
           共 {total} 题{applied && `（匹配「${applied}」）`}
@@ -278,6 +333,9 @@ function QuestionsPanel() {
                   <span className="tabular text-[11px] text-fg-subtle">
                     {new Date(item.createdAt).toLocaleDateString()}
                   </span>
+                  {item.tags.map((tag) => (
+                    <TagLink key={tag.id} tag={tag} />
+                  ))}
                   <div className="ml-auto flex items-center gap-1">
                     {isOwner ? (
                       <IconAction label="编辑" onPress={() => openEdit(item)}>
@@ -308,9 +366,9 @@ function QuestionsPanel() {
                   </div>
                 </div>
 
-                <div className="mt-4">
+                <BasketQuestionText id={item.id} className="mt-4">
                   <Markdown source={item.question} />
-                </div>
+                </BasketQuestionText>
 
                 <div className="mt-3 flex flex-wrap items-center gap-1">
                   <IconAction
@@ -331,6 +389,17 @@ function QuestionsPanel() {
                       <Copy width={14} height={14} className="shrink-0" />
                     </IconAction>
                   )}
+                  <span className="ml-auto">
+                    <AddToBasketButton
+                      question={{
+                        id: item.id,
+                        question: item.question,
+                        answer: item.answer,
+                        author: item.user.username ?? item.user.name,
+                        tags: item.tags,
+                      }}
+                    />
+                  </span>
                 </div>
 
                 <AnimatePresence initial={false}>
@@ -413,6 +482,12 @@ function QuestionsPanel() {
                   <label className="mb-1.5 block text-xs font-semibold text-fg-muted">答案</label>
                   <MarkdownEditor value={answer} onChange={setAnswer} />
                 </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-fg-muted">
+                    标签（可选）
+                  </label>
+                  <TagSelect value={tagIds} onChange={setTagIds} />
+                </div>
               </Modal.Body>
               <Modal.Footer>
                 <Button variant="secondary" onPress={resetForm}>
@@ -428,6 +503,18 @@ function QuestionsPanel() {
                 >
                   {editingId ? '保存修改' : '添加题目'}
                 </PendingButton>
+                {!editingId && (
+                  <PendingButton
+                    variant="secondary"
+                    isPending={saving}
+                    isDisabled={!question.trim() || !answer.trim()}
+                    icon={ShoppingCart}
+                    pendingLabel="创建中"
+                    onPress={() => void submitAndAddToBasket()}
+                  >
+                    创建题目并加入试题篮
+                  </PendingButton>
+                )}
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
@@ -445,7 +532,7 @@ function QuestionsPanel() {
   )
 }
 
-function SetsPanel() {
+function SetsPanel({ tags }: { tags: Tag[] }) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -465,8 +552,12 @@ function SetsPanel() {
     },
   })
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
 
-  const { data, error, loading, reload } = useAsyncData(() => listBanks(), [])
+  const { data, error, loading, reload } = useAsyncData(
+    () => listBanks({ tagId: tagFilter ?? undefined }),
+    [tagFilter],
+  )
   const banks = data?.banks ?? []
 
   useEffect(() => {
@@ -564,6 +655,17 @@ function SetsPanel() {
         </div>
       </div>
 
+      {tags.length > 0 && (
+        <div className="mb-3">
+          <TagFilter
+            tags={tags}
+            value={tagFilter}
+            onChange={setTagFilter}
+            onOpenTag={(id) => navigate(`/console/tag/${id}/banks`)}
+          />
+        </div>
+      )}
+
       {loading ? (
         <SkeletonList rows={3} className="h-24 rounded-2xl" />
       ) : banks.length === 0 ? (
@@ -611,6 +713,9 @@ function SetsPanel() {
                   <span className="tabular rounded-lg border border-line bg-sunken px-2 py-0.5 text-[11px] text-fg-muted">
                     {bank.experimentCount} 个实验使用
                   </span>
+                  {bank.tags.map((tag) => (
+                    <TagLink key={tag.id} tag={tag} kind="banks" />
+                  ))}
 
                   <div className="ml-auto flex items-center gap-1">
                     <Button
@@ -719,7 +824,14 @@ function SetsPanel() {
 
 export default function Questions() {
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
   const tab = params.get('tab') === 'sets' ? 'sets' : 'questions'
+  const { data: tagData, error: tagError } = useAsyncData(() => listTags(), [])
+  const tags = tagData?.tags ?? []
+
+  useEffect(() => {
+    if (tagError) toast.error(tagError)
+  }, [tagError])
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -731,23 +843,42 @@ export default function Questions() {
           setParams(key === 'sets' ? { tab: 'sets' } : {}, { replace: true })
         }
       >
-        <Tabs.ListContainer>
-          <Tabs.List aria-label="题库视图" className="max-w-xs">
-            <Tabs.Tab id="questions">
-              题目
-              <Tabs.Indicator />
-            </Tabs.Tab>
-            <Tabs.Tab id="sets">
-              题目集
-              <Tabs.Indicator />
-            </Tabs.Tab>
-          </Tabs.List>
-        </Tabs.ListContainer>
+        <div className="flex items-center gap-2">
+          <Tabs.ListContainer className="flex-1">
+            <Tabs.List aria-label="题库视图" className="w-full whitespace-nowrap">
+              <Tabs.Tab id="questions">
+                题目
+                <Tabs.Indicator />
+              </Tabs.Tab>
+              <Tabs.Tab id="sets">
+                题目集
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+          <Dropdown>
+            <Button isIconOnly size="sm" variant="ghost" aria-label="更多操作">
+              <Ellipsis width={16} height={16} className="shrink-0" />
+            </Button>
+            <Dropdown.Popover>
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === 'tags') navigate('/console/tag')
+                }}
+              >
+                <Dropdown.Item id="tags" textValue="管理tag">
+                  <Tags width={15} height={15} className="shrink-0 text-fg-muted" />
+                  <Label>管理tag</Label>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        </div>
         <Tabs.Panel id="questions" className="pt-4">
-          <QuestionsPanel />
+          <QuestionsPanel tags={tags} />
         </Tabs.Panel>
         <Tabs.Panel id="sets" className="pt-4">
-          <SetsPanel />
+          <SetsPanel tags={tags} />
         </Tabs.Panel>
       </Tabs>
     </div>

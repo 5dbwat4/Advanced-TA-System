@@ -1,10 +1,11 @@
 import { Input } from '@heroui/react'
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
 import { QuestionPicker } from '@/components/questions/QuestionPicker'
+import { TagSelect } from '@/components/questions/TagSelect'
 import { BackLink } from '@/components/ui/BackLink'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PendingButton } from '@/components/ui/PendingButton'
@@ -13,8 +14,16 @@ import { getErrorMessage } from '@/lib/error'
 
 export default function NewBank() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [name, setName] = useState('')
-  const [selected, setSelected] = useState<string[]>([])
+  const [selected, setSelected] = useState<string[]>(() => {
+    const questionIds = params.get('questionIds')
+    return questionIds ? questionIds.split(',').filter(Boolean) : []
+  })
+  const [tagIds, setTagIds] = useState<string[]>(() => {
+    const tagId = params.get('tagId')
+    return tagId ? [tagId] : []
+  })
   const [saving, setSaving] = useState(false)
 
   const submit = async (event: FormEvent) => {
@@ -22,7 +31,7 @@ export default function NewBank() {
     if (!name.trim()) return
     setSaving(true)
     try {
-      const { bank } = await createBank(name.trim())
+      const { bank } = await createBank(name.trim(), tagIds)
       if (selected.length > 0) {
         try {
           await setBankQuestions(bank.id, selected)
@@ -58,6 +67,13 @@ export default function NewBank() {
             required
             aria-label="题目集名称"
           />
+        </div>
+
+        <div className="rounded-2xl border border-line bg-elevated p-6">
+          <div className="mb-3 text-sm font-bold">
+            标签<span className="ml-1 text-xs font-normal text-fg-subtle">（可选）</span>
+          </div>
+          <TagSelect value={tagIds} onChange={setTagIds} />
         </div>
 
         <div className="rounded-2xl border border-line bg-elevated p-6">

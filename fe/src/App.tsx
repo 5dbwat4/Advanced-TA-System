@@ -56,6 +56,8 @@ const Scores = lazy(() => import('@/pages/console/scores/Scores'))
 const Settings = lazy(() => import('@/pages/account/Settings'))
 const Setup = lazy(() => import('@/pages/account/Setup'))
 const SpecialDrawEditor = lazy(() => import('@/pages/console/checkoff/SpecialDrawEditor'))
+const TagDetail = lazy(() => import('@/pages/console/tag/TagDetail'))
+const Tags = lazy(() => import('@/pages/console/tag/Tags'))
 const StudentExperiment = lazy(() => import('@/pages/student/StudentExperiment'))
 const StudentOverview = lazy(() => import('@/pages/student/StudentOverview'))
 const StudentScores = lazy(() => import('@/pages/student/StudentScores'))
@@ -146,6 +148,9 @@ export default function App() {
             <Route path="questions/banks/new" element={<NewBank />} />
             <Route path="questions/banks/:id/manage" element={<BankManage />} />
             <Route path="questions/banks/:id" element={<BankDetail />} />
+            <Route path="tag" element={<Tags />} />
+            <Route path="tag/:id/questions" element={<TagDetail />} />
+            <Route path="tag/:id/banks" element={<TagDetail />} />
             <Route path="reports" element={<Reports />} />
             <Route path="criteria" element={<CriteriaManage />} />
             <Route path="llm-connect" element={<LlmConnect />} />

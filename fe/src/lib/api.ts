@@ -10,14 +10,11 @@ export type Role = 'TA' | 'TEACHER' | 'VIEWER' | 'STUDENT'
 /** 可通过「添加用户 / 邀请链接」授予的角色；学生由课程名单产生 */
 export type InvitableRole = 'TA' | 'TEACHER' | 'VIEWER'
 
-export type MarkdownEditorId = 'uiw' | 'mdx'
-
 export type MarkdownStyleId = 'github' | 'prose'
 
 export type UserPreferences = {
   device: 'single' | 'multi'
   draw: 'random' | 'fixed'
-  markdownEditor: MarkdownEditorId
   markdownStyle: MarkdownStyleId
   drawCount: number
   customCards: CustomCards
@@ -134,11 +131,24 @@ export type Course = {
   isInstructor: boolean
 }
 
+export type TagSummary = {
+  id: string
+  name: string
+}
+
+export type Tag = TagSummary & {
+  questionCount: number
+  bankCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export type Question = {
   id: string
   question: string
   answer: string
   provider: string
+  tags: TagSummary[]
   createdAt: string
   updatedAt: string
   user: QuestionUser
@@ -148,6 +158,7 @@ export type QuestionBank = {
   id: string
   name: string
   owner: QuestionUser
+  tags: TagSummary[]
   questions: string[]
   experimentCount: number
   createdAt: string
@@ -306,6 +317,23 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (data ?? null) as T
 }
 
+export type StaffMember = {
+  id: string
+  name: string
+  role: InvitableRole
+  studentId: string
+  username: string | null
+  avatar: number | null
+}
+
+/** 课程 Staff 名单（教师 / 助教 / 观察者） */
+export async function listClassStaff(classId: string): Promise<StaffMember[]> {
+  const res = await apiFetch<{ members: StaffMember[] }>(
+    `/api/staff/members?classId=${encodeURIComponent(classId)}`,
+  )
+  return res.members
+}
+
 export async function listTas(): Promise<Ta[]> {
   const res = await apiFetch<{ tas: Ta[] }>('/api/staff/tas')
   return res.tas
@@ -376,17 +404,47 @@ export async function listClasses(): Promise<ClassInfo[]> {
 
 export function listQuestions(params?: {
   q?: string
+  tagId?: string
+  ids?: string[]
   limit?: number
   offset?: number
 }): Promise<{ questions: Question[]; total: number }> {
   const search = new URLSearchParams()
   if (params?.q) search.set('q', params.q)
+  if (params?.tagId) search.set('tagId', params.tagId)
+  if (params?.ids && params.ids.length > 0) search.set('ids', params.ids.join(','))
   if (params?.limit != null) search.set('limit', String(params.limit))
   if (params?.offset != null) search.set('offset', String(params.offset))
   const qs = search.toString()
   return apiFetch<{ questions: Question[]; total: number }>(
     `/api/questions${qs ? `?${qs}` : ''}`,
   )
+}
+
+export function listTags(): Promise<{ tags: Tag[] }> {
+  return apiFetch<{ tags: Tag[] }>('/api/tags')
+}
+
+export function getTag(id: string): Promise<{ tag: Tag }> {
+  return apiFetch<{ tag: Tag }>(`/api/tags/${id}`)
+}
+
+export function createTag(name: string): Promise<{ tag: Tag }> {
+  return apiFetch<{ tag: Tag }>('/api/tags', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function renameTag(id: string, name: string): Promise<{ tag: Tag }> {
+  return apiFetch<{ tag: Tag }>(`/api/tags/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteTag(id: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(`/api/tags/${id}`, { method: 'DELETE' })
 }
 
 export function fetchBankQuestions(bankId: string): Promise<{ questions: Question[] }> {
@@ -396,6 +454,7 @@ export function fetchBankQuestions(bankId: string): Promise<{ questions: Questio
 export function createQuestion(body: {
   question: string
   answer: string
+  tagIds?: string[]
 }): Promise<{ question: Question }> {
   return apiFetch<{ question: Question }>('/api/questions', {
     method: 'POST',
@@ -405,7 +464,7 @@ export function createQuestion(body: {
 
 export function updateQuestion(
   id: string,
-  body: { question?: string; answer?: string },
+  body: { question?: string; answer?: string; tagIds?: string[] },
 ): Promise<{ question: Question }> {
   return apiFetch<{ question: Question }>(`/api/questions/${id}`, {
     method: 'PATCH',
@@ -421,21 +480,28 @@ export function deleteQuestion(id: string): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>(`/api/questions/${id}`, { method: 'DELETE' })
 }
 
-export function listBanks(): Promise<{ banks: QuestionBank[] }> {
-  return apiFetch<{ banks: QuestionBank[] }>('/api/banks')
+export function listBanks(params?: { tagId?: string }): Promise<{ banks: QuestionBank[] }> {
+  const search = new URLSearchParams()
+  if (params?.tagId) search.set('tagId', params.tagId)
+  const qs = search.toString()
+  return apiFetch<{ banks: QuestionBank[] }>(`/api/banks${qs ? `?${qs}` : ''}`)
 }
 
-export function createBank(name: string): Promise<{ bank: QuestionBank }> {
+export function createBank(name: string, tagIds?: string[]): Promise<{ bank: QuestionBank }> {
   return apiFetch<{ bank: QuestionBank }>('/api/banks', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, tagIds }),
   })
 }
 
-export function renameBank(id: string, name: string): Promise<{ bank: QuestionBank }> {
+export function renameBank(
+  id: string,
+  name: string,
+  tagIds?: string[],
+): Promise<{ bank: QuestionBank }> {
   return apiFetch<{ bank: QuestionBank }>(`/api/banks/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, tagIds }),
   })
 }
 

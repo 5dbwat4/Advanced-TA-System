@@ -5,23 +5,36 @@ import { z } from 'zod'
 import { removeQuestionsFromBanks } from '../lib/banks.js'
 import { requireStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
+import {
+  filterExistingTagIds,
+  normalizeTagIds,
+  tagConnections,
+  tagSelect,
+} from '../lib/tags.js'
 
 const questionInclude = {
   user: { select: { id: true, username: true, name: true } },
+  tags: { select: tagSelect },
 } satisfies Prisma.QuestionInclude
+
+const tagIdsSchema = z.array(z.string().trim().min(1)).max(100).optional()
 
 const createQuestionSchema = z.object({
   question: z.string().trim().min(1).max(20000),
   answer: z.string().trim().min(1).max(20000),
+  tagIds: tagIdsSchema,
 })
 
 const updateQuestionSchema = z.object({
   question: z.string().trim().min(1).max(20000).optional(),
   answer: z.string().trim().min(1).max(20000).optional(),
+  tagIds: tagIdsSchema,
 })
 
 const listQuestionsQuerySchema = z.object({
   q: z.string().optional(),
+  tagId: z.string().trim().min(1).optional(),
+  ids: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 })
@@ -34,10 +47,18 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
     }
     const keyword = parsedQuery.data.q?.trim() ?? ''
+    const tagId = parsedQuery.data.tagId
+    const ids = (parsedQuery.data.ids ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
     const limit = parsedQuery.data.limit
     const offset = parsedQuery.data.offset
 
-    const where = keyword ? { question: { contains: keyword } } : undefined
+    const where: Prisma.QuestionWhereInput = {}
+    if (keyword) where.question = { contains: keyword }
+    if (tagId) where.tags = { some: { id: tagId } }
+    if (ids.length > 0) where.id = { in: ids }
 
     const [questions, total] = await Promise.all([
       prisma.question.findMany({
@@ -66,8 +87,15 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
+    const tagIds = await filterExistingTagIds(normalizeTagIds(parsed.data.tagIds))
+
     const created = await prisma.question.create({
-      data: { question: parsed.data.question, answer: parsed.data.answer, provider: sub },
+      data: {
+        question: parsed.data.question,
+        answer: parsed.data.answer,
+        provider: sub,
+        ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
+      },
       include: questionInclude,
     })
 
@@ -99,9 +127,16 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
         .send({ error: 'FORBIDDEN', message: '仅出题人可编辑，可先复制一份再修改' })
     }
 
+    const { tagIds, ...content } = parsed.data
+    const data: Prisma.QuestionUpdateInput = { ...content }
+    if (tagIds !== undefined) {
+      const ids = await filterExistingTagIds(normalizeTagIds(tagIds))
+      data.tags = { set: tagConnections(ids) }
+    }
+
     const updated = await prisma.question.update({
       where: { id },
-      data: parsed.data,
+      data,
       include: questionInclude,
     })
 
@@ -118,13 +153,23 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { id } = request.params as { id: string }
 
-    const existing = await prisma.question.findUnique({ where: { id } })
+    const existing = await prisma.question.findUnique({
+      where: { id },
+      include: { tags: { select: { id: true } } },
+    })
     if (!existing) {
       return reply.code(404).send({ error: 'QUESTION_NOT_FOUND', message: '题目不存在' })
     }
 
+    const tagIds = existing.tags.map((tag) => tag.id)
+
     const created = await prisma.question.create({
-      data: { question: existing.question, answer: existing.answer, provider: sub },
+      data: {
+        question: existing.question,
+        answer: existing.answer,
+        provider: sub,
+        ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
+      },
       include: questionInclude,
     })
 

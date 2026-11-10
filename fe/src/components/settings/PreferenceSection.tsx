@@ -4,14 +4,13 @@ import { toast } from 'sonner'
 import Check from '~icons/lucide/check'
 import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
 import { PreferenceFields } from '@/components/checkoff/PreferenceOnboarding'
-import { MarkdownEditorChoice } from '@/components/settings/MarkdownEditorChoice'
 import { MarkdownStyleChoice } from '@/components/settings/MarkdownStyleChoice'
 import { Card } from '@/components/ui/Card'
 import { PendingButton } from '@/components/ui/PendingButton'
 import { useAuth } from '@/lib/auth'
 import { createDefaultCustomCards } from '@/lib/custom-cards'
 import { getErrorMessage } from '@/lib/error'
-import type { MarkdownEditorId, MarkdownStyleId } from '@/lib/api'
+import type { MarkdownStyleId } from '@/lib/api'
 
 export function PreferenceSection({
   index = 0,
@@ -24,9 +23,6 @@ export function PreferenceSection({
   const saved = user?.preferences
   const [device, setDevice] = useState<'single' | 'multi'>(saved?.device ?? 'single')
   const [draw, setDraw] = useState<'random' | 'fixed'>(saved?.draw ?? 'random')
-  const [markdownEditor, setMarkdownEditor] = useState<MarkdownEditorId>(
-    saved?.markdownEditor ?? 'uiw',
-  )
   const [markdownStyle, setMarkdownStyle] = useState<MarkdownStyleId>(
     saved?.markdownStyle ?? 'github',
   )
@@ -39,7 +35,6 @@ export function PreferenceSection({
       ? markdownStyle !== saved.markdownStyle
       : device !== saved.device ||
         draw !== saved.draw ||
-        markdownEditor !== saved.markdownEditor ||
         markdownStyle !== saved.markdownStyle ||
         drawCount !== saved.drawCount)
 
@@ -49,7 +44,6 @@ export function PreferenceSection({
       await updatePreferences({
         device: saved?.device ?? device,
         draw: saved?.draw ?? draw,
-        markdownEditor: saved?.markdownEditor ?? markdownEditor,
         markdownStyle,
         drawCount: saved?.drawCount ?? drawCount,
         customCards: saved?.customCards ?? createDefaultCustomCards(),
@@ -85,8 +79,6 @@ export function PreferenceSection({
             showIcon={false}
             layout="rows"
           />
-
-          <MarkdownEditorChoice value={markdownEditor} onChange={setMarkdownEditor} />
         </>
       )}
 

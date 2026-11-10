@@ -3,6 +3,12 @@ import { z } from 'zod'
 
 import { removeQuestionsFromBanks } from '../../lib/banks.js'
 import { prisma } from '../../lib/prisma.js'
+import {
+  filterExistingTagIds,
+  normalizeTagIds,
+  tagConnections,
+  tagSelect,
+} from '../../lib/tags.js'
 import { jsonResult, runTool } from '../helpers.js'
 import type { McpPrincipal } from '../principal.js'
 
@@ -11,6 +17,7 @@ const questionSelect = {
   question: true,
   answer: true,
   provider: true,
+  tags: { select: tagSelect },
   createdAt: true,
   updatedAt: true,
 } as const
@@ -23,6 +30,7 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
       description: '按关键词搜索题目（含题干与答案），支持分页。',
       inputSchema: {
         q: z.string().trim().optional().describe('关键词，匹配题干'),
+        tagId: z.string().trim().min(1).optional().describe('按标签 id 过滤'),
         limit: z.number().int().min(1).max(100).optional().describe('返回条数，默认 20'),
         offset: z.number().int().min(0).optional().describe('偏移量，默认 0'),
       },
@@ -31,7 +39,9 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
       runTool(principal, 'search_questions', 'questions:read', async () => {
         const take = args.limit ?? 20
         const skip = args.offset ?? 0
-        const where = args.q ? { question: { contains: args.q } } : undefined
+        const where: { question?: { contains: string }; tags?: { some: { id: string } } } = {}
+        if (args.q) where.question = { contains: args.q }
+        if (args.tagId) where.tags = { some: { id: args.tagId } }
         const [questions, total] = await Promise.all([
           prisma.question.findMany({
             where,
@@ -72,12 +82,19 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
       inputSchema: {
         question: z.string().trim().min(1).max(20000).describe('题干（Markdown）'),
         answer: z.string().trim().min(1).max(20000).describe('答案（Markdown）'),
+        tagIds: z.array(z.string().min(1)).max(100).optional().describe('绑定的标签 id 列表'),
       },
     },
     (args) =>
       runTool(principal, 'create_question', 'questions:write', async () => {
+        const tagIds = await filterExistingTagIds(normalizeTagIds(args.tagIds))
         const question = await prisma.question.create({
-          data: { question: args.question, answer: args.answer, provider: principal.userId },
+          data: {
+            question: args.question,
+            answer: args.answer,
+            provider: principal.userId,
+            ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
+          },
           select: questionSelect,
         })
         return jsonResult({ question })
@@ -93,6 +110,11 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
         id: z.string().min(1).describe('题目 id'),
         question: z.string().trim().min(1).max(20000).optional().describe('新题干'),
         answer: z.string().trim().min(1).max(20000).optional().describe('新答案'),
+        tagIds: z
+          .array(z.string().min(1))
+          .max(100)
+          .optional()
+          .describe('新的标签 id 列表（覆盖原有绑定）'),
       },
     },
     (args) =>
@@ -102,9 +124,17 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
         if (existing.provider !== principal.userId) {
           throw new Error('仅出题人可编辑，可先复制一份再修改')
         }
+        const tagIds =
+          args.tagIds === undefined
+            ? undefined
+            : await filterExistingTagIds(normalizeTagIds(args.tagIds))
         const question = await prisma.question.update({
           where: { id: args.id },
-          data: { question: args.question, answer: args.answer },
+          data: {
+            question: args.question,
+            answer: args.answer,
+            ...(tagIds !== undefined ? { tags: { set: tagConnections(tagIds) } } : {}),
+          },
           select: questionSelect,
         })
         return jsonResult({ question })
@@ -120,13 +150,18 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
     },
     (args) =>
       runTool(principal, 'duplicate_question', 'questions:write', async () => {
-        const existing = await prisma.question.findUnique({ where: { id: args.id } })
+        const existing = await prisma.question.findUnique({
+          where: { id: args.id },
+          include: { tags: { select: { id: true } } },
+        })
         if (!existing) throw new Error('题目不存在')
+        const tagIds = existing.tags.map((tag) => tag.id)
         const question = await prisma.question.create({
           data: {
             question: existing.question,
             answer: existing.answer,
             provider: principal.userId,
+            ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
           },
           select: questionSelect,
         })

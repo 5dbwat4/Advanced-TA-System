@@ -11,23 +11,42 @@ import {
 } from '../lib/banks.js'
 import { requireStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
+import {
+  filterExistingTagIds,
+  normalizeTagIds,
+  tagConnections,
+  tagSelect,
+} from '../lib/tags.js'
 
 const questionInclude = {
   user: { select: { id: true, username: true, name: true, avatar: true } },
+  tags: { select: tagSelect },
 } satisfies Prisma.QuestionInclude
 
 const nameSchema = z.object({
   name: z.string().trim().min(1).max(64),
+  tagIds: z.array(z.string().trim().min(1)).max(100).optional(),
 })
 
 const idsSchema = z.object({
   questionIds: z.array(z.string().trim().min(1)).max(2000),
 })
 
+const listBanksQuerySchema = z.object({
+  tagId: z.string().trim().min(1).optional(),
+})
+
 export const banksRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 题库列表 */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async () => {
+  /** 题库列表（可选按标签过滤） */
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const parsedQuery = listBanksQuerySchema.safeParse(request.query)
+    if (!parsedQuery.success) {
+      return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
+    }
+
+    const tagId = parsedQuery.data.tagId
     const banks = await prisma.questionBank.findMany({
+      where: tagId ? { tags: { some: { id: tagId } } } : undefined,
       include: bankInclude,
       orderBy: { updatedAt: 'desc' },
     })
@@ -75,8 +94,14 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
     }
 
+    const tagIds = await filterExistingTagIds(normalizeTagIds(parsed.data.tagIds))
+
     const bank = await prisma.questionBank.create({
-      data: { name: parsed.data.name, ownerId: sub },
+      data: {
+        name: parsed.data.name,
+        ownerId: sub,
+        ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
+      },
       include: bankInclude,
     })
 
@@ -98,9 +123,15 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(404).send({ error: 'BANK_NOT_FOUND', message: '题库不存在' })
     }
 
+    const data: Prisma.QuestionBankUpdateInput = { name: parsed.data.name }
+    if (parsed.data.tagIds !== undefined) {
+      const tagIds = await filterExistingTagIds(normalizeTagIds(parsed.data.tagIds))
+      data.tags = { set: tagConnections(tagIds) }
+    }
+
     const bank = await prisma.questionBank.update({
       where: { id },
-      data: { name: parsed.data.name },
+      data,
       include: bankInclude,
     })
 
@@ -117,16 +148,22 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { id } = request.params as { id: string }
 
-    const existing = await prisma.questionBank.findUnique({ where: { id } })
+    const existing = await prisma.questionBank.findUnique({
+      where: { id },
+      include: { tags: { select: { id: true } } },
+    })
     if (!existing) {
       return reply.code(404).send({ error: 'BANK_NOT_FOUND', message: '题库不存在' })
     }
+
+    const tagIds = existing.tags.map((tag) => tag.id)
 
     const bank = await prisma.questionBank.create({
       data: {
         name: `${existing.name} 副本`,
         ownerId: sub,
         questions: existing.questions,
+        ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
       },
       include: bankInclude,
     })

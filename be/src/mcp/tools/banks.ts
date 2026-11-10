@@ -9,6 +9,12 @@ import {
   serializeBank,
 } from '../../lib/banks.js'
 import { prisma } from '../../lib/prisma.js'
+import {
+  filterExistingTagIds,
+  normalizeTagIds,
+  tagConnections,
+  tagSelect,
+} from '../../lib/tags.js'
 import { jsonResult, runTool } from '../helpers.js'
 import type { McpPrincipal } from '../principal.js'
 
@@ -21,6 +27,7 @@ async function loadQuestionsInOrder(ids: string[]) {
       question: true,
       answer: true,
       provider: true,
+      tags: { select: tagSelect },
       user: { select: { id: true, username: true, name: true } },
     },
   })
@@ -73,12 +80,20 @@ export function registerBankTools(server: McpServer, principal: McpPrincipal): v
     {
       title: '新建题目集',
       description: '新建一个题目集，管理者为当前用户。',
-      inputSchema: { name: z.string().trim().min(1).max(64).describe('题目集名称') },
+      inputSchema: {
+        name: z.string().trim().min(1).max(64).describe('题目集名称'),
+        tagIds: z.array(z.string().min(1)).max(100).optional().describe('绑定的标签 id 列表'),
+      },
     },
     (args) =>
       runTool(principal, 'create_bank', 'banks:write', async () => {
+        const tagIds = await filterExistingTagIds(normalizeTagIds(args.tagIds))
         const bank = await prisma.questionBank.create({
-          data: { name: args.name, ownerId: principal.userId },
+          data: {
+            name: args.name,
+            ownerId: principal.userId,
+            ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
+          },
           include: bankInclude,
         })
         return jsonResult({ bank: serializeBank(bank) })
@@ -93,15 +108,27 @@ export function registerBankTools(server: McpServer, principal: McpPrincipal): v
       inputSchema: {
         id: z.string().min(1).describe('题目集 id'),
         name: z.string().trim().min(1).max(64).describe('新名称'),
+        tagIds: z
+          .array(z.string().min(1))
+          .max(100)
+          .optional()
+          .describe('新的标签 id 列表（覆盖原有绑定）'),
       },
     },
     (args) =>
       runTool(principal, 'rename_bank', 'banks:write', async () => {
         const existing = await prisma.questionBank.findUnique({ where: { id: args.id } })
         if (!existing) throw new Error('题目集不存在')
+        const tagIds =
+          args.tagIds === undefined
+            ? undefined
+            : await filterExistingTagIds(normalizeTagIds(args.tagIds))
         const bank = await prisma.questionBank.update({
           where: { id: args.id },
-          data: { name: args.name },
+          data: {
+            name: args.name,
+            ...(tagIds !== undefined ? { tags: { set: tagConnections(tagIds) } } : {}),
+          },
           include: bankInclude,
         })
         return jsonResult({ bank: serializeBank(bank) })
@@ -117,13 +144,18 @@ export function registerBankTools(server: McpServer, principal: McpPrincipal): v
     },
     (args) =>
       runTool(principal, 'duplicate_bank', 'banks:write', async () => {
-        const existing = await prisma.questionBank.findUnique({ where: { id: args.id } })
+        const existing = await prisma.questionBank.findUnique({
+          where: { id: args.id },
+          include: { tags: { select: { id: true } } },
+        })
         if (!existing) throw new Error('题目集不存在')
+        const tagIds = existing.tags.map((tag) => tag.id)
         const bank = await prisma.questionBank.create({
           data: {
             name: `${existing.name} 副本`,
             ownerId: principal.userId,
             questions: existing.questions,
+            ...(tagIds.length > 0 ? { tags: { connect: tagConnections(tagIds) } } : {}),
           },
           include: bankInclude,
         })

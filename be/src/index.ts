@@ -30,6 +30,7 @@ import { settingsRoutes } from './routes/settings.js'
 import { staffRoutes } from './routes/staff.js'
 import { studentPreviewRoutes } from './routes/student-preview.js'
 import { studentRoutes } from './routes/student.js'
+import { tagsRoutes } from './routes/tags.js'
 import { telemetryRoutes } from './routes/telemetry.js'
 import { tokensRoutes } from './routes/tokens.js'
 import { xzzdSyncRoutes } from './routes/xzzd-sync.js'
@@ -124,6 +125,7 @@ const VIEWER_READONLY_ROUTES = new Set([
   '/api/report-reviews',
   '/api/criteria/:key',
   '/api/student-preview/experiment',
+  '/api/staff/members',
 ])
 
 fastify.addHook('preHandler', async (request, reply) => {
@@ -194,6 +196,7 @@ await fastify.register(experimentsRoutes, { prefix: '/api/experiments' })
 await fastify.register(xzzdSyncRoutes, { prefix: '/api/experiments' })
 await fastify.register(questionsRoutes, { prefix: '/api/questions' })
 await fastify.register(banksRoutes, { prefix: '/api/banks' })
+await fastify.register(tagsRoutes, { prefix: '/api/tags' })
 await fastify.register(rosterRoutes, { prefix: '/api' })
 await fastify.register(reportReviewsRoutes, { prefix: '/api/report-reviews' })
 await fastify.register(remarksRoutes, { prefix: '/api/remarks' })

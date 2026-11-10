@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import AlertTriangle from '~icons/lucide/alert-triangle'
+import Check from '~icons/lucide/check'
 import Copy from '~icons/lucide/copy'
 import Ellipsis from '~icons/lucide/ellipsis'
 import Eye from '~icons/lucide/eye'
@@ -14,14 +15,19 @@ import FileDown from '~icons/lucide/file-down'
 import NotebookText from '~icons/lucide/notebook-text'
 import Pen from '~icons/lucide/pen'
 import Settings2 from '~icons/lucide/settings-2'
+import Tags from '~icons/lucide/tags'
 import Trash2 from '~icons/lucide/trash-2'
 import X from '~icons/lucide/x'
+import { AddToBasketButton, BasketQuestionText } from '@/components/questions/AddToBasketButton'
+import { TagLink } from '@/components/questions/TagLink'
+import { TagSelect } from '@/components/questions/TagSelect'
 import { BackLink } from '@/components/ui/BackLink'
 import { EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconAction } from '@/components/ui/IconAction'
 import { Markdown } from '@/components/ui/Markdown'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PendingButton } from '@/components/ui/PendingButton'
 import {
   deleteBank,
   duplicateBank,
@@ -58,8 +64,11 @@ export default function BankDetail() {
     },
   })
   const confirmState = useOverlayState()
+  const tagState = useOverlayState()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [tagIds, setTagIds] = useState<string[]>([])
+  const [savingTags, setSavingTags] = useState(false)
 
   const { data, error, loading, reload } = useAsyncData(
     async () => {
@@ -114,6 +123,27 @@ export default function BankDetail() {
     if (!pendingRename) return
     renameState.close()
     await performRename(pendingRename)
+  }
+
+  const openTags = () => {
+    if (!bank) return
+    setTagIds(bank.tags.map((tag) => tag.id))
+    tagState.open()
+  }
+
+  const saveTags = async () => {
+    if (!bank) return
+    setSavingTags(true)
+    try {
+      await renameBank(bank.id, bank.name, tagIds)
+      toast.success('已更新标签')
+      tagState.close()
+      reload()
+    } catch (err) {
+      toast.error(getErrorMessage(err, '保存失败'))
+    } finally {
+      setSavingTags(false)
+    }
   }
 
   const exportMarkdown = async () => {
@@ -205,7 +235,8 @@ export default function BankDetail() {
                         if (key === 'rename') {
                           setRenameValue(bank.name)
                           setRenaming(true)
-                        } else if (key === 'export-md') void exportMarkdown()
+                        } else if (key === 'tags') openTags()
+                        else if (key === 'export-md') void exportMarkdown()
                         else if (key === 'duplicate') void duplicate()
                         else if (key === 'delete') confirmState.open()
                       }}
@@ -213,6 +244,10 @@ export default function BankDetail() {
                       <Dropdown.Item id="rename" textValue="重命名">
                         <Pen width={15} height={15} className="shrink-0 text-fg-muted" />
                         <Label>重命名</Label>
+                      </Dropdown.Item>
+                      <Dropdown.Item id="tags" textValue="编辑标签">
+                        <Tags width={15} height={15} className="shrink-0 text-fg-muted" />
+                        <Label>编辑标签</Label>
                       </Dropdown.Item>
                       <Dropdown.Item id="export-md" textValue="导出为 Markdown">
                         <FileDown width={15} height={15} className="shrink-0 text-fg-muted" />
@@ -260,6 +295,9 @@ export default function BankDetail() {
                 <span className="tabular rounded-lg border border-line bg-sunken px-2 py-0.5 text-[11px] text-fg-muted">
                   {bank.experimentCount} 个实验使用
                 </span>
+                {bank.tags.map((tag) => (
+                  <TagLink key={tag.id} tag={tag} kind="banks" />
+                ))}
               </>
             )}
           </div>
@@ -293,9 +331,9 @@ export default function BankDetail() {
                     <span>{item.user.username ?? item.user.name}</span>
                   </div>
 
-                  <div className="mt-3">
+                  <BasketQuestionText id={item.id} className="mt-3">
                     <Markdown source={item.question} />
-                  </div>
+                  </BasketQuestionText>
 
                   <div className="mt-3 flex flex-wrap items-center gap-1">
                     <IconAction
@@ -321,7 +359,16 @@ export default function BankDetail() {
                         <Copy width={14} height={14} className="shrink-0" />
                       </IconAction>
                     )}
-                    <span className="ml-auto">
+                    <span className="ml-auto flex items-center gap-1">
+                      <AddToBasketButton
+                        question={{
+                          id: item.id,
+                          question: item.question,
+                          answer: item.answer,
+                          author: item.user.username ?? item.user.name,
+                          tags: item.tags,
+                        }}
+                      />
                       <IconAction
                         label="从题目集中移除"
                         variant="danger-soft"
@@ -354,6 +401,38 @@ export default function BankDetail() {
           )}
         </>
       )}
+
+      <Modal state={tagState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-md">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <Tags width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>编辑题目集标签</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <TagSelect value={tagIds} onChange={setTagIds} />
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">
+                  取消
+                </Button>
+                <PendingButton
+                  isPending={savingTags}
+                  icon={Check}
+                  pendingLabel="保存中"
+                  onPress={() => void saveTags()}
+                >
+                  保存
+                </PendingButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       <Modal state={renameState}>
         <Modal.Backdrop>

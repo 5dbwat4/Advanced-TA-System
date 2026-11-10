@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import BookOpenText from '~icons/lucide/book-open-text'
 import Ellipsis from '~icons/lucide/ellipsis'
 import LogOut from '~icons/lucide/log-out'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
@@ -11,6 +12,7 @@ import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
 import { AiAssistant } from '@/components/ai/AiAssistant'
 import { ClassAccountMenu } from '@/components/layout/ClassAccountMenu'
+import { QuestionBasket } from '@/components/questions/QuestionBasket'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
@@ -216,6 +218,9 @@ export function AppShell() {
               />
             )}
             <ClassAccountMenu />
+            <IconAction label="使用文档" placement="bottom" onPress={() => navigate('/docs')}>
+              <BookOpenText width={16} height={16} className="shrink-0 text-fg-muted" />
+            </IconAction>
             <ThemeToggle />
             <div className="md:hidden">
               <IconAction label="退出登录" onPress={handleLogout}>
@@ -277,6 +282,7 @@ export function AppShell() {
         </main>
       </div>
 
+      <QuestionBasket />
       {AI_ENABLED && <AiAssistant />}
     </div>
   )

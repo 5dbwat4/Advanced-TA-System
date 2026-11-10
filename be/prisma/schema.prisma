@@ -148,6 +148,8 @@ model Question {
   /// 题目提供者
   provider  String
   user      User     @relation(fields: [provider], references: [id], onDelete: Cascade)
+  /// 绑定的标签（可空：题目不要求标签）
+  tags      Tag[]
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -164,12 +166,25 @@ model QuestionBank {
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   /// 题目 id 列表（JSON 字符串数组，保序）
   questions String   @default("[]")
+  /// 绑定的标签（可空：题目集不要求标签）
+  tags      Tag[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   experiments Experiment[]
 
   @@index([ownerId])
+}
+
+/// 标签（全局共享；可同时绑定到多道题目 / 多个题目集）
+model Tag {
+  id        String   @id @default(uuid(4))
+  /// 标签名称
+  name      String   @unique
+  questions Question[]
+  banks     QuestionBank[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// 班级

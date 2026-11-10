@@ -265,7 +265,6 @@ export function PreferenceOnboarding({
       await onSubmit({
         device,
         draw,
-        markdownEditor: initial?.markdownEditor ?? 'uiw',
         markdownStyle: initial?.markdownStyle ?? 'github',
         drawCount,
         customCards: initial?.customCards ?? createDefaultCustomCards(),

@@ -1,10 +1,12 @@
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from './prisma.js'
+import { tagSelect } from './tags.js'
 
-/** 题库查询的关联加载（含 owner 与绑定实验数） */
+/** 题库查询的关联加载（含 owner、标签与绑定实验数） */
 export const bankInclude = {
   owner: { select: { id: true, username: true, name: true } },
+  tags: { select: tagSelect },
   _count: { select: { experiments: true } },
 } satisfies Prisma.QuestionBankInclude
 
@@ -14,6 +16,7 @@ export function serializeBank(bank: Prisma.QuestionBankGetPayload<{ include: typ
     id: bank.id,
     name: bank.name,
     owner: bank.owner,
+    tags: bank.tags,
     questions: parseBankQuestions(bank.questions),
     experimentCount: bank._count.experiments,
     createdAt: bank.createdAt,
