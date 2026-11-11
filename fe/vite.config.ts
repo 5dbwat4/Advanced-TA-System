@@ -6,8 +6,9 @@ import Icons from 'unplugin-icons/vite'
 import { defineConfig } from 'vite'
 
 import { buildInfo } from './plugins/build-info.ts'
+import { bootProgress } from './plugins/boot-progress.ts'
 import { htmlMinify } from './plugins/html-minify.ts'
-import { loading } from './plugins/loading.ts'
+import { serviceWorker } from './plugins/service-worker.ts'
 
 /** 取 node_modules 下的包目录名作为分包标识（含 scope，如 `@heroui-react`）。 */
 function packageChunkName(moduleId: string): string | null {
@@ -24,7 +25,8 @@ export default defineConfig({
     tailwindcss(),
     Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false }),
     buildInfo(),
-    loading(),
+    bootProgress(),
+    serviceWorker(),
     htmlMinify(),
   ],
   resolve: {

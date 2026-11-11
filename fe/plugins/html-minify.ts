@@ -10,8 +10,7 @@ const OPTIONS: Options = {
 
 /**
  * 构建后压缩 index.html：
- * - loading 插件会从 HTML 中剥离入口 script / 样式与 modulepreload 标签，这些标签通常各占一行，
- *   剥离后会残留大量空行，这里通过折叠空白一并清除；
+ * - bootProgress 会往 head 内联首屏资源清单与进度脚本，压缩时一并折叠空白；
  * - 顺带移除注释、压缩属性间空白。
  * 需要在 loading() 之后注册（同 order 下按 plugins 数组顺序执行）。
  */

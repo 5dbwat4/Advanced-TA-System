@@ -1,5 +1,5 @@
 /* Service Worker：缓存前端静态资源（Cache Storage），不缓存 API。
- * 由 fe/plugins/loading.ts 在构建时注入 __BUILD_VERSION__（每次部署版本变化以触发更新提示）。
+ * 由 fe/plugins/service-worker.ts 在构建时注入 __BUILD_VERSION__（每次部署版本变化以触发更新提示）。
  *
  * 缓存布局：
  * - tasaas-static（不含版本，长期复用）：内容哈希的 /assets/*、字体等，cache-first，
@@ -10,9 +10,8 @@
  *
  * 加载策略（按需）：
  * - 不再阻塞首屏等待全部 chunk 下载完成。install 只预取本版本的 index.html 与 manifest.json。
- * - activate 后（以及页面发送 PRELOAD_START 时），SW 在后台基于 manifest.json 把 chunk
- *   （JS/CSS）逐条写入 STATIC_CACHE，并通过 clients.postMessage 广播 CHUNK_PROGRESS。
- *   预加载固定单并发，避免占满浏览器同源连接数、拖慢 entry 与当前路由。
+ * - 不在 activate 时主动预加载全部 chunk；只有页面明确发送 PRELOAD_START 时才在后台
+ *   基于 manifest.json 按需预取（当前首屏加载器已不再发送该消息）。
  * - 页面请求 /assets/* 时 cache-first：命中直接返回；未命中立刻联网（不会等待后台预加载），
  *   并把响应写入缓存；若同一资源后台正在下载，则复用在途请求，避免重复下载。
  * - /api、/socket.io、/mcp：直接放行，绝不缓存。
@@ -291,10 +290,7 @@ self.addEventListener('activate', (event) => {
       await self.clients.claim()
     })(),
   )
-  // 首次安装 / 新版本接管后主动在后台开始加载；页面消息会再次锚定该进程。
-  setTimeout(() => {
-    startPreload().catch(() => {})
-  }, 0)
+  // 不主动预加载全部 chunk；页面需要时再发送 PRELOAD_START。
 })
 
 self.addEventListener('message', (event) => {

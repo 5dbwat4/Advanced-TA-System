@@ -85,9 +85,18 @@ export default function App() {
   useEffect(() => {
     const splash = document.getElementById('app-splash')
     if (!splash) return
-    splash.classList.add('app-splash--hidden')
-    const timer = window.setTimeout(() => splash.remove(), 400)
-    return () => window.clearTimeout(timer)
+    if ((window as Window & { __BOOT_FAILED__?: boolean }).__BOOT_FAILED__) return
+
+    window.dispatchEvent(new Event('pb:app-ready'))
+
+    // 短暂停留，让真实进度能显示到 100%，再淡出 splash。
+    const hideTimer = window.setTimeout(() => splash.classList.add('app-splash--hidden'), 120)
+    const removeTimer = window.setTimeout(() => splash.remove(), 520)
+
+    return () => {
+      window.clearTimeout(hideTimer)
+      window.clearTimeout(removeTimer)
+    }
   }, [])
 
   return (

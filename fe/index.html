@@ -48,10 +48,6 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
     <script>
       (function () {
         try {
@@ -70,8 +66,10 @@
         inset: 0;
         z-index: 2147483646;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 28px;
         background: #f6f7fb;
         transition:
           opacity 0.35s ease,
@@ -97,6 +95,89 @@
       html.dark #app-splash .app-splash-logo--on-dark {
         display: block;
       }
+      #boot-progress {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        z-index: 2147483647;
+        pointer-events: none;
+        opacity: 1;
+        transition: opacity 0.35s ease;
+      }
+      #boot-progress.boot-progress--hidden {
+        opacity: 0;
+      }
+      #boot-progress .boot-progress-track {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: rgba(79, 82, 226, 0.14);
+      }
+      html.dark #boot-progress .boot-progress-track {
+        background: rgba(148, 163, 255, 0.18);
+      }
+      #boot-progress-fill {
+        width: 0;
+        height: 100%;
+        border-radius: 0 2px 2px 0;
+        background: linear-gradient(90deg, #4f52e2, #8b5cf6);
+        box-shadow: 0 0 8px rgba(79, 82, 226, 0.45);
+        transition: width 0.2s ease;
+      }
+      #boot-progress.boot-progress--indeterminate #boot-progress-fill {
+        width: 32%;
+        animation: boot-progress-slide 1.2s ease-in-out infinite;
+      }
+      @keyframes boot-progress-slide {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(320%);
+        }
+      }
+      #app-splash .app-splash-status {
+        max-width: min(80vw, 640px);
+        font-size: 12px;
+        line-height: 1.6;
+        color: #6b7280;
+        text-align: center;
+        white-space: pre-wrap;
+        word-break: break-all;
+        cursor: pointer;
+      }
+      html.dark #app-splash .app-splash-status {
+        color: #9ca3af;
+      }
+      #app-splash.app-splash--error .app-splash-logo {
+        animation: none;
+        opacity: 0.5;
+      }
+      #app-splash .app-splash-hint {
+        max-width: min(80vw, 560px);
+        padding: 14px 16px;
+        border: 1px solid rgba(79, 82, 226, 0.18);
+        border-radius: 12px;
+        background: rgba(79, 82, 226, 0.06);
+        font-size: 12px;
+        line-height: 1.7;
+        color: #4b5563;
+        text-align: left;
+      }
+      html.dark #app-splash .app-splash-hint {
+        border-color: rgba(148, 163, 255, 0.24);
+        background: rgba(148, 163, 255, 0.08);
+        color: #cbd5e1;
+      }
+      #app-splash .app-splash-hint p {
+        margin: 0 0 6px;
+      }
+      #app-splash .app-splash-hint ul {
+        margin: 0;
+        padding-left: 18px;
+      }
       #app-splash.app-splash--hidden {
         opacity: 0;
         visibility: hidden;
@@ -115,14 +196,346 @@
       }
       @media (prefers-reduced-motion: reduce) {
         #app-splash,
-        #app-splash .app-splash-logo {
+        #app-splash .app-splash-logo,
+        #boot-progress-fill {
           transition: none;
           animation: none;
         }
+        #boot-progress.boot-progress--indeterminate #boot-progress-fill {
+          width: 100%;
+          opacity: 0.55;
+        }
       }
     </style>
+    <script>
+      (function () {
+        var assets = window.__BOOT_ASSETS__ || []
+        var byUrl = Object.create(null)
+        var seen = Object.create(null)
+        var total = 0
+        var loaded = 0
+        var finished = false
+        var failed = false
+        var failureMessage = ''
+        var failureDetail = ''
+        var retryBound = false
+        var entryUrl = null
+
+        try {
+          entryUrl = window.__BOOT_ENTRY__
+            ? new URL(window.__BOOT_ENTRY__, location.href).href
+            : null
+        } catch (error) {}
+
+        for (var i = 0; i < assets.length; i++) {
+          try {
+            var url = new URL(assets[i].u, location.href).href
+            byUrl[url] = assets[i]
+            total += assets[i].s || 0
+          } catch (error) {}
+        }
+
+        function syncIndeterminate() {
+          var bar = document.getElementById('boot-progress')
+          if (bar) bar.classList.toggle('boot-progress--indeterminate', total <= 0)
+        }
+
+        function paint() {
+          var percent =
+            total > 0 ? (finished ? 100 : Math.min(99, Math.floor((loaded / total) * 100))) : 0
+          var bar = document.getElementById('boot-progress')
+          var fill = document.getElementById('boot-progress-fill')
+          if (fill && total > 0) fill.style.width = percent + '%'
+          if (bar) bar.setAttribute('aria-valuenow', String(percent))
+        }
+
+        function settle(name) {
+          if (!byUrl[name] || seen[name]) return
+          seen[name] = 1
+          loaded += byUrl[name].s || 0
+          paint()
+        }
+
+        function shortUrl(value) {
+          try {
+            var parsed = new URL(value, location.href)
+            return parsed.pathname + parsed.search
+          } catch (error) {
+            return String(value || '')
+          }
+        }
+
+        function describeError(reason) {
+          if (!reason) return '未知错误'
+          if (typeof reason === 'string') return reason
+          if (reason.message) return String(reason.message)
+          try {
+            return JSON.stringify(reason)
+          } catch (error) {
+            return String(reason)
+          }
+        }
+
+        function probeStatus(url, callback) {
+          if (!window.fetch) return
+          fetch(url, { cache: 'no-store' })
+            .then(function (response) {
+              if (response.body && response.body.cancel) {
+                response.body.cancel().catch(function () {})
+              }
+              callback('HTTP ' + response.status)
+            })
+            .catch(function (error) {
+              callback(describeError(error))
+            })
+        }
+
+        function retry() {
+          var tasks = []
+          try {
+            if (navigator.serviceWorker) {
+              tasks.push(
+                navigator.serviceWorker
+                  .getRegistrations()
+                  .then(function (registrations) {
+                    return Promise.all(
+                      registrations.map(function (registration) {
+                        return registration.unregister()
+                      }),
+                    )
+                  })
+                  .catch(function () {}),
+              )
+            }
+          } catch (error) {}
+          try {
+            if (window.caches) {
+              tasks.push(
+                caches
+                  .keys()
+                  .then(function (keys) {
+                    return Promise.all(
+                      keys
+                        .filter(function (key) {
+                          return key.indexOf('tasaas-') === 0
+                        })
+                        .map(function (key) {
+                          return caches.delete(key)
+                        }),
+                    )
+                  })
+                  .catch(function () {}),
+              )
+            }
+          } catch (error) {}
+          Promise.all(tasks).then(
+            function () {
+              window.location.reload()
+            },
+            function () {
+              window.location.reload()
+            },
+          )
+        }
+
+        function bindRetry() {
+          if (retryBound) return
+          var splash = document.getElementById('app-splash')
+          if (!splash) return
+          retryBound = true
+          splash.addEventListener('click', retry, { once: true })
+        }
+
+        function renderFailure() {
+          var splash = document.getElementById('app-splash')
+          var status = document.getElementById('app-splash-status')
+          var bar = document.getElementById('boot-progress')
+          if (splash) splash.classList.add('app-splash--error')
+          if (status) {
+            status.hidden = false
+            status.textContent =
+              failureMessage + (failureDetail ? '\n' + failureDetail : '') + '\n点击重试'
+          }
+          if (bar) {
+            bar.classList.remove('boot-progress--indeterminate')
+            bar.classList.add('boot-progress--hidden')
+          }
+          bindRetry()
+        }
+
+        function fail(message, hard, detail) {
+          if (finished) return
+          if (failed && !hard) return
+          failed = true
+          failureMessage = message
+          failureDetail = detail || ''
+          if (hard) window.__BOOT_FAILED__ = true
+          renderFailure()
+        }
+
+        function onResource(entry) {
+          settle(entry.name)
+        }
+
+        function scan() {
+          if (!performance.getEntriesByType) return
+          performance.getEntriesByType('resource').forEach(onResource)
+        }
+
+        if (performance.setResourceTimingBufferSize) {
+          performance.setResourceTimingBufferSize(1000)
+        }
+
+        if (window.PerformanceObserver) {
+          try {
+            new PerformanceObserver(function (list) {
+              list.getEntries().forEach(onResource)
+            }).observe({ type: 'resource', buffered: true })
+          } catch (error) {}
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+          syncIndeterminate()
+          paint()
+          if (failed) renderFailure()
+        })
+        window.addEventListener('load', scan)
+        window.addEventListener(
+          'error',
+          function (event) {
+            var target = event.target
+            var src = target && (target.src || target.href)
+            if (src) {
+              var url
+              try {
+                url = new URL(src, location.href).href
+              } catch (error) {
+                return
+              }
+              if (entryUrl && url === entryUrl) {
+                fail('入口脚本加载失败', true, shortUrl(url))
+                probeStatus(url, function (status) {
+                  if (failed && failureMessage === '入口脚本加载失败') {
+                    failureDetail = shortUrl(url) + '\n' + status
+                    renderFailure()
+                  }
+                })
+                return
+              }
+              if (byUrl[url]) {
+                settle(url)
+                if (target && target.rel === 'stylesheet') {
+                  fail('样式加载失败', true, shortUrl(url))
+                  probeStatus(url, function (status) {
+                    if (failed && failureMessage === '样式加载失败') {
+                      failureDetail = shortUrl(url) + '\n' + status
+                      renderFailure()
+                    }
+                  })
+                }
+              }
+              return
+            }
+            if (!finished) {
+              var detail = event.message || '未知错误'
+              if (event.filename) {
+                detail +=
+                  '\n' +
+                  shortUrl(event.filename) +
+                  ':' +
+                  (event.lineno || 0) +
+                  ':' +
+                  (event.colno || 0)
+              }
+              if (event.error && event.error.stack) {
+                detail += '\n' + String(event.error.stack).split('\n').slice(0, 3).join('\n')
+              }
+              fail('应用启动失败', false, detail)
+            }
+          },
+          true,
+        )
+        window.addEventListener('unhandledrejection', function (event) {
+          if (!finished) fail('应用启动失败', false, describeError(event.reason))
+        })
+        window.addEventListener('vite:preloadError', function (event) {
+          if (!finished) {
+            var payload = event.detail && event.detail.payload
+            fail('资源加载失败', false, describeError(payload))
+            return
+          }
+          try {
+            var key = 'tasaas:chunk-reload'
+            var last = Number(sessionStorage.getItem(key) || 0)
+            if (Date.now() - last < 60000) return
+            sessionStorage.setItem(key, String(Date.now()))
+          } catch (error) {}
+          event.preventDefault()
+          window.location.reload()
+        })
+        window.addEventListener('pb:app-ready', function () {
+          if (failed && !window.__BOOT_FAILED__) {
+            failed = false
+            failureMessage = ''
+            failureDetail = ''
+            var splash = document.getElementById('app-splash')
+            var status = document.getElementById('app-splash-status')
+            if (splash) splash.classList.remove('app-splash--error')
+            if (status) status.hidden = true
+          }
+          finished = true
+          loaded = total
+          paint()
+          var bar = document.getElementById('boot-progress')
+          if (!bar) return
+          window.setTimeout(function () {
+            bar.classList.add('boot-progress--hidden')
+            window.setTimeout(function () {
+              bar.remove()
+            }, 400)
+          }, 250)
+        })
+      })()
+    </script>
+    <script>
+      (function () {
+        var ready = false
+        var timer = window.setTimeout(function () {
+          if (ready) return
+          var splash = document.getElementById('app-splash')
+          if (splash && splash.classList.contains('app-splash--error')) return
+          var hint = document.getElementById('app-splash-hint')
+          if (hint) hint.hidden = false
+        }, 15000)
+        window.addEventListener(
+          'pb:app-ready',
+          function () {
+            ready = true
+            window.clearTimeout(timer)
+          },
+          { once: true },
+        )
+      })()
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
+    <div
+      id="boot-progress"
+      class="boot-progress"
+      role="progressbar"
+      aria-label="正在加载资源"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    >
+      <div class="boot-progress-track">
+        <div id="boot-progress-fill"></div>
+      </div>
+    </div>
     <div id="app-splash" role="status" aria-label="正在加载">
       <img
         class="app-splash-logo app-splash-logo--on-light"
@@ -138,6 +551,17 @@
         aria-hidden="true"
         draggable="false"
       />
+      <div id="app-splash-status" class="app-splash-status" hidden>
+        加载失败，点击重试
+      </div>
+      <div id="app-splash-hint" class="app-splash-hint" hidden>
+        <p>服务器位于华东可用区，如果长时间加载不成功可以尝试：</p>
+        <ul>
+          <li>关掉梯子</li>
+          <li>刷新页面</li>
+          <li>使用 Ctrl+Shift+R 硬刷新页面</li>
+        </ul>
+      </div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

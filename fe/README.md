@@ -62,18 +62,18 @@ src/
 
 ## Build & loading
 
-The production build is post-processed by two local Vite plugins:
+The production build is post-processed by local Vite plugins:
 
-- `plugins/loading.ts` — strips the entry `<script>`/`<link>` tags, emits a
-  `manifest.json` + content-hashed `loader.js` + a service worker `sw.js`, and
-  injects a top progress bar. The loader injects the entry as soon as the manifest
-  is available instead of waiting for every chunk; the service worker keeps
-  preloading JS/CSS chunks from the manifest in the background and broadcasts
-  per-chunk progress to the bar. Requests for assets are served cache-first and
-  start immediately when missing. A version hash (baked into `sw.js`) gates
-  updates; users are prompted to refresh rather than being reloaded silently.
-- `plugins/html-minify.ts` — minifies the final `index.html` (and collapses the
-  blank lines left behind by stripping the entry tags).
+- `plugins/boot-progress.ts` — injects the boot-time critical asset list and
+  sizes into `index.html`; the inline splash uses it to show real, asset-weighted
+  load progress. It does not strip or delay the entry `<script>` or stylesheets,
+  so the browser still loads them through the normal HTML critical path.
+- `plugins/service-worker.ts` — emits `manifest.json` and a versioned `sw.js`.
+  The service worker caches the app shell, preloads JS/CSS chunks in the
+  background, and serves hashed assets cache-first. It is registered after the
+  app mounts and never blocks first paint. A version hash gates updates; users
+  are prompted to refresh rather than being reloaded silently.
+- `plugins/html-minify.ts` — minifies the final `index.html`.
 
 Routes are code-split, and dependencies are split per package for stable, cacheable
 chunks.

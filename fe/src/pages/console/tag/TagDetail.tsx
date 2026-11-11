@@ -1,6 +1,6 @@
 import { Button, Modal, Tabs, useOverlayState } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Key } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -71,9 +71,9 @@ export default function TagDetail() {
   const questions = data?.questions ?? []
   const banks = data?.banks ?? []
 
-  const goTab = (key: string) => {
+  const goTab = (key: Key) => {
     if (!id) return
-    navigate(`/console/tag/${id}/${key}`)
+    navigate(`/console/tag/${id}/${String(key)}`)
   }
 
   const openCreate = () => {
