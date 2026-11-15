@@ -9,7 +9,6 @@ import LayoutDashboard from '~icons/lucide/layout-dashboard'
 import NotebookText from '~icons/lucide/notebook-text'
 import Settings2 from '~icons/lucide/settings-2'
 import Table from '~icons/lucide/table'
-import Users from '~icons/lucide/users'
 
 export type NavItem = {
   to: string
@@ -25,7 +24,6 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/console', label: '总览', icon: LayoutDashboard, end: true, mobile: true, description: '工作台总览与快捷入口' },
   { to: '/console/checkoff', label: '验收', icon: ClipboardCheck, description: '抽题 · 评分 · 记录检查点' },
-  { to: '/console/checkoff-multi', label: '群面', icon: Users, description: '多学生并行验收（最多 8 个）' },
   { to: '/console/experiments', label: '实验', icon: FlaskConical, mobile: true, description: '创建实验并绑定题目集' },
   { to: '/console/questions', label: '题库', icon: NotebookText, mobile: true, description: '题目与题目集管理' },
   { to: '/console/reports', label: '实验报告', icon: FileText, mobile: true, description: '报告批阅与查看' },

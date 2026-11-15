@@ -54,48 +54,27 @@ function HintCard({ title, hint }: { title: string; hint: string }) {
 }
 
 function QuestionCard({
-  studentName,
-  studentAvatar,
   questionAuthor,
   questionAuthorAvatar,
-  index,
-  total,
   content,
   markdownStyle,
 }: {
-  studentName: string
-  studentAvatar: number | null
   questionAuthor: string
   questionAuthorAvatar: number | null
-  index: number
-  total: number
   content: string
   markdownStyle?: MarkdownStyleId
 }) {
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+      <div className="mb-4 flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-1.5 text-[11px] text-fg-subtle">
+          <span>命题人</span>
           <AvatarImage
-            id={studentAvatar}
-            size={36}
-            fallback={studentName.slice(0, 1)}
+            id={questionAuthorAvatar}
+            size={18}
+            fallback={(questionAuthor || '未知').slice(0, 1)}
           />
-          <span className="text-sm font-semibold text-fg">{studentName}</span>
-        </div>
-        <div className="text-right">
-          <div className="tabular text-[11px] uppercase tracking-widest text-fg-subtle">
-            问题 {index} / {total}
-          </div>
-          <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-fg-subtle">
-            <span>命题人</span>
-            <AvatarImage
-              id={questionAuthorAvatar}
-              size={18}
-              fallback={(questionAuthor || '未知').slice(0, 1)}
-            />
-            <span>{questionAuthor || '未知'}</span>
-          </div>
+          <span>{questionAuthor || '未知'}</span>
         </div>
       </div>
       <Markdown source={content} style={markdownStyle} />
@@ -141,12 +120,8 @@ function CardBody({ state, markdownStyle }: { state: SlaveCardState; markdownSty
     case 'ask_question':
       return (
         <QuestionCard
-          studentName={state.studentName}
-          studentAvatar={state.studentAvatar}
           questionAuthor={state.questionAuthor}
           questionAuthorAvatar={state.questionAuthorAvatar}
-          index={state.index}
-          total={state.total}
           content={state.content}
           markdownStyle={markdownStyle}
         />

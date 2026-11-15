@@ -1,5 +1,5 @@
 import { Input, Slider } from '@heroui/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -17,7 +17,7 @@ import {
   type Score,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
-import { SCORE_MAX } from '@/lib/scores'
+import { SCORE_LIMIT, SCORE_MAX } from '@/lib/scores'
 import { weightedTotal } from '@/lib/scoring'
 
 /** 验收计分的两类，具体权重来自课程 / 实验的评分占比配置 */
@@ -27,6 +27,71 @@ const SCORED_TYPES = [
 ] as const
 
 const DEFAULT_SCORE = 100
+
+/** 分数输入框：允许手动输入 0~100 以外的分数，滑块仍限制在 0~100 */
+function ScoreInput({
+  value,
+  ariaLabel,
+  onChange,
+}: {
+  value: number
+  ariaLabel: string
+  onChange: (next: number) => void
+}) {
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => {
+    setDraft((prev) => (Number(prev) === value && prev.trim() !== '' ? prev : String(value)))
+  }, [value])
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed === String(value)) return
+    if (trimmed === '') {
+      setDraft(String(value))
+      return
+    }
+    const parsed = Number(trimmed)
+    if (!Number.isFinite(parsed) || parsed < -SCORE_LIMIT || parsed > SCORE_LIMIT) {
+      toast.error(`请输入 ${-SCORE_LIMIT}~${SCORE_LIMIT} 的分数`)
+      setDraft(String(value))
+      return
+    }
+    const next = Math.round(parsed)
+    setDraft(String(next))
+    if (next !== value) onChange(next)
+  }
+
+  const handleChange = (raw: string) => {
+    setDraft(raw)
+    const trimmed = raw.trim()
+    if (trimmed === '') return
+    const parsed = Number(trimmed)
+    if (!Number.isFinite(parsed) || parsed < -SCORE_LIMIT || parsed > SCORE_LIMIT) return
+    if (parsed !== value) onChange(parsed)
+  }
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      value={draft}
+      onChange={(event) => handleChange(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+          event.preventDefault()
+          event.currentTarget.blur()
+        } else if (event.key === 'Escape') {
+          setDraft(String(value))
+          event.currentTarget.blur()
+        }
+      }}
+      className="tabular w-24 shrink-0 rounded-xl border border-line bg-elevated px-3 py-2 text-center text-lg font-bold text-fg outline-none transition-all focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+    />
+  )
+}
 
 export function ScoreForm({
   experimentId,
@@ -122,7 +187,7 @@ export function ScoreForm({
           <span className="font-semibold text-fg">{student.name}</span>
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
-        <span className="text-xs text-fg-subtle">默认 100，可按需下调</span>
+        <span className="text-xs text-fg-subtle">默认 100，可输入 0~100 以外的分数</span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -151,7 +216,7 @@ export function ScoreForm({
                   minValue={0}
                   maxValue={SCORE_MAX}
                   step={1}
-                  value={values[type.value]}
+                  value={Math.min(SCORE_MAX, Math.max(0, values[type.value]))}
                   onChange={(value) =>
                     setValue(type.value, Array.isArray(value) ? value[0] : value)
                   }
@@ -162,16 +227,10 @@ export function ScoreForm({
                   </Slider.Track>
                 </Slider>
 
-                <Input
-                  type="number"
-                  min={0}
-                  max={SCORE_MAX}
-                  step={1}
-                  inputMode="numeric"
-                  aria-label={type.label}
+                <ScoreInput
+                  ariaLabel={type.label}
                   value={values[type.value]}
-                  onChange={(event) => setValue(type.value, Number(event.target.value))}
-                  className="tabular w-24 shrink-0 rounded-xl border border-line bg-elevated px-3 py-2 text-center text-lg font-bold text-fg outline-none transition-all focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                  onChange={(next) => setValues((prev) => ({ ...prev, [type.value]: next }))}
                 />
               </div>
             </div>

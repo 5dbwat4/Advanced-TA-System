@@ -1,6 +1,8 @@
 import {
   Alert,
   Button,
+  Dropdown,
+  Label,
   Modal,
   Spinner,
   toast as herouiToast,
@@ -9,9 +11,12 @@ import {
 import copyToClipboard from 'copy-to-clipboard'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Link2 from '~icons/lucide/link-2'
+import MoreHorizontal from '~icons/lucide/more-horizontal'
 import Plus from '~icons/lucide/plus'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
@@ -51,6 +56,7 @@ export default function CheckoffMulti() {
   const { user, loading: authLoading, updatePreferences } = useAuth()
   const classId = currentClass?.id
   const { resolvedTheme } = useTheme()
+  const navigate = useNavigate()
   const prefsState = useOverlayState()
 
   const [experiments, setExperiments] = useState<CheckoffExperiment[]>([])
@@ -224,9 +230,31 @@ export default function CheckoffMulti() {
     <CheckoffLayout
       title="群面"
       actions={
-        <IconAction label="偏好" onPress={prefsState.open}>
-          <Settings2 width={15} height={15} className="shrink-0" />
-        </IconAction>
+        <>
+          <IconAction label="偏好" onPress={prefsState.open}>
+            <Settings2 width={15} height={15} className="shrink-0" />
+          </IconAction>
+          <Dropdown>
+            <Dropdown.Trigger
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-sunken hover:text-fg"
+              aria-label="更多"
+            >
+              <MoreHorizontal width={16} height={16} className="shrink-0" />
+            </Dropdown.Trigger>
+            <Dropdown.Popover className="min-w-[180px]">
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === 'checkoff') navigate('/console/checkoff')
+                }}
+              >
+                <Dropdown.Item id="checkoff" textValue="返回验收">
+                  <ClipboardCheck width={15} height={15} className="shrink-0 text-fg-muted" />
+                  <Label>返回验收</Label>
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        </>
       }
     >
       <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1" role="tablist">
