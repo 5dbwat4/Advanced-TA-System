@@ -6,6 +6,7 @@ import BookOpen from '~icons/lucide/book-open'
 import BookOpenText from '~icons/lucide/book-open-text'
 import ClipboardList from '~icons/lucide/clipboard-list'
 import LayoutDashboard from '~icons/lucide/layout-dashboard'
+import ListOrdered from '~icons/lucide/list-ordered'
 import LogOut from '~icons/lucide/log-out'
 import SettingsIcon from '~icons/lucide/settings'
 import { GradeNotificationWatcher } from '@/components/student/GradeNotificationWatcher'
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { to: '/student-console', label: '概览', icon: LayoutDashboard, end: true },
+  { to: '/student-console/queue', label: '排队验收', icon: ListOrdered, end: false },
   { to: '/student-console/scores', label: '实验成绩', icon: ClipboardList, end: false },
   { to: '/student-console/settings', label: '设置', icon: SettingsIcon, end: false },
 ]
