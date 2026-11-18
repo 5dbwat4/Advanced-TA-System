@@ -1,3 +1,6 @@
+import { formatDistanceToNow } from 'date-fns'
+import { zhCN } from 'date-fns/locale'
+
 export function formatDateTime(value: string | null, fallback?: string): string {
   if (!value) return fallback ?? '—'
   const date = new Date(value)
@@ -16,6 +19,13 @@ export function formatLocaleDateTime(value: string | null, fallback?: string): s
     minute: '2-digit',
     hour12: false,
   })
+}
+
+export function formatRelativeTime(value: string | null, fallback?: string): string {
+  if (!value) return fallback ?? '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return fallback ?? '—'
+  return formatDistanceToNow(date, { addSuffix: true, locale: zhCN })
 }
 
 export function formatBytes(value: number | undefined, fallback?: string): string {

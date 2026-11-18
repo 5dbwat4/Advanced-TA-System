@@ -13,6 +13,7 @@ import { loginRateLimit } from './lib/rate-limit.js'
 import { authRoutes } from './routes/auth.js'
 import { banksRoutes } from './routes/banks.js'
 import { checkoffRoutes } from './routes/checkoff.js'
+import { checkoffSessionsRoutes } from './routes/checkoff-sessions.js'
 import { classesRoutes } from './routes/classes.js'
 import { criteriaRoutes } from './routes/criteria.js'
 import { devboardsRoutes } from './routes/devboards.js'
@@ -87,6 +88,7 @@ const STUDENT_ALLOWED_ROUTES = new Set([
   '/api/auth/passkey/registration-verify',
   '/api/student/overview',
   '/api/student/experiments/:id',
+  '/api/student/checkoff-queue',
   '/api/push/public-key',
   '/api/push/subscribe',
   '/api/push/unsubscribe',
@@ -202,6 +204,7 @@ await fastify.register(reportReviewsRoutes, { prefix: '/api/report-reviews' })
 await fastify.register(remarksRoutes, { prefix: '/api/remarks' })
 await fastify.register(scoresRoutes, { prefix: '/api/scores' })
 await fastify.register(checkoffRoutes, { prefix: '/api/checkoff' })
+await fastify.register(checkoffSessionsRoutes, { prefix: '/api/checkoff/sessions' })
 await fastify.register(devboardsRoutes, { prefix: '/api/devboards' })
 await fastify.register(studentPreviewRoutes, { prefix: '/api/student-preview' })
 await fastify.register(studentRoutes, { prefix: '/api/student' })

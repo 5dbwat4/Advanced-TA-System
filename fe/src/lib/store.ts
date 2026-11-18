@@ -28,6 +28,7 @@ type AppState = {
   zjuamError: string | null
   onboarding: boolean
   onboardingInfo: OnboardingInfo | null
+  debugMode: boolean
   setCurrentClassId: (id: string | null) => void
   toggleSidebar: () => void
   syncLocalCredential: () => void
@@ -35,6 +36,7 @@ type AppState = {
   resetZjuam: () => void
   setOnboarding: (onboarding: boolean) => void
   setOnboardingInfo: (info: OnboardingInfo | null) => void
+  setDebugMode: (debugMode: boolean) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -48,6 +50,7 @@ export const useAppStore = create<AppState>()(
       zjuamError: null,
       onboarding: false,
       onboardingInfo: null,
+      debugMode: false,
       setCurrentClassId: (id) => set({ currentClassId: id }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       syncLocalCredential: () => set({ hasLocalCredential: Boolean(getZjuamCredential()) }),
@@ -73,6 +76,7 @@ export const useAppStore = create<AppState>()(
       resetZjuam: () => set({ zjuamCourses: null, zjuamStatus: 'idle', zjuamError: null }),
       setOnboarding: (onboarding) => set({ onboarding }),
       setOnboardingInfo: (onboardingInfo) => set({ onboardingInfo }),
+      setDebugMode: (debugMode) => set({ debugMode }),
     }),
     {
       name: 'tasaas.app',

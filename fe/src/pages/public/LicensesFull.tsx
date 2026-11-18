@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { licenseEntryText, thirdPartyLicenses } from '@/lib/third-party'
+import { thirdPartyLicenses } from '@/lib/third-party'
+import { licenseEntryText } from '@/lib/third-party-text'
 
 const SEPARATOR = `\n\n${'='.repeat(80)}\n\n`
 

@@ -31,11 +31,11 @@ import TriangleAlert from '~icons/lucide/triangle-alert'
 import Users from '~icons/lucide/users'
 import X from '~icons/lucide/x'
 import { ScoreRatioEditor } from '@/components/settings/ScoreRatioEditor'
+import { QuestionBankPickerModal } from '@/components/questions/QuestionBankPickerModal'
 import { EmptyState } from '@/components/ui/Card'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { SearchInput } from '@/components/ui/SearchInput'
 import {
   apiFetch,
   fetchCheckoff,
@@ -56,7 +56,6 @@ import { formatDateTime, formatLocaleDateTime } from '@/lib/format'
 import { SCORE_TYPES, scoreKey } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, weightedTotal } from '@/lib/scoring'
 import { useDebouncedSave } from '@/lib/use-class-settings'
-import { cn } from '@/lib/utils'
 
 const MORE_BANKS_KEY = '__more__'
 
@@ -100,7 +99,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
   const bindState = useOverlayState()
   const preferencesState = useOverlayState()
   const banksState = useOverlayState()
-  const [bankQuery, setBankQuery] = useState('')
 
   const loadHomeworks = useCallback(async () => {
     if (!id) return
@@ -219,6 +217,11 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
     }
   }
 
+  const selectBank = async (bankId: string) => {
+    await bind(bankId)
+    banksState.close()
+  }
+
   const scoreOf = (userId: string, type: number) =>
     experiment ? scores.get(scoreKey(userId, type, experiment.id)) : undefined
 
@@ -259,11 +262,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
     const bound = banks.find((item) => item.id === bank.id)
     if (bound) recentBanks.push(bound)
   }
-
-  const bankQueryLower = bankQuery.trim().toLowerCase()
-  const filteredBanks = bankQueryLower
-    ? banks.filter((item) => item.name.toLowerCase().includes(bankQueryLower))
-    : banks
 
   const xzzdBoundCount = [experiment.xzzdBindIdCheckout, experiment.xzzdBindIdReport].filter(
     Boolean,
@@ -387,7 +385,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
             placeholder="未绑定题目集"
             onChange={(key) => {
               if (key === MORE_BANKS_KEY) {
-                setBankQuery('')
                 banksState.open()
                 return
               }
@@ -804,67 +801,12 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
         </Modal.Backdrop>
       </Modal>
 
-      <Modal state={banksState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-lg">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <NotebookText width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>选择题目集</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="flex flex-col gap-3">
-                <SearchInput
-                  value={bankQuery}
-                  onChange={setBankQuery}
-                  ariaLabel="搜索题目集"
-                  placeholder="搜索"
-                />
-                <div className="max-h-[50vh] overflow-auto">
-                  {filteredBanks.length === 0 ? (
-                    <p className="py-6 text-center text-xs text-fg-subtle">没有匹配的题目集</p>
-                  ) : (
-                    filteredBanks.map((item) => {
-                      const active = bank?.id === item.id
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            void bind(item.id)
-                            banksState.close()
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors',
-                            active ? 'bg-brand-500/10' : 'hover:bg-sunken',
-                          )}
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{item.name}</span>
-                            <span className="tabular block text-[11px] text-fg-subtle">
-                              {item.questions.length} 题 · 更新于{' '}
-                              {formatLocaleDateTime(item.updatedAt)}
-                            </span>
-                          </span>
-                          {active && (
-                            <Check
-                              width={15}
-                              height={15}
-                              className="shrink-0 text-brand-600 dark:text-brand-300"
-                            />
-                          )}
-                        </button>
-                      )
-                    })
-                  )}
-                </div>
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <QuestionBankPickerModal
+        state={banksState}
+        banks={banks}
+        selectedBankId={bank?.id ?? null}
+        onSelect={selectBank}
+      />
     </div>
   )
 }

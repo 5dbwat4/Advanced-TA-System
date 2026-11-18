@@ -18,7 +18,20 @@ type ThirdPartyLicense = {
   homepage: string
   author: string
   license: string
+  licenseTextIndex: number
+}
+
+type RawThirdPartyLicense = Omit<ThirdPartyLicense, 'licenseTextIndex'> & {
   licenseText: string
+}
+
+type LicenseBlock = string | number[]
+
+type ThirdPartyLicenseData = {
+  licenses: ThirdPartyLicense[]
+  licenseTexts: number[][]
+  licenseBlocks: LicenseBlock[]
+  licenseLines: string[]
 }
 
 function formatDate(timestamp: number, timezoneOffset: number): string {
@@ -154,7 +167,25 @@ function readLicenseText(dir: string): string {
   }
 }
 
-async function readLicenses(): Promise<ThirdPartyLicense[]> {
+const BLANK_LINE = /^[ \t\r]*$/
+
+function splitLicenseParagraphs(text: string): string[] {
+  const lines = text.split('\n')
+  const parts: string[] = []
+  let start = 0
+  for (let index = 0; index < lines.length; index += 1) {
+    const isBoundary =
+      BLANK_LINE.test(lines[index]) &&
+      (index + 1 === lines.length || !BLANK_LINE.test(lines[index + 1]))
+    if (!isBoundary) continue
+    parts.push(lines.slice(start, index + 1).join('\n'))
+    start = index + 1
+  }
+  if (start < lines.length) parts.push(lines.slice(start).join('\n'))
+  return parts
+}
+
+async function readLicenses(): Promise<ThirdPartyLicenseData> {
   const dirs = collectPackageDirs()
   const metas = await Promise.all(
     dirs.map(async (dir) => {
@@ -186,7 +217,7 @@ async function readLicenses(): Promise<ThirdPartyLicense[]> {
     }),
   )
   const seen = new Set<string>()
-  const result: ThirdPartyLicense[] = []
+  const result: RawThirdPartyLicense[] = []
   for (const meta of metas) {
     if (!meta) continue
     const key = `${meta.name}@${meta.version}`
@@ -194,7 +225,82 @@ async function readLicenses(): Promise<ThirdPartyLicense[]> {
     seen.add(key)
     result.push(meta)
   }
-  return result.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version))
+  result.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version))
+
+  const allLines: string[] = []
+  const allLineIds = new Map<string, number>()
+  const internLine = (line: string): number => {
+    const existing = allLineIds.get(line)
+    if (existing !== undefined) return existing
+    const id = allLines.length
+    allLines.push(line)
+    allLineIds.set(line, id)
+    return id
+  }
+
+  const paragraphIds = new Map<string, number>()
+  const paragraphs: string[] = []
+  const paragraphLines: number[][] = []
+  const licenseTexts: number[][] = []
+  for (const meta of result) {
+    const refs: number[] = []
+    for (const paragraph of splitLicenseParagraphs(meta.licenseText)) {
+      let id = paragraphIds.get(paragraph)
+      if (id === undefined) {
+        id = paragraphs.length
+        paragraphs.push(paragraph)
+        paragraphLines.push(paragraph.split('\n').map(internLine))
+        paragraphIds.set(paragraph, id)
+      }
+      refs.push(id)
+    }
+    licenseTexts.push(refs)
+  }
+
+  const lineUsage = new Uint32Array(allLines.length)
+  for (const ids of paragraphLines) {
+    for (const id of new Set(ids)) lineUsage[id] += 1
+  }
+
+  const lineCosts = allLines.map((line) => JSON.stringify(line).length)
+  const lineIds = new Map<number, number>()
+  const licenseLines: string[] = []
+  const licenseBlocks: LicenseBlock[] = []
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const ids = paragraphLines[index]
+    let exclusiveCost = 0
+    for (const id of new Set(ids)) {
+      if (lineUsage[id] === 1) exclusiveCost += lineCosts[id] + 1
+    }
+    const idsCost = JSON.stringify(ids).length + exclusiveCost
+    if (JSON.stringify(paragraphs[index]).length < idsCost) {
+      licenseBlocks.push(paragraphs[index])
+      continue
+    }
+    licenseBlocks.push(
+      ids.map((id) => {
+        let mapped = lineIds.get(id)
+        if (mapped === undefined) {
+          mapped = licenseLines.length
+          licenseLines.push(allLines[id])
+          lineIds.set(id, mapped)
+        }
+        return mapped
+      }),
+    )
+  }
+
+  const licenses: ThirdPartyLicense[] = result.map((meta, index) => ({
+    name: meta.name,
+    version: meta.version,
+    description: meta.description,
+    homepage: meta.homepage,
+    author: meta.author,
+    license: meta.license,
+    licenseTextIndex: index,
+  }))
+
+  return { licenses, licenseTexts, licenseBlocks, licenseLines }
 }
 
 export function buildInfo(): Plugin {
@@ -202,13 +308,16 @@ export function buildInfo(): Plugin {
     name: 'ta-build-info',
     async config() {
       const { hash, changelog } = await readGitInfo()
-      const licenses = await readLicenses()
+      const { licenses, licenseTexts, licenseBlocks, licenseLines } = await readLicenses()
       return {
         define: {
           __BUILD_HASH__: JSON.stringify(hash),
           __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
           __BUILD_CHANGELOG__: JSON.stringify(changelog),
           __THIRD_PARTY_LICENSES__: JSON.stringify(licenses),
+          __THIRD_PARTY_LICENSE_TEXTS__: JSON.stringify(licenseTexts),
+          __THIRD_PARTY_LICENSE_BLOCKS__: JSON.stringify(licenseBlocks),
+          __THIRD_PARTY_LICENSE_LINES__: JSON.stringify(licenseLines),
         },
       }
     },

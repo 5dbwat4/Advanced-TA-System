@@ -23,6 +23,8 @@ const Checkin = lazy(() => import('@/pages/checkin/Checkin'))
 const CheckinSession = lazy(() => import('@/pages/checkin/CheckinSession'))
 const Checkoff = lazy(() => import('@/pages/console/checkoff/Checkoff'))
 const CheckoffMulti = lazy(() => import('@/pages/console/checkoff/CheckoffMulti'))
+const CheckoffQueue = lazy(() => import('@/pages/console/checkoff/CheckoffQueue'))
+const CheckoffQueueNew = lazy(() => import('@/pages/console/checkoff/CheckoffQueueNew'))
 const Checkpoints = lazy(() => import('@/pages/console/courses/Checkpoints'))
 const CourseSettings = lazy(() => import('@/pages/console/courses/CourseSettings'))
 const CriteriaManage = lazy(() => import('@/pages/console/reports/CriteriaManage'))
@@ -41,6 +43,7 @@ const LicensesFull = lazy(() => import('@/pages/public/LicensesFull'))
 const LlmConnect = lazy(() => import('@/pages/console/LlmConnect'))
 const Login = lazy(() => import('@/pages/auth/Login'))
 const LoginClassSelect = lazy(() => import('@/pages/auth/LoginClassSelect'))
+const LoginDebug = lazy(() => import('@/pages/auth/LoginDebug'))
 const LoginSelect = lazy(() => import('@/pages/auth/LoginSelect'))
 const More = lazy(() => import('@/pages/console/More'))
 const NewBank = lazy(() => import('@/pages/console/questions/NewBank'))
@@ -60,6 +63,7 @@ const TagDetail = lazy(() => import('@/pages/console/tag/TagDetail'))
 const Tags = lazy(() => import('@/pages/console/tag/Tags'))
 const StudentExperiment = lazy(() => import('@/pages/student/StudentExperiment'))
 const StudentOverview = lazy(() => import('@/pages/student/StudentOverview'))
+const StudentQueue = lazy(() => import('@/pages/student/StudentQueue'))
 const StudentScores = lazy(() => import('@/pages/student/StudentScores'))
 const StudentSettings = lazy(() => import('@/pages/student/StudentSettings'))
 const StudentUnlock = lazy(() => import('@/pages/student/StudentUnlock'))
@@ -106,6 +110,7 @@ export default function App() {
         <Route element={<RedirectIfAuthed />}>
           <Route path="/login" element={<Login />} />
         </Route>
+        <Route path="/login/debug" element={<LoginDebug />} />
         <Route path="/login/select" element={<LoginSelect />} />
         <Route path="/login/class" element={<LoginClassSelect />} />
         <Route element={<RequireOnboarding />}>
@@ -118,6 +123,7 @@ export default function App() {
           <Route element={<RequireStudent />}>
             <Route path="/student-console" element={<StudentShell />}>
               <Route index element={<StudentOverview />} />
+              <Route path="queue" element={<StudentQueue />} />
               <Route path="scores" element={<StudentScores />} />
               <Route path="experiments/:id" element={<StudentExperiment />} />
               <Route path="settings" element={<StudentSettings />} />
@@ -146,6 +152,9 @@ export default function App() {
             <Route path="/console/courses/new-account" element={<NewClassAccount />} />
             <Route path="/console" element={<AppShell />}>
             <Route index element={<Dashboard />} />
+            <Route path="checkoff-queue" element={<CheckoffQueue />} />
+            <Route path="checkoff-queue/new" element={<CheckoffQueueNew />} />
+            <Route path="checkoff-queue/edit" element={<CheckoffQueueNew />} />
             <Route path="checkoff/cards" element={<CustomCards />} />
             <Route path="boards" element={<Boards />} />
             <Route path="boards/scan" element={<BoardScan />} />

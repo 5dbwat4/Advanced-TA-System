@@ -12,10 +12,13 @@ type TaThirdPartyLicense = {
   homepage: string
   author: string
   license: string
-  licenseText: string
+  licenseTextIndex: number
 }
 
 declare const __BUILD_HASH__: string
 declare const __BUILD_TIME__: string
 declare const __BUILD_CHANGELOG__: TaChangelogEntry[]
 declare const __THIRD_PARTY_LICENSES__: TaThirdPartyLicense[]
+declare const __THIRD_PARTY_LICENSE_TEXTS__: number[][]
+declare const __THIRD_PARTY_LICENSE_BLOCKS__: (string | number[])[]
+declare const __THIRD_PARTY_LICENSE_LINES__: string[]

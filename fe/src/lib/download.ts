@@ -1,12 +1,9 @@
+import { saveAs } from 'file-saver'
+import filenamify from 'filenamify/browser'
+
 /** 触发浏览器下载一个 Markdown 文件 */
 export function downloadMarkdown(filename: string, content: string) {
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
+  saveAs(new Blob([content], { type: 'text/markdown;charset=utf-8' }), filename)
 }
 
 /** 将题目集题目序列化为 Markdown（标题 + 每题题目/答案） */
@@ -25,5 +22,5 @@ export function bankQuestionsToMarkdown(
 
 /** 将题目集名称转为安全的文件名 */
 export function bankFilename(name: string): string {
-  return `${name.replace(/[\\/:*?"<>|]/g, '_')}.md`
+  return `${filenamify(name, { replacement: '_' })}.md`
 }

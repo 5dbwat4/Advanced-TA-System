@@ -204,6 +204,7 @@ model Class {
   checkpointClaims CheckpointClaimed[]
   focusStudents    FocusStudent[]
   devBoards        DevBoard[]
+  checkoffSessions CheckoffSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -278,6 +279,25 @@ model FocusStudent {
   @@unique([classId, userId])
   @@index([classId])
   @@index([userId])
+}
+
+/// 验收排队会话（每次排队一条记录，保存设置与统计）
+model CheckoffSession {
+  id String @id @default(uuid(4))
+
+  /// 所属课程
+  classId String
+  klass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  /// 会话设置（JSON 字符串）
+  settings String @default("{}")
+  /// 会话统计（JSON 字符串）
+  stats    String @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@map("CheckoffSessions")
+  @@index([classId])
 }
 
 /// 开发板（一块板一条记录；多人合用时 userIds 存 JSON 数组）

@@ -9,6 +9,7 @@ import { useAppStore } from '@/lib/store'
 export function RequireOnboarding() {
   const { user, loading } = useAuth()
   const onboarding = useAppStore((state) => state.onboarding)
+  const debugMode = useAppStore((state) => state.debugMode)
 
   if (loading) {
     return (
@@ -18,9 +19,19 @@ export function RequireOnboarding() {
     )
   }
 
+  if (debugMode && user) {
+    return <Navigate to={homePathFor(user)} replace />
+  }
+
+  // 已登录但尚未完成初始化的账号必须允许进入 /setup，
+  // 否则刷新后 onboarding 状态丢失会在 /login 与 /setup 之间来回跳转。
+  if (user) {
+    if (user.username) return <Navigate to={homePathFor(user)} replace />
+    return <Outlet />
+  }
+
   if (!onboarding) {
-    const target = user && user.username ? homePathFor(user) : '/login'
-    return <Navigate to={target} replace />
+    return <Navigate to="/login" replace />
   }
 
   return <Outlet />

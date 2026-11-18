@@ -322,6 +322,44 @@ export function useCheckoffWatch(
   return peers
 }
 
+export type CheckoffQueueUpdateEvent = {
+  classId: string
+  sessionId: string
+  at: number
+}
+
+/** 订阅班级验收排队更新（助教与学生均可使用） */
+export function useCheckoffQueueUpdates(
+  classId: string | null | undefined,
+  onUpdate: (event: CheckoffQueueUpdateEvent) => void,
+): void {
+  const handlerRef = useRef(onUpdate)
+
+  useEffect(() => {
+    handlerRef.current = onUpdate
+  }, [onUpdate])
+
+  useEffect(() => {
+    if (!classId) return
+    const s = getCheckoffSocket()
+
+    const join = () => s.emit('checkoff-queue:subscribe', { classId })
+    const onEvent = (payload: CheckoffQueueUpdateEvent) => {
+      if (payload?.classId === classId) handlerRef.current(payload)
+    }
+
+    s.on('checkoff-queue:update', onEvent)
+    s.on('connect', join)
+    if (s.connected) join()
+
+    return () => {
+      s.off('checkoff-queue:update', onEvent)
+      s.off('connect', join)
+      s.emit('checkoff-queue:unsubscribe', { classId })
+    }
+  }, [classId])
+}
+
 /** 通知当前班级的验收房间：本助教开始验收某学生 */
 export function notifyCheckoffStarted(payload: { classId: string; studentName: string }): void {
   getCheckoffSocket().emit('checkoff:notify', payload)

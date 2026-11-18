@@ -1,36 +1,29 @@
-/* Service Worker：缓存前端静态资源（Cache Storage），不缓存 API。
+/* Service Worker：仅缓存前端构建产物（/assets/*），绝不缓存 index.html 等页面、manifest 或 API。
  * 由 fe/plugins/service-worker.ts 在构建时注入 __BUILD_VERSION__（每次部署版本变化以触发更新提示）。
  *
  * 缓存布局：
- * - tasaas-static（不含版本，长期复用）：内容哈希的 /assets/*、字体等，cache-first，
+ * - tasaas-static（不含版本，长期复用）：仅内容哈希的 /assets/*（js/css 等），cache-first，
  *   实现增量更新——未改动的 chunk hash 不变、直接命中缓存。
- * - tasaas-pages-<VERSION>（按版本隔离）：index.html 与 manifest.json，cache-first。
- *   install 时预取本版本两者；activate 时清理旧版本。这样页面与 manifest 始终同版本，
- *   应用只在用户点“刷新”（新 SW 接管）后升级，而不是静默更新。
+ * - 页面导航（index.html 之类）、manifest.json、/api、/socket.io、/mcp 一律放行到网络，
+ *   由 Service Worker 完全不管，避免页面被旧缓存卡住或导航被 SW 拦截报错。
  *
  * 加载策略（按需）：
- * - 不再阻塞首屏等待全部 chunk 下载完成。install 只预取本版本的 index.html 与 manifest.json。
+ * - install 不预取任何页面或 manifest。
  * - 不在 activate 时主动预加载全部 chunk；只有页面明确发送 PRELOAD_START 时才在后台
  *   基于 manifest.json 按需预取（当前首屏加载器已不再发送该消息）。
  * - 页面请求 /assets/* 时 cache-first：命中直接返回；未命中立刻联网（不会等待后台预加载），
  *   并把响应写入缓存；若同一资源后台正在下载，则复用在途请求，避免重复下载。
- * - /api、/socket.io、/mcp：直接放行，绝不缓存。
  * 更新：默认不 skipWaiting，等待页面提示用户后发送 SKIP_WAITING 再接管。
  */
 const VERSION = '__BUILD_VERSION__'
 
 const STATIC_CACHE = 'tasaas-static'
-const PAGE_CACHE = `tasaas-pages-${VERSION}`
 
 const SCOPE = self.registration.scope
-const PAGE_KEY = new URL('index.html', SCOPE).href
-const MANIFEST_PATH = new URL('manifest.json', SCOPE).pathname
 const MANIFEST_KEY = new URL('manifest.json', SCOPE).href
 const ASSETS_PATH = new URL('assets/', SCOPE).pathname
 
 const API_PREFIXES = ['/api', '/socket.io', '/mcp']
-const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com'
-const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com'
 // 只占一个连接：浏览器同源并发通常为 6，其余留给 entry / 当前路由的按需加载。
 const PRELOAD_CONCURRENCY = 1
 const CHUNK_RE = /\.(?:m?js|css)$/i
@@ -132,12 +125,8 @@ function markChunkSettled(url, bytes, failed) {
 }
 
 async function readManifest() {
-  const cache = await caches.open(PAGE_CACHE)
-  let response = await cache.match(MANIFEST_KEY)
-  if (!response) {
-    response = await fetch(new Request(MANIFEST_KEY, { cache: 'reload' }))
-    if (isCacheable(response)) cache.put(MANIFEST_KEY, response.clone())
-  }
+  // manifest.json 仅用于确定需预取的 chunk 列表，不写入缓存。
+  const response = await fetch(new Request(MANIFEST_KEY, { cache: 'no-store' }))
   if (!response || !response.ok) throw new Error('manifest unavailable')
   return response.json()
 }
@@ -262,19 +251,8 @@ async function preloadAsset(asset, cache) {
   }
 }
 
-self.addEventListener('install', (event) => {
-  // 只预取本版本的 index.html 与 manifest.json；具体 chunk 由后台加载进程按需写入。
-  event.waitUntil(
-    (async () => {
-      const cache = await caches.open(PAGE_CACHE)
-      const [page, manifest] = await Promise.all([
-        fetch(new Request(SCOPE, { cache: 'reload' })),
-        fetch(new Request(MANIFEST_KEY, { cache: 'reload' })),
-      ])
-      if (isCacheable(page)) await cache.put(PAGE_KEY, page)
-      if (isCacheable(manifest)) await cache.put(MANIFEST_KEY, manifest)
-    })().catch(() => {}),
-  )
+self.addEventListener('install', () => {
+  // 不再预取任何页面或 manifest；/assets/* 仅在页面实际请求时按需缓存。
   // 不调用 skipWaiting：保留 waiting 状态，交给页面提示用户更新。
 })
 
@@ -282,9 +260,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const names = await caches.keys()
+      // 清理历史版本遗留的页面 / manifest 缓存，之后不再缓存任何页面。
       await Promise.all(
         names
-          .filter((name) => name.startsWith('tasaas-pages-') && name !== PAGE_CACHE)
+          .filter((name) => name.startsWith('tasaas-pages-'))
           .map((name) => caches.delete(name)),
       )
       await self.clients.claim()
@@ -400,37 +379,6 @@ async function serveChunk(request) {
   return response
 }
 
-async function cacheFirst(request, cacheName) {
-  const cache = await caches.open(cacheName)
-  const cached = await cache.match(request)
-  if (cached) return cached
-  const response = await fetch(request)
-  if (isCacheable(response)) cache.put(request, response.clone())
-  return response
-}
-
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName)
-  const cached = await cache.match(request)
-  const network = fetch(request)
-    .then((response) => {
-      if (isCacheable(response)) cache.put(request, response.clone())
-      return response
-    })
-    .catch(() => undefined)
-  return cached || network || Response.error()
-}
-
-/** 页面 / manifest：从当前版本的 PAGE_CACHE 命中；未命中再联网并缓存。 */
-async function pageAsset(key, request) {
-  const cache = await caches.open(PAGE_CACHE)
-  const cached = await cache.match(key)
-  if (cached) return cached
-  const response = await fetch(request)
-  if (isCacheable(response)) cache.put(key, response.clone())
-  return response
-}
-
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
@@ -443,38 +391,18 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return
 
-  const sameOrigin = url.origin === self.location.origin
+  // 页面导航一律交给网络，SW 不接管，避免缓存页面或拦截导航时报误导性错误。
+  if (request.mode === 'navigate') return
 
-  if (sameOrigin && API_PREFIXES.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))) {
+  if (url.origin !== self.location.origin) return
+
+  if (API_PREFIXES.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))) {
     return
   }
 
-  if (request.mode === 'navigate') {
-    event.respondWith(pageAsset(PAGE_KEY, request))
-    return
-  }
-
-  if (sameOrigin && url.pathname === MANIFEST_PATH) {
-    event.respondWith(pageAsset(MANIFEST_KEY, request))
-    return
-  }
-
-  if (sameOrigin && url.pathname.startsWith(ASSETS_PATH)) {
+  // 只缓存构建产物 /assets/*；manifest、sw.js、图标等其余同源请求一律放行。
+  if (url.pathname.startsWith(ASSETS_PATH)) {
     event.respondWith(serveChunk(request))
-    return
-  }
-
-  if (url.origin === FONT_CSS_ORIGIN) {
-    event.respondWith(staleWhileRevalidate(request, STATIC_CACHE))
-    return
-  }
-  if (url.origin === FONT_FILE_ORIGIN) {
-    event.respondWith(cacheFirst(request, STATIC_CACHE))
-    return
-  }
-
-  if (sameOrigin) {
-    event.respondWith(staleWhileRevalidate(request, STATIC_CACHE))
   }
 })
 

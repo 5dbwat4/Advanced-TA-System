@@ -6,6 +6,7 @@ import ClipboardCheck from '~icons/lucide/clipboard-check'
 import FileText from '~icons/lucide/file-text'
 import FlaskConical from '~icons/lucide/flask-conical'
 import LayoutDashboard from '~icons/lucide/layout-dashboard'
+import ListOrdered from '~icons/lucide/list-ordered'
 import NotebookText from '~icons/lucide/notebook-text'
 import Settings2 from '~icons/lucide/settings-2'
 import Table from '~icons/lucide/table'
@@ -24,6 +25,12 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/console', label: '总览', icon: LayoutDashboard, end: true, mobile: true, description: '工作台总览与快捷入口' },
   { to: '/console/checkoff', label: '验收', icon: ClipboardCheck, description: '抽题 · 评分 · 记录检查点' },
+  {
+    to: '/console/checkoff-queue',
+    label: '验收排队',
+    icon: ListOrdered,
+    description: '现场排队 · 叫号 · 调整顺序',
+  },
   { to: '/console/experiments', label: '实验', icon: FlaskConical, mobile: true, description: '创建实验并绑定题目集' },
   { to: '/console/questions', label: '题库', icon: NotebookText, mobile: true, description: '题目与题目集管理' },
   { to: '/console/reports', label: '实验报告', icon: FileText, mobile: true, description: '报告批阅与查看' },
@@ -43,6 +50,7 @@ export const MORE_PATH = '/console/more'
 const MORE_SECTION_PATHS = [
   '/console/checkoff',
   '/console/checkoff-multi',
+  '/console/checkoff-queue',
   '/console/boards',
   '/console/llm-connect',
   '/console/courses',

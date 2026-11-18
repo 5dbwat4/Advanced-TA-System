@@ -175,7 +175,6 @@ export function StudentPreviewContent({ data }: { data: StudentPreviewData }) {
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-fg">{experiment.title}</h1>
         <div className="mt-1 text-sm text-fg-subtle">
           {experiment.className ?? '未知课程'}
-          {experiment.questionBankName ? ` · ${experiment.questionBankName}` : ''}
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <InfoItem

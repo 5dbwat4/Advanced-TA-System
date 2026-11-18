@@ -6,9 +6,9 @@ const UPDATE_INTERVAL_MS = 30 * 60 * 1000
 /**
  * 注册 Service Worker，并在检测到新版本时提示用户手动刷新。
  *
- * 页面 HTML 由 SW 以 cache-first 提供，因此应用只会在用户点击“刷新”、新 SW 接管后
- * 升级。这里通过定时 / 回到前台时调用 registration.update() 主动检查更新，
- * 覆盖 SPA 内长时间不整页导航的情况。
+ * SW 只缓存 /assets/* 构建产物（页面 HTML 与 manifest 始终走网络），新 SW 接管后
+ * 才会启用新的资源缓存。这里通过定时 / 回到前台时调用 registration.update()
+ * 主动检查更新，覆盖 SPA 内长时间不整页导航的情况。
  */
 export function ServiceWorkerUpdate() {
   useEffect(() => {

@@ -180,6 +180,82 @@ export type CheckoffStudent = {
   avatar: number | null
 }
 
+export type CheckoffSessionSettings = {
+  acceptedExperimentIds: string[]
+  priorityExperimentIds: string[]
+  taIds: string[]
+  allowStudentChooseTa: boolean
+  taPreferences: Record<string, string[]>
+  studentScope: 'all' | 'whitelist' | 'blacklist'
+  studentIds: string[]
+  allowSelfMoveDown: boolean
+  jumpMode: 'after3' | 'anywhere' | 'none'
+  startMode: 'now' | 'scheduled'
+  startAt: string | null
+}
+
+export type CheckoffQueueEntry = {
+  userId: string
+  experimentId: string
+  taId: string | null
+  status: 'waiting' | 'called'
+  calledBy?: string | null
+  calledAt?: string | null
+  joinedAt: string
+}
+
+export type CheckoffSessionStats = {
+  entries: CheckoffQueueEntry[]
+  [key: string]: unknown
+}
+
+export type CheckoffSession = {
+  id: string
+  classId: string
+  settings: CheckoffSessionSettings
+  stats: CheckoffSessionStats
+  createdAt: string
+}
+
+export type StudentCheckoffQueueEntry = CheckoffQueueEntry & { position: number }
+
+export type StudentCheckoffQueueTimelineEntry = {
+  userId: string
+  name: string
+  studentId: string
+  experimentId: string
+  experimentMark: string
+  experimentTitle: string
+  status: 'waiting' | 'called'
+  taName: string | null
+  calledByName: string | null
+  calledAt: string | null
+  joinedAt: string
+}
+
+export type StudentCheckoffQueueView = {
+  session: {
+    id: string
+    startAt: string
+    started: boolean
+    allowStudentChooseTa: boolean
+    allowSelfMoveDown: boolean
+    jumpMode: CheckoffSessionSettings['jumpMode']
+    experiments: { id: string; mark: string; title: string }[]
+    tas: {
+      id: string
+      name: string
+      studentId: string | null
+      avatar: number | null
+      preferenceExperimentIds: string[]
+    }[]
+    entry: StudentCheckoffQueueEntry | null
+    queue: StudentCheckoffQueueTimelineEntry[]
+  } | null
+  eligible: boolean
+  reason: 'NO_CLASS' | 'NO_SESSION' | 'NOT_STARTED' | 'NOT_IN_SCOPE' | null
+}
+
 export type LoginCandidate = {
   userId: string
   name: string
@@ -1082,6 +1158,80 @@ export function fetchCheckoff(params: {
     scores: Score[]
     questions?: CheckoffQuestion[]
   }>(`/api/checkoff?${search.toString()}`)
+}
+
+export function updateCheckoffSessionSettings(
+  sessionId: string,
+  settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt: string | null },
+): Promise<{ session: CheckoffSession }> {
+  return apiFetch<{ session: CheckoffSession }>(
+    `/api/checkoff/sessions/${encodeURIComponent(sessionId)}/settings`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ settings }),
+    },
+  )
+}
+
+export function fetchCheckoffSessions(
+  classId: string,
+): Promise<{ sessions: CheckoffSession[] }> {
+  return apiFetch<{ sessions: CheckoffSession[] }>(
+    `/api/checkoff/sessions?classId=${encodeURIComponent(classId)}`,
+  )
+}
+
+export function createCheckoffSession(body: {
+  classId: string
+  settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt: string | null }
+}): Promise<{ session: CheckoffSession }> {
+  return apiFetch<{ session: CheckoffSession }>('/api/checkoff/sessions', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export type CheckoffQueueAction =
+  | { action: 'move'; userIds: string[]; direction: 'up' | 'down' | 'top' }
+  | { action: 'precall'; userIds: string[]; called: boolean }
+  | { action: 'remove'; userIds: string[] }
+  | { action: 'reorder'; userId: string; toIndex: number }
+
+export function updateCheckoffQueue(
+  sessionId: string,
+  action: CheckoffQueueAction,
+): Promise<{ session: CheckoffSession }> {
+  return apiFetch<{ session: CheckoffSession }>(
+    `/api/checkoff/sessions/${encodeURIComponent(sessionId)}/queue`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(action),
+    },
+  )
+}
+
+export function fetchStudentCheckoffQueue(): Promise<StudentCheckoffQueueView> {
+  return apiFetch<StudentCheckoffQueueView>('/api/student/checkoff-queue')
+}
+
+export function joinStudentCheckoffQueue(body: {
+  experimentId: string
+  taId?: string | null
+}): Promise<{ ok: true; entry: CheckoffQueueEntry; position: number }> {
+  return apiFetch<{ ok: true; entry: CheckoffQueueEntry; position: number }>(
+    '/api/student/checkoff-queue',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  )
+}
+
+export function reorderStudentCheckoffQueue(toIndex: number): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/student/checkoff-queue', {
+    method: 'PATCH',
+    body: JSON.stringify({ toIndex }),
+  })
 }
 
 export function submitCheckoff(body: {

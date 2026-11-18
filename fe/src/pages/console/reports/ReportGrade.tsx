@@ -176,7 +176,6 @@ export default function ReportGrade() {
 
   const selectedStudent =
     gradeStudents.find((student) => student.personId === selectedPersonId) ?? null
-  const gradedCount = gradeStudents.filter((student) => student.score != null).length
 
   const handleScoreSaved = useCallback((score: Score) => {
     setScores((prev) => {
@@ -340,12 +339,6 @@ export default function ReportGrade() {
         <div className="min-w-0 flex-1 truncate text-sm font-bold">
           {experiment ? `${experiment.mark} · ${experiment.title}` : '报告批改'}
         </div>
-        {gradeStudents.length > 0 && (
-          <span className="tabular shrink-0 text-xs text-fg-subtle">
-            已批改 <span className="font-semibold text-fg">{gradedCount}</span> /{' '}
-            {gradeStudents.length}
-          </span>
-        )}
         <Dropdown>
           <Button isIconOnly size="sm" variant="secondary" aria-label="更多操作">
             <Ellipsis width={16} height={16} className="shrink-0" />

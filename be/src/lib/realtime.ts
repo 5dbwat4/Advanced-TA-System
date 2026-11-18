@@ -37,6 +37,11 @@ function watchRoom(classId: string): string {
   return `checkoff-watch:${classId}`
 }
 
+/** 验收排队房间名（助教与学生均可加入） */
+function checkoffQueueRoom(classId: string): string {
+  return `checkoff-queue:${classId}`
+}
+
 /** 验收在场信息（打开验收页的人：在线 + 当前正在验收的学生） */
 export type CheckoffPeer = {
   userId: string
@@ -363,6 +368,38 @@ export function createRealtime(fastify: FastifyInstance): Server {
       },
     )
 
+    /* -------- 验收排队房间（班级内助教与学生均可加入） -------- */
+    socket.on(
+      'checkoff-queue:subscribe',
+      async ({ classId } = {} as { classId?: string }, ack?: (res: unknown) => void) => {
+        const userId = socket.data.user?.sub as string | undefined
+        if (!userId || typeof classId !== 'string') {
+          return ack?.({ ok: false, error: 'UNAUTHORIZED' })
+        }
+        try {
+          const classIds = await loadClassIds(userId)
+          if (!classIds.includes(classId)) return ack?.({ ok: false, error: 'FORBIDDEN' })
+          for (const room of [...socket.rooms]) {
+            if (room.startsWith('checkoff-queue:')) await socket.leave(room)
+          }
+          await socket.join(checkoffQueueRoom(classId))
+          socket.data.checkoffQueueClassId = classId
+          ack?.({ ok: true })
+        } catch (error) {
+          fastify.log.error(error)
+          ack?.({ ok: false, error: 'INTERNAL' })
+        }
+      },
+    )
+
+    socket.on('checkoff-queue:unsubscribe', ({ classId } = {} as { classId?: string }) => {
+      if (typeof classId !== 'string') return
+      void socket.leave(checkoffQueueRoom(classId))
+      if (socket.data.checkoffQueueClassId === classId) {
+        socket.data.checkoffQueueClassId = undefined
+      }
+    })
+
     /* -------- 报告批改房间（按实验，仅打开批改页的助教加入） -------- */
     socket.on(
       'report:join',
@@ -673,6 +710,22 @@ export function createRealtime(fastify: FastifyInstance): Server {
 
   io = server
   return server
+}
+
+/** 验收排队更新事件 */
+export type CheckoffQueueUpdateEvent = {
+  classId: string
+  sessionId: string
+  at: number
+}
+
+/** 向指定班级广播验收排队更新 */
+export function emitCheckoffQueueUpdate(classId: string, sessionId: string): void {
+  io?.to(checkoffQueueRoom(classId)).emit('checkoff-queue:update', {
+    classId,
+    sessionId,
+    at: Date.now(),
+  } satisfies CheckoffQueueUpdateEvent)
 }
 
 /** 向指定班级广播成绩变更 */

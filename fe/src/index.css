@@ -230,6 +230,7 @@ body {
     transparent 1px,
     transparent 14px
   );
+  background-attachment: fixed;
 }
 
 /* ---------------------------------- */
