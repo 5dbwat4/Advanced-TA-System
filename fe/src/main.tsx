@@ -17,6 +17,30 @@ import '@uiw/react-md-editor/markdown-editor.css'
 
 initSentry()
 
+async function hardRefresh(): Promise<void> {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map((registration) => registration.unregister()))
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys()
+      await Promise.all(
+        keys
+          .filter((key) => key.startsWith('tasaas-'))
+          .map((key) => caches.delete(key)),
+      )
+    }
+  } catch {
+    /* ignore */
+  }
+  window.location.reload()
+}
+
 function AppCrash({ eventId, resetError }: { eventId: string; resetError: () => void }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-bg px-6 text-fg">
@@ -28,7 +52,7 @@ function AppCrash({ eventId, resetError }: { eventId: string; resetError: () => 
           type="button"
           onClick={() => {
             resetError()
-            window.location.reload()
+            void hardRefresh()
           }}
           className="mt-6 rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700"
         >

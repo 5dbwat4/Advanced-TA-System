@@ -94,13 +94,12 @@ export default function App() {
     window.dispatchEvent(new Event('pb:app-ready'))
 
     // 短暂停留，让真实进度能显示到 100%，再淡出 splash。
-    const hideTimer = window.setTimeout(() => splash.classList.add('app-splash--hidden'), 120)
-    const removeTimer = window.setTimeout(() => splash.remove(), 520)
+    const hideTimer = window.setTimeout(() => {
+      if ((window as Window & { __BOOT_FAILED__?: boolean }).__BOOT_FAILED__) return
+      splash.classList.add('app-splash--hidden')
+    }, 120)
 
-    return () => {
-      window.clearTimeout(hideTimer)
-      window.clearTimeout(removeTimer)
-    }
+    return () => window.clearTimeout(hideTimer)
   }, [])
 
   return (

@@ -350,7 +350,10 @@
           var splash = document.getElementById('app-splash')
           var status = document.getElementById('app-splash-status')
           var bar = document.getElementById('boot-progress')
-          if (splash) splash.classList.add('app-splash--error')
+          if (splash) {
+            splash.classList.remove('app-splash--hidden')
+            splash.classList.add('app-splash--error')
+          }
           if (status) {
             status.hidden = false
             status.textContent =
@@ -363,9 +366,9 @@
           bindRetry()
         }
 
-        function fail(message, hard, detail) {
-          if (finished) return
-          if (failed && !hard) return
+        function fail(message, hard, detail, force) {
+          if (finished && !force) return
+          if (failed && !hard && !force) return
           failed = true
           failureMessage = message
           failureDetail = detail || ''
@@ -459,19 +462,13 @@
           if (!finished) fail('应用启动失败', false, describeError(event.reason))
         })
         window.addEventListener('vite:preloadError', function (event) {
+          event.preventDefault()
+          var payload = event.payload || (event.detail && event.detail.payload)
           if (!finished) {
-            var payload = event.detail && event.detail.payload
-            fail('资源加载失败', false, describeError(payload))
+            fail('资源加载失败', true, describeError(payload))
             return
           }
-          try {
-            var key = 'tasaas:chunk-reload'
-            var last = Number(sessionStorage.getItem(key) || 0)
-            if (Date.now() - last < 60000) return
-            sessionStorage.setItem(key, String(Date.now()))
-          } catch (error) {}
-          event.preventDefault()
-          window.location.reload()
+          fail('资源加载失败', true, describeError(payload), true)
         })
         window.addEventListener('pb:app-ready', function () {
           if (failed && !window.__BOOT_FAILED__) {

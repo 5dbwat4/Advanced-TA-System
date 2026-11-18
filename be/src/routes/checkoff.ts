@@ -3,9 +3,10 @@ import { z } from 'zod'
 
 import { compareExperimentMark, parseBankQuestions } from '../lib/banks.js'
 import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { orderQueueEntries, parseSessionStats } from '../lib/checkoff-queue.js'
 import { prisma } from '../lib/prisma.js'
 import { describeScoreChange, sendPushToUser } from '../lib/push.js'
-import { emitScoreChange, type ScoreChangeEvent } from '../lib/realtime.js'
+import { emitCheckoffQueueUpdate, emitScoreChange, type ScoreChangeEvent } from '../lib/realtime.js'
 import { toScoreDto } from '../lib/score.js'
 
 const submitSchema = z.object({
@@ -328,9 +329,32 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     if (messages.length > 0) {
       void sendPushToUser(userId, {
         title: '成绩更新',
-        body: messages.join('；'),
+        body: messages.join('、'),
         url: `/student-console/experiments/${encodeURIComponent(experimentId)}`,
       })
+    }
+
+    const queueSession = await prisma.checkoffSession.findFirst({
+      where: { classId },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (queueSession) {
+      const stats = parseSessionStats(queueSession.stats)
+      if (stats.entries.some((entry) => entry.userId === userId)) {
+        const finishedAt = new Date().toISOString()
+        const entries = orderQueueEntries(
+          stats.entries.map((entry) =>
+            entry.userId === userId
+              ? { ...entry, status: 'finished' as const, finishedAt }
+              : entry,
+          ),
+        )
+        await prisma.checkoffSession.update({
+          where: { id: queueSession.id },
+          data: { stats: JSON.stringify({ ...stats, entries }) },
+        })
+        emitCheckoffQueueUpdate(classId, queueSession.id)
+      }
     }
 
     return reply.send({ ok: true })

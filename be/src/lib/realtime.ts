@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 
+import { orderQueueEntries, parseSessionStats } from './checkoff-queue.js'
 import { prisma } from './prisma.js'
 import { isStaff } from './roles.js'
 import type { ScoreDto } from './score.js'
@@ -49,6 +50,12 @@ export type CheckoffPeer = {
   avatar: number | null
   /** 当前正在验收的学生姓名，null 表示空闲 */
   studentName: string | null
+  /** 当前正在验收的学生 ID，null 表示空闲 */
+  studentId: string | null
+  /** 该学生的「正在验收」是否由本次开始自动写入队列 */
+  markedCalled: boolean
+  /** 取消本次「正在验收」时恢复的队列状态 */
+  restoreStatus: 'waiting' | 'notified' | null
   at: number
 }
 
@@ -72,14 +79,126 @@ function broadcastCheckoffPresence(classId: string): void {
   io?.to(watchRoom(classId)).emit('checkoff:presence', { classId, peers: checkoffPeers(classId) })
 }
 
+function otherPresenceActive(
+  classId: string,
+  studentId: string,
+  exceptSocketId: string,
+): boolean {
+  const room = checkoffPresences.get(classId)
+  if (!room) return false
+  for (const [socketId, peer] of room) {
+    if (socketId !== exceptSocketId && peer.studentId === studentId) return true
+  }
+  return false
+}
+
+/** 助教开始验收时，把队列中的该学生标记为正在验收 */
+async function markQueueActive(
+  classId: string,
+  studentId: string,
+  callerName: string,
+): Promise<{
+  marked: boolean
+  previousStatus: 'waiting' | 'notified' | 'called' | 'finished'
+}> {
+  const row = await prisma.checkoffSession.findFirst({
+    where: { classId },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!row) return { marked: false, previousStatus: 'waiting' }
+  const stats = parseSessionStats(row.stats)
+  const target = stats.entries.find((entry) => entry.userId === studentId)
+  if (!target) return { marked: false, previousStatus: 'waiting' }
+  if (target.status === 'finished') {
+    return { marked: false, previousStatus: 'finished' }
+  }
+
+  const previousStatus = target.status
+  const wasCalled = previousStatus === 'called'
+  const now = new Date().toISOString()
+  const startedAt = wasCalled ? (target.startedAt ?? now) : now
+  const checkedBy = wasCalled ? (target.checkedBy ?? callerName) : callerName
+  const finishedAt = wasCalled ? target.finishedAt : null
+  const changed =
+    target.status !== 'called' ||
+    target.startedAt !== startedAt ||
+    target.checkedBy !== checkedBy ||
+    target.finishedAt !== finishedAt
+  if (changed) {
+    const entries = orderQueueEntries(
+      stats.entries.map((entry) =>
+        entry.userId === studentId
+          ? { ...entry, status: 'called' as const, startedAt, checkedBy, finishedAt }
+          : entry,
+      ),
+    )
+    await prisma.checkoffSession.update({
+      where: { id: row.id },
+      data: { stats: JSON.stringify({ ...stats, entries }) },
+    })
+    emitCheckoffQueueUpdate(classId, row.id)
+  }
+  return { marked: !wasCalled, previousStatus }
+}
+
+/** 本次开始自动标记的「正在验收」结束后恢复原状态 */
+async function unmarkQueueActive(
+  classId: string,
+  studentId: string,
+  restoreStatus: 'waiting' | 'notified',
+  finished: boolean,
+): Promise<void> {
+  const row = await prisma.checkoffSession.findFirst({
+    where: { classId },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!row) return
+  const stats = parseSessionStats(row.stats)
+  const target = stats.entries.find((entry) => entry.userId === studentId)
+  if (!target || target.status !== 'called') return
+
+  const status = finished ? ('waiting' as const) : restoreStatus
+  const entries = orderQueueEntries(
+    stats.entries.map((entry) =>
+      entry.userId === studentId
+        ? {
+            ...entry,
+            status,
+            startedAt: finished ? entry.startedAt : null,
+            checkedBy: finished ? entry.checkedBy : null,
+          }
+        : entry,
+    ),
+  )
+  await prisma.checkoffSession.update({
+    where: { id: row.id },
+    data: { stats: JSON.stringify({ ...stats, entries }) },
+  })
+  emitCheckoffQueueUpdate(classId, row.id)
+}
+
 /** socket 离开验收房间：移除在场并广播（幂等） */
 function removeCheckoffPresence(socket: Socket): void {
   const classId = socket.data.checkoffWatchClassId as string | undefined
   socket.data.checkoffWatchClassId = undefined
   if (typeof classId !== 'string') return
   const room = checkoffPresences.get(classId)
-  if (!room || !room.delete(socket.id)) return
+  const entry = room?.get(socket.id)
+  if (!room || !entry) return
+  room.delete(socket.id)
   if (room.size === 0) checkoffPresences.delete(classId)
+  if (
+    entry.markedCalled &&
+    entry.studentId &&
+    !otherPresenceActive(classId, entry.studentId, socket.id)
+  ) {
+    void unmarkQueueActive(
+      classId,
+      entry.studentId,
+      entry.restoreStatus ?? 'waiting',
+      false,
+    ).catch(() => {})
+  }
   broadcastCheckoffPresence(classId)
 }
 
@@ -466,6 +585,9 @@ export function createRealtime(fastify: FastifyInstance): Server {
           name: ctx.name,
           avatar: ctx.avatar,
           studentName: null,
+          studentId: null,
+          markedCalled: false,
+          restoreStatus: null,
           at: Date.now(),
         })
         ack?.({ peers: checkoffPeers(classId) })
@@ -486,11 +608,18 @@ export function createRealtime(fastify: FastifyInstance): Server {
 
     socket.on(
       'checkoff:notify',
-      async ({ classId, studentName } = {} as { classId?: string; studentName?: string }) => {
+      async (
+        { classId, studentId: rawStudentId, studentName } = {} as {
+          classId?: string
+          studentId?: string
+          studentName?: string
+        },
+      ) => {
         const user = socket.data.user as { sub?: string } | undefined
         if (!user?.sub || typeof classId !== 'string') return
         const name = (studentName ?? '').trim()
-        if (!name) return
+        const studentId = (rawStudentId ?? '').trim()
+        if (!name || !studentId) return
         const ctx = await loadBroadcastContext(user.sub)
         if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
         const payload: CheckoffStartedEvent = {
@@ -500,23 +629,75 @@ export function createRealtime(fastify: FastifyInstance): Server {
           at: Date.now(),
         }
         socket.to(watchRoom(classId)).emit('checkoff:started', payload)
+
         const entry = checkoffPresences.get(classId)?.get(socket.id)
+        if (entry?.studentId && entry.studentId !== studentId) {
+          if (
+            entry.markedCalled &&
+            !otherPresenceActive(classId, entry.studentId, socket.id)
+          ) {
+            await unmarkQueueActive(
+              classId,
+              entry.studentId,
+              entry.restoreStatus ?? 'waiting',
+              false,
+            ).catch(() => {})
+          }
+        }
+        const result = await markQueueActive(classId, studentId, ctx.name).catch(() => ({
+          marked: false,
+          previousStatus: 'waiting' as const,
+        }))
         if (entry) {
+          const sameStudent = entry.studentId === studentId
+          const restoreStatus =
+            result.marked &&
+            (result.previousStatus === 'waiting' || result.previousStatus === 'notified')
+              ? result.previousStatus
+              : null
           entry.studentName = name
+          entry.studentId = studentId
+          entry.restoreStatus = sameStudent
+            ? (entry.restoreStatus ?? restoreStatus)
+            : restoreStatus
+          entry.markedCalled = sameStudent
+            ? entry.markedCalled || result.marked
+            : result.marked
           entry.at = Date.now()
           broadcastCheckoffPresence(classId)
         }
       },
     )
 
-    socket.on('checkoff:clear', ({ classId } = {} as { classId?: string }) => {
-      if (typeof classId !== 'string') return
-      const entry = checkoffPresences.get(classId)?.get(socket.id)
-      if (!entry || entry.studentName === null) return
-      entry.studentName = null
-      entry.at = Date.now()
-      broadcastCheckoffPresence(classId)
-    })
+    socket.on(
+      'checkoff:clear',
+      async ({ classId, finished } = {} as { classId?: string; finished?: boolean }) => {
+        if (typeof classId !== 'string') return
+        const entry = checkoffPresences.get(classId)?.get(socket.id)
+        if (!entry || entry.studentName === null) return
+        const studentId = entry.studentId
+        const markedCalled = entry.markedCalled
+        const restoreStatus = entry.restoreStatus ?? 'waiting'
+        entry.studentName = null
+        entry.studentId = null
+        entry.markedCalled = false
+        entry.restoreStatus = null
+        entry.at = Date.now()
+        if (
+          markedCalled &&
+          studentId &&
+          !otherPresenceActive(classId, studentId, socket.id)
+        ) {
+          await unmarkQueueActive(
+            classId,
+            studentId,
+            restoreStatus,
+            finished === true,
+          ).catch(() => {})
+        }
+        broadcastCheckoffPresence(classId)
+      },
+    )
 
     /* -------- master -------- */
     socket.on(
@@ -726,6 +907,30 @@ export function emitCheckoffQueueUpdate(classId: string, sessionId: string): voi
     sessionId,
     at: Date.now(),
   } satisfies CheckoffQueueUpdateEvent)
+}
+
+export type CheckoffNotifiedCanceledEvent = {
+  classId: string
+  sessionId: string
+  userId: string
+  name: string
+  at: number
+}
+
+/** 学生自行后挪/退出导致预叫号结束时通知课程 */
+export function emitCheckoffNotifiedCanceled(
+  classId: string,
+  sessionId: string,
+  userId: string,
+  name: string,
+): void {
+  io?.to(checkoffQueueRoom(classId)).emit('checkoff-queue:notified-canceled', {
+    classId,
+    sessionId,
+    userId,
+    name,
+    at: Date.now(),
+  } satisfies CheckoffNotifiedCanceledEvent)
 }
 
 /** 向指定班级广播成绩变更 */

@@ -23,12 +23,16 @@ export function StepIndicator({
   onStep,
   hasExperiment,
   hasStudent,
+  experimentLabel,
+  studentLabel,
   layoutId = 'checkoff-step-pill',
 }: {
   step: number
   onStep: (step: number) => void
   hasExperiment: boolean
   hasStudent: boolean
+  experimentLabel?: string | null
+  studentLabel?: string | null
   layoutId?: string
 }) {
   const canGo = (target: number) => {
@@ -43,6 +47,12 @@ export function StepIndicator({
         const active = step === i
         const done = step > i
         const allowed = canGo(i)
+        const label =
+          i === 0 && experimentLabel
+            ? experimentLabel
+            : i === 1 && studentLabel
+              ? studentLabel
+              : meta.label
         return (
           <Button
             key={meta.label}
@@ -51,7 +61,7 @@ export function StepIndicator({
             isDisabled={!allowed}
             onPress={() => onStep(i)}
             className={cn(
-              'relative h-auto flex-1 justify-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm',
+              'relative h-auto min-w-0 flex-1 justify-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm',
               active
                 ? 'text-white hover:bg-transparent'
                 : done
@@ -73,7 +83,7 @@ export function StepIndicator({
             ) : (
               <meta.icon width={15} height={15} className="shrink-0 relative" />
             )}
-            <span className="relative hidden sm:inline">{meta.label}</span>
+            <span className="relative hidden min-w-0 truncate sm:inline">{label}</span>
           </Button>
         )
       })}

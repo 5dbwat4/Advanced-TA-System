@@ -2,7 +2,11 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { myClassIds, requireStaff } from '../lib/class-access.js'
-import { parseSessionSettings, parseSessionStats } from '../lib/checkoff-queue.js'
+import {
+  orderQueueEntries,
+  parseSessionSettings,
+  parseSessionStats,
+} from '../lib/checkoff-queue.js'
 import { prisma } from '../lib/prisma.js'
 import { emitCheckoffQueueUpdate } from '../lib/realtime.js'
 
@@ -196,15 +200,19 @@ function reorderEntries(
   userId: string,
   toIndex: number,
 ) {
-  const current = entries.find((entry) => entry.status === 'called') ?? null
-  const waiting = current ? entries.filter((entry) => entry !== current) : [...entries]
+  const finished = entries.filter((entry) => entry.status === 'finished')
+  const current = entries.filter((entry) => entry.status === 'called')
+  const waiting = entries.filter(
+    (entry) => entry.status !== 'finished' && entry.status !== 'called',
+  )
   const fromIndex = waiting.findIndex((entry) => entry.userId === userId)
   if (fromIndex < 0) return null
   const next = [...waiting]
   const [item] = next.splice(fromIndex, 1)
+  if (!item) return null
   const target = Math.max(0, Math.min(toIndex, next.length))
   next.splice(target, 0, item)
-  return current ? [current, ...next] : next
+  return orderQueueEntries([...finished, ...current, ...next])
 }
 
 export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -336,38 +344,61 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
     }
 
-    let calledByName: string | null = null
+    let notifiedByName: string | null = null
     if (action.action === 'precall' && action.called) {
       const { sub } = request.user as { sub: string }
       const me = await prisma.user.findUnique({ where: { id: sub }, select: { name: true } })
-      calledByName = me?.name ?? null
+      notifiedByName = me?.name ?? null
     }
 
     let entries = stats.entries
     if (action.action === 'remove') {
       entries = entries.filter((entry) => !selected.has(entry.userId))
     } else if (action.action === 'precall') {
-      const called = action.called
-      const calledAt = new Date().toISOString()
-      entries = entries.map((entry) =>
-        selected.has(entry.userId)
-          ? {
-              ...entry,
-              status: called ? ('called' as const) : ('waiting' as const),
-              calledBy: called ? entry.calledBy ?? calledByName : null,
-              calledAt: called ? entry.calledAt ?? calledAt : null,
-            }
-          : entry,
-      )
+      const notifiedAt = new Date().toISOString()
+      entries = entries.map((entry) => {
+        if (!selected.has(entry.userId) || entry.status === 'finished') return entry
+        if (action.called) {
+          if (entry.status === 'called' || entry.status === 'notified') return entry
+          return {
+            ...entry,
+            status: 'notified' as const,
+            notifiedAt,
+            notifiedBy: notifiedByName,
+            startedAt: null,
+            checkedBy: null,
+            finishedAt: null,
+          }
+        }
+        if (entry.status !== 'notified') return entry
+        return {
+          ...entry,
+          status: 'waiting' as const,
+          notifiedAt: null,
+          notifiedBy: null,
+        }
+      })
     } else if (action.action === 'reorder') {
+      const target = entries.find((entry) => entry.userId === action.userId)
+      if (target?.status === 'finished') {
+        return reply.code(403).send({ error: 'FINISHED', message: '已完成验收，无法调整顺序' })
+      }
       const reordered = reorderEntries(entries, action.userId, action.toIndex)
       if (!reordered) {
         return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
       }
       entries = reordered
     } else {
-      entries = moveEntries(entries, selected, action.direction)
+      const movable = new Set(
+        [...selected].filter((userId) => {
+          const entry = entries.find((item) => item.userId === userId)
+          return entry !== undefined && entry.status !== 'finished'
+        }),
+      )
+      entries = movable.size > 0 ? moveEntries(entries, movable, action.direction) : entries
     }
+
+    entries = orderQueueEntries(entries)
 
     const updated = await prisma.checkoffSession.update({
       where: { id: session.id },

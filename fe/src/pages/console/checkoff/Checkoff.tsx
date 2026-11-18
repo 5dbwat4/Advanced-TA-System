@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 
 import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
 import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
+import { CheckoffQueueDrawer } from '@/components/checkoff/CheckoffQueueDrawer'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
@@ -109,6 +110,7 @@ export default function Checkoff() {
   const [loading, setLoading] = useState(true)
   const [experiment, setExperiment] = useState<CheckoffExperiment | null>(null)
   const [student, setStudent] = useState<CheckoffStudent | null>(null)
+  const [activeStartedAt, setActiveStartedAt] = useState<string | null>(null)
   const [questions, setQuestions] = useState<CheckoffQuestion[]>([])
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
@@ -390,7 +392,6 @@ export default function Checkoff() {
 
   const selectExperiment = useCallback(async (next: CheckoffExperiment) => {
     setExperiment(next)
-    setStudent(null)
     setDrawn([])
     setMarks({})
     setExistingScores([])
@@ -412,6 +413,7 @@ export default function Checkoff() {
   const selectStudent = useCallback(
     (next: CheckoffStudent, nextScores: Score[]) => {
       setStudent(next)
+      setActiveStartedAt(new Date().toISOString())
       setExistingScores(nextScores)
       setDrawn([])
       setMarks({})
@@ -419,9 +421,60 @@ export default function Checkoff() {
       setSearching(false)
       setAiOral(null)
       setStep(2)
-      if (classId) notifyCheckoffStarted({ classId, studentName: next.name })
+      if (classId) {
+        notifyCheckoffStarted({
+          classId,
+          studentId: next.userId,
+          studentName: next.name,
+        })
+      }
     },
     [classId],
+  )
+
+  const startQueueStudent = useCallback(
+    async (next: CheckoffStudent, experimentId: string) => {
+      if (!classId) return
+      const target = experiments.find((item) => item.id === experimentId)
+      if (!target) {
+        toast.error('该学生选择的实验不在当前验收范围内')
+        return
+      }
+      try {
+        const response = await fetchCheckoff({
+          classId,
+          experimentId,
+          includeQuestions: !bankOverrideId,
+        })
+        const found = response.students.find((item) => item.userId === next.userId)
+        if (!found) {
+          toast.error('未找到该学生')
+          return
+        }
+        if (experiment?.id !== target.id) {
+          await selectExperiment(target)
+        }
+        if (!bankOverrideId) {
+          setQuestions(response.questions ?? [])
+          setQuestionsLoaded(true)
+          setQuestionsError(null)
+        }
+        selectStudent(
+          found,
+          response.scores.filter((score) => score.userId === next.userId),
+        )
+      } catch (err) {
+        toast.error(getErrorMessage(err, '开始验收失败'))
+      }
+    },
+    [
+      bankOverrideId,
+      classId,
+      experiments,
+      experiment,
+      selectExperiment,
+      selectStudent,
+    ],
   )
 
   const mark = useCallback((id: string, next: QuestionMark) => {
@@ -430,6 +483,7 @@ export default function Checkoff() {
 
   const handleSaved = useCallback(() => {
     setStudent(null)
+    setActiveStartedAt(null)
     setDrawn([])
     setMarks({})
     setExistingScores([])
@@ -437,7 +491,7 @@ export default function Checkoff() {
     setSearching(false)
     setAiOral(null)
     setStep(1)
-    if (classId) clearCheckoffPresence(classId)
+    if (classId) clearCheckoffPresence(classId, { finished: true })
   }, [classId])
 
   const handleStep = useCallback(
@@ -719,6 +773,8 @@ export default function Checkoff() {
           onStep={handleStep}
           hasExperiment={Boolean(experiment)}
           hasStudent={Boolean(student)}
+          experimentLabel={experiment ? `${experiment.mark} · ${experiment.title}` : null}
+          studentLabel={student?.name ?? null}
         />
         {activeCustomCardSlots.length > 0 && (
           <div className="z-20 mt-3 lg:absolute lg:left-full lg:top-0 lg:ml-3 lg:mt-0">
@@ -1060,6 +1116,12 @@ export default function Checkoff() {
         state={specialDrawState}
         onEdit={openSpecialDrawEditor}
         onApplied={applySpecialDrawMachine}
+      />
+      <CheckoffQueueDrawer
+        classId={currentClass.id}
+        activeStudentId={student?.userId ?? null}
+        activeStartedAt={activeStartedAt}
+        onStart={startQueueStudent}
       />
     </CheckoffLayout>
   )

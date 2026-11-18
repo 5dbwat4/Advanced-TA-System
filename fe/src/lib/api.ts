@@ -198,10 +198,13 @@ export type CheckoffQueueEntry = {
   userId: string
   experimentId: string
   taId: string | null
-  status: 'waiting' | 'called'
-  calledBy?: string | null
-  calledAt?: string | null
+  status: 'waiting' | 'notified' | 'called' | 'finished'
   joinedAt: string
+  notifiedAt: string | null
+  notifiedBy: string | null
+  startedAt: string | null
+  checkedBy: string | null
+  finishedAt: string | null
 }
 
 export type CheckoffSessionStats = {
@@ -226,10 +229,13 @@ export type StudentCheckoffQueueTimelineEntry = {
   experimentId: string
   experimentMark: string
   experimentTitle: string
-  status: 'waiting' | 'called'
+  status: 'waiting' | 'notified' | 'called' | 'finished'
   taName: string | null
-  calledByName: string | null
-  calledAt: string | null
+  notifiedAt: string | null
+  notifiedBy: string | null
+  startedAt: string | null
+  checkedBy: string | null
+  finishedAt: string | null
   joinedAt: string
 }
 
@@ -1230,7 +1236,23 @@ export function joinStudentCheckoffQueue(body: {
 export function reorderStudentCheckoffQueue(toIndex: number): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>('/api/student/checkoff-queue', {
     method: 'PATCH',
-    body: JSON.stringify({ toIndex }),
+    body: JSON.stringify({ action: 'reorder', toIndex }),
+  })
+}
+
+export function updateStudentCheckoffQueue(body: {
+  experimentId: string
+  taId?: string | null
+}): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/student/checkoff-queue', {
+    method: 'PATCH',
+    body: JSON.stringify({ action: 'update', ...body }),
+  })
+}
+
+export function leaveStudentCheckoffQueue(): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/student/checkoff-queue', {
+    method: 'DELETE',
   })
 }
 

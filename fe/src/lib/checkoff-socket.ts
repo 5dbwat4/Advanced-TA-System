@@ -328,16 +328,27 @@ export type CheckoffQueueUpdateEvent = {
   at: number
 }
 
+export type CheckoffNotifiedCanceledEvent = {
+  classId: string
+  sessionId: string
+  userId: string
+  name: string
+  at: number
+}
+
 /** 订阅班级验收排队更新（助教与学生均可使用） */
 export function useCheckoffQueueUpdates(
   classId: string | null | undefined,
   onUpdate: (event: CheckoffQueueUpdateEvent) => void,
+  onNotifiedCanceled?: (event: CheckoffNotifiedCanceledEvent) => void,
 ): void {
   const handlerRef = useRef(onUpdate)
+  const canceledRef = useRef(onNotifiedCanceled)
 
   useEffect(() => {
     handlerRef.current = onUpdate
-  }, [onUpdate])
+    canceledRef.current = onNotifiedCanceled
+  }, [onUpdate, onNotifiedCanceled])
 
   useEffect(() => {
     if (!classId) return
@@ -347,13 +358,18 @@ export function useCheckoffQueueUpdates(
     const onEvent = (payload: CheckoffQueueUpdateEvent) => {
       if (payload?.classId === classId) handlerRef.current(payload)
     }
+    const onCanceled = (payload: CheckoffNotifiedCanceledEvent) => {
+      if (payload?.classId === classId) canceledRef.current?.(payload)
+    }
 
     s.on('checkoff-queue:update', onEvent)
+    s.on('checkoff-queue:notified-canceled', onCanceled)
     s.on('connect', join)
     if (s.connected) join()
 
     return () => {
       s.off('checkoff-queue:update', onEvent)
+      s.off('checkoff-queue:notified-canceled', onCanceled)
       s.off('connect', join)
       s.emit('checkoff-queue:unsubscribe', { classId })
     }
@@ -361,13 +377,23 @@ export function useCheckoffQueueUpdates(
 }
 
 /** 通知当前班级的验收房间：本助教开始验收某学生 */
-export function notifyCheckoffStarted(payload: { classId: string; studentName: string }): void {
+export function notifyCheckoffStarted(payload: {
+  classId: string
+  studentId: string
+  studentName: string
+}): void {
   getCheckoffSocket().emit('checkoff:notify', payload)
 }
 
 /** 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场） */
-export function clearCheckoffPresence(classId: string): void {
-  getCheckoffSocket().emit('checkoff:clear', { classId })
+export function clearCheckoffPresence(
+  classId: string,
+  options?: { finished?: boolean },
+): void {
+  getCheckoffSocket().emit('checkoff:clear', {
+    classId,
+    finished: options?.finished === true,
+  })
 }
 
 /* ------------------------------- slave ------------------------------- */

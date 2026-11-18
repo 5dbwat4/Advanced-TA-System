@@ -2,10 +2,13 @@ export type CheckoffQueueEntry = {
   userId: string
   experimentId: string
   taId: string | null
-  status: 'waiting' | 'called'
-  calledBy?: string | null
-  calledAt?: string | null
+  status: 'waiting' | 'notified' | 'called' | 'finished'
   joinedAt: string
+  notifiedAt: string | null
+  notifiedBy: string | null
+  startedAt: string | null
+  checkedBy: string | null
+  finishedAt: string | null
 }
 
 export type CheckoffSessionStats = {
@@ -77,18 +80,71 @@ export function parseSessionSettings(raw: string): CheckoffSessionSettings {
 
 function readQueueEntry(value: unknown): CheckoffQueueEntry | null {
   if (!value || typeof value !== 'object') return null
-  const entry = value as Partial<CheckoffQueueEntry>
+  const entry = value as Partial<CheckoffQueueEntry> & {
+    calledAt?: string | null
+    calledBy?: string | null
+  }
   if (typeof entry.userId !== 'string' || typeof entry.experimentId !== 'string') return null
   if (typeof entry.joinedAt !== 'string') return null
+  const status =
+    entry.status === 'called'
+      ? 'called'
+      : entry.status === 'notified'
+        ? 'notified'
+        : entry.status === 'finished'
+          ? 'finished'
+          : 'waiting'
+  const legacyAt = typeof entry.calledAt === 'string' ? entry.calledAt : null
+  const legacyBy = typeof entry.calledBy === 'string' ? entry.calledBy : null
   return {
     userId: entry.userId,
     experimentId: entry.experimentId,
     taId: typeof entry.taId === 'string' ? entry.taId : null,
-    status: entry.status === 'called' ? 'called' : 'waiting',
-    calledBy: typeof entry.calledBy === 'string' ? entry.calledBy : null,
-    calledAt: typeof entry.calledAt === 'string' ? entry.calledAt : null,
+    status,
     joinedAt: entry.joinedAt,
+    notifiedAt:
+      typeof entry.notifiedAt === 'string'
+        ? entry.notifiedAt
+        : status === 'notified'
+          ? legacyAt
+          : null,
+    notifiedBy:
+      typeof entry.notifiedBy === 'string'
+        ? entry.notifiedBy
+        : status === 'notified'
+          ? legacyBy
+          : null,
+    startedAt:
+      typeof entry.startedAt === 'string'
+        ? entry.startedAt
+        : status === 'called'
+          ? legacyAt
+          : null,
+    checkedBy:
+      typeof entry.checkedBy === 'string'
+        ? entry.checkedBy
+        : status === 'called'
+          ? legacyBy
+          : null,
+    finishedAt: typeof entry.finishedAt === 'string' ? entry.finishedAt : null,
   }
+}
+
+export function orderQueueEntries(entries: CheckoffQueueEntry[]): CheckoffQueueEntry[] {
+  const finished = entries
+    .filter((entry) => entry.status === 'finished')
+    .sort((a, b) => {
+      const aTime = a.finishedAt ? Date.parse(a.finishedAt) : Number.NaN
+      const bTime = b.finishedAt ? Date.parse(b.finishedAt) : Number.NaN
+      const aValue = Number.isNaN(aTime) ? Number.POSITIVE_INFINITY : aTime
+      const bValue = Number.isNaN(bTime) ? Number.POSITIVE_INFINITY : bTime
+      return aValue - bValue
+    })
+  const current = entries.find((entry) => entry.status === 'called') ?? null
+  const rest = entries.filter(
+    (entry) => entry.status !== 'finished' && entry !== current,
+  )
+  return current ? [...finished, current, ...rest] : [...finished, ...rest]
 }
 
 export function parseSessionStats(raw: string): CheckoffSessionStats {
@@ -98,7 +154,7 @@ export function parseSessionStats(raw: string): CheckoffSessionStats {
         .map(readQueueEntry)
         .filter((entry): entry is CheckoffQueueEntry => entry !== null)
     : []
-  return { ...data, entries }
+  return { ...data, entries: orderQueueEntries(entries) }
 }
 
 export function isStudentInScope(settings: CheckoffSessionSettings, userId: string): boolean {

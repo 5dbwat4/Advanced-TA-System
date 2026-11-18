@@ -251,9 +251,19 @@ async function preloadAsset(asset, cache) {
   }
 }
 
-self.addEventListener('install', () => {
-  // 不再预取任何页面或 manifest；/assets/* 仅在页面实际请求时按需缓存。
-  // 不调用 skipWaiting：保留 waiting 状态，交给页面提示用户更新。
+self.addEventListener('install', (event) => {
+  // 不再预取任何页面或 manifest；assets/* 仅在页面实际请求时按需缓存。
+  // 正常情况下不调用 skipWaiting，保留 waiting 状态交给页面提示更新。
+  // 但旧版本 SW 曾缓存页面（tasaas-pages-*），必须立即接管并清掉，
+  // 否则用户会一直拿到旧 index.html，继续请求已不存在的旧 chunk。
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys()
+      if (names.some((name) => name.startsWith('tasaas-pages-'))) {
+        await self.skipWaiting()
+      }
+    })(),
+  )
 })
 
 self.addEventListener('activate', (event) => {

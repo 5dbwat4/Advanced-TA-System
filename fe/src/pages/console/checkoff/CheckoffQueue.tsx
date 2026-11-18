@@ -8,6 +8,7 @@ import ArrowUp from '~icons/lucide/arrow-up'
 import ChevronsUp from '~icons/lucide/chevrons-up'
 import Megaphone from '~icons/lucide/megaphone'
 import Plus from '~icons/lucide/plus'
+import RefreshCw from '~icons/lucide/refresh-cw'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
 import Trash2 from '~icons/lucide/trash-2'
@@ -40,10 +41,13 @@ type QueueItem = {
   avatar: number | null
   experimentMark: string
   experimentTitle: string
-  status: 'waiting' | 'called'
-  calledByName?: string | null
-  calledAt?: string | null
+  status: 'waiting' | 'notified' | 'called' | 'finished'
   joinedAt: string
+  notifiedAt: string | null
+  notifiedBy: string | null
+  startedAt: string | null
+  checkedBy: string | null
+  finishedAt: string | null
 }
 
 export default function CheckoffQueue() {
@@ -53,6 +57,7 @@ export default function CheckoffQueue() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pending, setPending] = useState(false)
+  const [reorderingId, setReorderingId] = useState<string | null>(null)
   const lastClickedIndex = useRef<number | null>(null)
 
   const { data, loading, error } = useAsyncData(
@@ -109,9 +114,12 @@ export default function CheckoffQueue() {
         experimentMark: experiment?.mark ?? '',
         experimentTitle: experiment?.title ?? '',
         status: entry.status,
-        calledByName: entry.calledBy ?? null,
-        calledAt: entry.calledAt ?? null,
         joinedAt: entry.joinedAt,
+        notifiedAt: entry.notifiedAt,
+        notifiedBy: entry.notifiedBy,
+        startedAt: entry.startedAt,
+        checkedBy: entry.checkedBy,
+        finishedAt: entry.finishedAt,
       }
     })
   }, [session, studentById, experimentById])
@@ -169,14 +177,20 @@ export default function CheckoffQueue() {
   )
   const selectedCount = selected.size
   const hasSelection = selectedCount > 0
+  const selectedHasFinished = queue.some(
+    (item) => selected.has(item.userId) && item.status === 'finished',
+  )
   const operationDisabled = !hasSelection || pending || !session
   const sortingDisabled =
-    operationDisabled || (currentUserId !== null && selected.has(currentUserId))
+    operationDisabled ||
+    selectedHasFinished ||
+    (currentUserId !== null && selected.has(currentUserId))
+  const precallDisabled = operationDisabled || selectedHasFinished
 
   const toggleItem = useCallback(
     (userId: string, index: number, shiftKey: boolean) => {
-      const item = queue[index]
-      if (!item || item.userId !== userId) return
+      const item = queue.find((entry) => entry.userId === userId)
+      if (!item) return
       if (shiftKey && lastClickedIndex.current !== null) {
         const from = Math.min(lastClickedIndex.current, index)
         const to = Math.max(lastClickedIndex.current, index)
@@ -236,23 +250,50 @@ export default function CheckoffQueue() {
     void runQueueAction({ action: 'move', userIds: [...selected], direction: 'top' }, '已置顶')
   }
 
-  const reorderQueue = (
+  const reorderQueue = async (
     activeId: string,
-    _overId: string,
+    overId: string,
     _fromIndex: number,
     toIndex: number,
   ) => {
-    if (!session || pending) return
-    void runQueueAction({ action: 'reorder', userId: activeId, toIndex }, '顺序已更新')
+    if (!session || pending || reorderingId) return false
+    if (
+      queue.find((item) => item.userId === activeId)?.status === 'finished' ||
+      queue.find((item) => item.userId === overId)?.status === 'finished'
+    ) {
+      return false
+    }
+    setReorderingId(activeId)
+    try {
+      await updateCheckoffQueue(session.id, { action: 'reorder', userId: activeId, toIndex })
+      reloadSessions()
+      return true
+    } catch (err) {
+      toast.error(getErrorMessage(err, '调整顺序失败'))
+      return false
+    } finally {
+      setReorderingId(null)
+    }
   }
 
   const precall = () => {
     if (!session || !hasSelection) return
-    const targets = queue.filter((item) => selected.has(item.userId))
-    const allCalled = targets.length > 0 && targets.every((item) => item.status === 'called')
+    const targets = queue.filter(
+      (item) => selected.has(item.userId) && item.status !== 'finished',
+    )
+    if (targets.length === 0) return
+    const allNotified = targets.every((item) => item.status === 'notified')
     void runQueueAction(
-      { action: 'precall', userIds: [...selected], called: !allCalled },
-      allCalled ? '已取消预叫' : '已预叫',
+      { action: 'precall', userIds: targets.map((item) => item.userId), called: !allNotified },
+      allNotified ? '已取消预叫' : '已预叫',
+    )
+  }
+
+  const precallUser = (userId: string) => {
+    if (!session || pending) return
+    void runQueueAction(
+      { action: 'precall', userIds: [userId], called: true },
+      '已预叫',
     )
   }
 
@@ -408,19 +449,27 @@ export default function CheckoffQueue() {
               <h2 className="text-sm font-bold text-fg">当前队列</h2>
               <span className="tabular text-xs text-fg-subtle">{queue.length} 人</span>
             </div>
-            {hasSelection && (
-              <div className="flex items-center gap-2">
-                <span className="tabular text-xs font-semibold text-brand-600 dark:text-brand-300">
-                  已选 {selectedCount} 人
+            <div className="flex items-center gap-2">
+              {reorderingId && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-brand-600 dark:text-brand-300">
+                  <RefreshCw width={12} height={12} className="shrink-0 animate-spin" />
+                  正在更新
                 </span>
-                <Button size="sm" variant="ghost" onPress={clearSelection}>
-                  取消选择
-                </Button>
-              </div>
-            )}
+              )}
+              {hasSelection && (
+                <>
+                  <span className="tabular text-xs font-semibold text-brand-600 dark:text-brand-300">
+                    已选 {selectedCount} 人
+                  </span>
+                  <Button size="sm" variant="ghost" onPress={clearSelection}>
+                    取消选择
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
-          {loading || sessionLoading ? (
+          {loading || (sessionLoading && !session) ? (
             <SkeletonList rows={5} className="h-20 rounded-2xl" />
           ) : queue.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line px-6 py-14 text-center">
@@ -441,8 +490,15 @@ export default function CheckoffQueue() {
               entries={queue}
               selectedIds={selected}
               onToggle={toggleItem}
-              canDrag={() => !pending}
+              canDrag={(entry) => !pending && entry.status !== 'finished'}
+              canReorder={(activeId, overId) =>
+                !pending &&
+                !reorderingId &&
+                queue.find((item) => item.userId === activeId)?.status !== 'finished' &&
+                queue.find((item) => item.userId === overId)?.status !== 'finished'
+              }
               onReorder={reorderQueue}
+              onPrecall={precallUser}
             />
           )}
         </section>
@@ -488,7 +544,7 @@ export default function CheckoffQueue() {
           <Button
             variant="ghost"
             className="w-full justify-start"
-            isDisabled={operationDisabled}
+            isDisabled={precallDisabled}
             onPress={precall}
           >
             <Megaphone width={16} height={16} className="shrink-0" />

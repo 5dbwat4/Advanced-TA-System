@@ -5,6 +5,8 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
   type Modifier,
 } from '@dnd-kit/core'
 import {
@@ -13,10 +15,12 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent } from 'react'
 
+import Bell from '~icons/lucide/bell'
 import GripVertical from '~icons/lucide/grip-vertical'
+import { IconAction } from '@/components/ui/IconAction'
 import { cn } from '@/lib/utils'
 
 const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
@@ -26,10 +30,13 @@ export type QueueTimelineEntry = {
   name: string
   experimentMark: string
   experimentTitle: string
-  status: 'waiting' | 'called'
-  calledByName?: string | null
-  calledAt?: string | null
+  status: 'waiting' | 'notified' | 'called' | 'finished'
   joinedAt: string
+  notifiedAt: string | null
+  notifiedBy: string | null
+  startedAt: string | null
+  checkedBy: string | null
+  finishedAt: string | null
 }
 
 function formatElapsed(from: string | null | undefined, now: number): string {
@@ -44,6 +51,12 @@ function formatElapsed(from: string | null | undefined, now: number): string {
   return `${minutes} 分钟`
 }
 
+function finishedTime(entry: QueueTimelineEntry): number {
+  if (!entry.finishedAt) return Number.POSITIVE_INFINITY
+  const time = Date.parse(entry.finishedAt)
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
+}
+
 function CardBody({
   entry,
   now,
@@ -53,33 +66,100 @@ function CardBody({
   now: number
   current?: boolean
 }) {
+  const experimentText = [entry.experimentMark, entry.experimentTitle]
+    .filter(Boolean)
+    .join(' · ')
   return (
     <>
       <div className="truncate text-sm font-semibold">{entry.name}</div>
-      <div className="mt-0.5 truncate text-xs text-fg-muted">
-        期望验收 {entry.experimentMark}
-        {entry.experimentTitle ? ` · ${entry.experimentTitle}` : ''}
-      </div>
+      {experimentText ? (
+        <div className="mt-0.5 truncate text-xs text-fg-muted">
+          将验收 {experimentText}
+        </div>
+      ) : null}
       {current ? (
         <div className="mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300">
           正在验收
-          {entry.calledAt ? `，已经过 ${formatElapsed(entry.calledAt, now)}` : ''}
+          {entry.startedAt ? `，已经过 ${formatElapsed(entry.startedAt, now)}` : ''}
         </div>
-      ) : entry.status === 'called' ? (
+      ) : entry.status === 'notified' ? (
         <>
-          <div className="mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300">
-            {entry.calledByName
-              ? `由 ${entry.calledByName} 叫号，请做好准备`
-              : '已叫号，请做好准备'}
+          <div className="mt-1 text-[11px] font-medium text-warning">
+            {entry.notifiedBy
+              ? `由 ${entry.notifiedBy} 预叫，请做好准备`
+              : '已预叫，请做好准备'}
           </div>
-          {entry.calledAt && (
+          {entry.notifiedAt && (
             <div className="mt-1 text-[11px] text-fg-subtle">
-              已等待 {formatElapsed(entry.calledAt, now)}
+              已预叫 {formatElapsed(entry.notifiedAt, now)}
             </div>
           )}
         </>
+      ) : entry.status === 'called' ? (
+        <>
+          <div className="mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300">
+            {entry.checkedBy
+              ? `由 ${entry.checkedBy} 开始验收`
+              : '已开始验收'}
+          </div>
+          {entry.startedAt && (
+            <div className="mt-1 text-[11px] text-fg-subtle">
+              已进行 {formatElapsed(entry.startedAt, now)}
+            </div>
+          )}
+        </>
+      ) : entry.status === 'finished' ? (
+        <div className="mt-1 text-[11px] font-medium text-success">已完成验收</div>
       ) : null}
     </>
+  )
+}
+
+function FinishedQueueItem({
+  entry,
+  queueIndex,
+  now,
+  selected,
+  interactive,
+  onToggle,
+}: {
+  entry: QueueTimelineEntry
+  queueIndex: number
+  now: number
+  selected: boolean
+  interactive: boolean
+  onToggle?: (userId: string, index: number, shiftKey: boolean) => void
+}) {
+  return (
+    <div
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-pressed={interactive ? selected : undefined}
+      onClick={
+        interactive
+          ? (event: MouseEvent<HTMLDivElement>) =>
+              onToggle?.(entry.userId, queueIndex, event.shiftKey)
+          : undefined
+      }
+      onKeyDown={
+        interactive
+          ? (event: KeyboardEvent<HTMLDivElement>) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onToggle?.(entry.userId, queueIndex, event.shiftKey)
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        'relative rounded-2xl border border-line bg-elevated px-3.5 py-3 transition-colors outline-none',
+        selected && 'border-brand-500/70 bg-brand-500/10 ring-2 ring-brand-500/20',
+        interactive &&
+          'cursor-pointer hover:border-brand-500/40 hover:bg-sunken/30 focus-visible:ring-2 focus-visible:ring-brand-500/40',
+      )}
+    >
+      <CardBody entry={entry} now={now} />
+    </div>
   )
 }
 
@@ -92,6 +172,8 @@ function SortableQueueItem({
   interactive,
   canDrag,
   onToggle,
+  onPrecall,
+  onDoubleClick,
 }: {
   entry: QueueTimelineEntry
   displayIndex: number
@@ -101,11 +183,15 @@ function SortableQueueItem({
   interactive: boolean
   canDrag: boolean
   onToggle?: (userId: string, index: number, shiftKey: boolean) => void
+  onPrecall?: (userId: string) => void
+  onDoubleClick?: (userId: string) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.userId,
     disabled: !canDrag,
   })
+  const showPrecall = Boolean(onPrecall && entry.status === 'waiting')
+  const showActions = canDrag || showPrecall
 
   return (
     <div
@@ -123,6 +209,7 @@ function SortableQueueItem({
                 onToggle?.(entry.userId, queueIndex, event.shiftKey)
             : undefined
         }
+        onDoubleClick={onDoubleClick ? () => onDoubleClick(entry.userId) : undefined}
         onKeyDown={
           interactive
             ? (event: KeyboardEvent<HTMLDivElement>) => {
@@ -135,8 +222,9 @@ function SortableQueueItem({
         }
         className={cn(
           'relative rounded-2xl border border-line bg-elevated px-3.5 py-3 transition-colors outline-none',
-          canDrag && 'pr-10',
+          showActions && (canDrag && showPrecall ? 'pr-20' : 'pr-12'),
           selected && 'border-brand-500/70 bg-brand-500/10 ring-2 ring-brand-500/20',
+          onDoubleClick && 'cursor-pointer',
           interactive &&
             'cursor-pointer hover:border-brand-500/40 hover:bg-sunken/30 focus-visible:ring-2 focus-visible:ring-brand-500/40',
         )}
@@ -145,17 +233,37 @@ function SortableQueueItem({
           {displayIndex + 1}
         </span>
         <CardBody entry={entry} now={now} />
-        {canDrag && (
-          <button
-            type="button"
-            aria-label="拖动排序"
-            {...attributes}
-            {...listeners}
-            onClick={(event) => event.stopPropagation()}
-            className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-sunken hover:text-fg active:cursor-grabbing"
-          >
-            <GripVertical width={16} height={16} className="shrink-0" />
-          </button>
+        {showActions && (
+          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+            {showPrecall && (
+              <span
+                onClick={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+              >
+                <IconAction
+                  label="进行预叫号"
+                  tooltip="进行预叫号"
+                  placement="left"
+                  onPress={() => onPrecall?.(entry.userId)}
+                >
+                  <Bell width={15} height={15} className="shrink-0" />
+                </IconAction>
+              </span>
+            )}
+            {canDrag && (
+              <button
+                type="button"
+                aria-label="拖动排序"
+                {...attributes}
+                {...listeners}
+                onClick={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+                className="flex h-7 w-7 cursor-grab touch-none items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-sunken hover:text-fg active:cursor-grabbing"
+              >
+                <GripVertical width={16} height={16} className="shrink-0" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -167,22 +275,40 @@ export function QueueTimeline({
   className,
   selectedIds,
   onToggle,
+  onPrecall,
+  onDoubleClick,
   canDrag,
+  canReorder,
   onReorder,
 }: {
   entries: QueueTimelineEntry[]
   className?: string
   selectedIds?: Set<string>
   onToggle?: (userId: string, index: number, shiftKey: boolean) => void
+  onPrecall?: (userId: string) => void
+  onDoubleClick?: (userId: string) => void
   canDrag?: (entry: QueueTimelineEntry) => boolean
+  canReorder?: (
+    activeId: string,
+    overId: string,
+    fromIndex: number,
+    toIndex: number,
+  ) => boolean
   onReorder?: (
     activeId: string,
     overId: string,
     fromIndex: number,
     toIndex: number,
-  ) => void
+  ) => boolean | void | Promise<boolean>
 }) {
   const [now, setNow] = useState(() => Date.now())
+  const [optimisticWaiting, setOptimisticWaiting] = useState<string[] | null>(null)
+  const [dragActiveId, setDragActiveId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const entriesKey = entries
+    .map((entry) => `${entry.userId}:${entry.status}:${entry.finishedAt ?? ''}`)
+    .join('|')
+  const previousEntriesKey = useRef(entriesKey)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
@@ -192,6 +318,12 @@ export function QueueTimeline({
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    if (previousEntriesKey.current === entriesKey) return
+    previousEntriesKey.current = entriesKey
+    setOptimisticWaiting(null)
+  }, [entriesKey])
+
   if (entries.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-line px-4 py-8 text-center text-xs text-fg-subtle">
@@ -200,19 +332,82 @@ export function QueueTimeline({
     )
   }
 
+  const finished = entries
+    .filter((entry) => entry.status === 'finished')
+    .sort((a, b) => finishedTime(a) - finishedTime(b))
   const current = entries.find((entry) => entry.status === 'called') ?? null
-  const waiting = entries.filter((entry) => entry !== current)
+  const baseWaiting = entries.filter(
+    (entry) => entry.status !== 'finished' && entry !== current,
+  )
+  let waiting = baseWaiting
+  if (optimisticWaiting) {
+    const byId = new Map(baseWaiting.map((entry) => [entry.userId, entry] as const))
+    const ordered = optimisticWaiting
+      .map((id) => byId.get(id))
+      .filter((entry): entry is QueueTimelineEntry => entry !== undefined)
+    const seen = new Set(ordered.map((entry) => entry.userId))
+    for (const entry of baseWaiting) {
+      if (!seen.has(entry.userId)) ordered.push(entry)
+    }
+    waiting = ordered
+  }
+  let previewOrder = waiting.map((entry) => entry.userId)
+  if (dragActiveId && dragOverId && dragActiveId !== dragOverId) {
+    const fromIndex = previewOrder.indexOf(dragActiveId)
+    const toIndex = previewOrder.indexOf(dragOverId)
+    if (fromIndex >= 0 && toIndex >= 0) {
+      const next = [...previewOrder]
+      const [moved] = next.splice(fromIndex, 1)
+      if (moved) {
+        next.splice(toIndex, 0, moved)
+        previewOrder = next
+      }
+    }
+  }
+  const displayIndexById = new Map(previewOrder.map((id, index) => [id, index] as const))
   const interactive = Boolean(onToggle)
   const currentIndex = current ? entries.indexOf(current) : -1
   const currentSelected = current ? selectedIds?.has(current.userId) ?? false : false
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setDragActiveId(String(event.active.id))
+    setDragOverId(null)
+  }
+
+  const handleDragOver = (event: DragOverEvent) => {
+    setDragOverId(event.over ? String(event.over.id) : null)
+  }
+
+  const handleDragCancel = () => {
+    setDragActiveId(null)
+    setDragOverId(null)
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setDragActiveId(null)
+    setDragOverId(null)
     const { active, over } = event
     if (!over || active.id === over.id || !onReorder) return
     const fromIndex = waiting.findIndex((entry) => entry.userId === String(active.id))
     const toIndex = waiting.findIndex((entry) => entry.userId === String(over.id))
     if (fromIndex < 0 || toIndex < 0) return
-    onReorder(String(active.id), String(over.id), fromIndex, toIndex)
+    if (canReorder && !canReorder(String(active.id), String(over.id), fromIndex, toIndex)) {
+      return
+    }
+
+    const next = [...waiting]
+    const [moved] = next.splice(fromIndex, 1)
+    if (!moved) return
+    next.splice(toIndex, 0, moved)
+
+    const result = onReorder(String(active.id), String(over.id), fromIndex, toIndex)
+    if (result === false) return
+    setOptimisticWaiting(next.map((entry) => entry.userId))
+    if (result && typeof (result as Promise<boolean>).then === 'function') {
+      void (result as Promise<boolean>).then((ok) => {
+        if (!ok) setOptimisticWaiting(null)
+      })
+    }
   }
 
   return (
@@ -220,11 +415,26 @@ export function QueueTimeline({
       sensors={sensors}
       collisionDetection={closestCenter}
       modifiers={[restrictToVerticalAxis]}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
     >
-      <div className={cn('max-h-[26rem] overflow-y-auto pe-1', className)}>
+      <div className={cn('max-h-[26rem] overflow-x-hidden overflow-y-auto pe-1', className)}>
         <div className="relative flex flex-col gap-3 pl-10">
           <div className="pointer-events-none absolute bottom-0 left-2 top-0 w-px bg-line" />
+
+          {finished.map((entry) => (
+            <FinishedQueueItem
+              key={entry.userId}
+              entry={entry}
+              queueIndex={entries.indexOf(entry)}
+              now={now}
+              selected={selectedIds?.has(entry.userId) ?? false}
+              interactive={interactive}
+              onToggle={onToggle}
+            />
+          ))}
 
           {current && (
             <div
@@ -236,6 +446,9 @@ export function QueueTimeline({
                   ? (event: MouseEvent<HTMLDivElement>) =>
                       onToggle?.(current.userId, currentIndex, event.shiftKey)
                   : undefined
+              }
+              onDoubleClick={
+                onDoubleClick ? () => onDoubleClick(current.userId) : undefined
               }
               onKeyDown={
                 interactive
@@ -250,6 +463,7 @@ export function QueueTimeline({
               className={cn(
                 'relative rounded-2xl border border-brand-500/40 bg-brand-500/10 px-3.5 py-3 transition-colors outline-none',
                 currentSelected && 'ring-2 ring-brand-500/30',
+                onDoubleClick && 'cursor-pointer',
                 interactive &&
                   'cursor-pointer hover:bg-brand-500/15 focus-visible:ring-2 focus-visible:ring-brand-500/40',
               )}
@@ -266,13 +480,15 @@ export function QueueTimeline({
               <SortableQueueItem
                 key={entry.userId}
                 entry={entry}
-                displayIndex={index}
+                displayIndex={displayIndexById.get(entry.userId) ?? index}
                 queueIndex={entries.indexOf(entry)}
                 now={now}
                 selected={selectedIds?.has(entry.userId) ?? false}
                 interactive={interactive}
                 canDrag={canDrag?.(entry) ?? false}
                 onToggle={onToggle}
+                onPrecall={onPrecall}
+                onDoubleClick={onDoubleClick}
               />
             ))}
           </SortableContext>

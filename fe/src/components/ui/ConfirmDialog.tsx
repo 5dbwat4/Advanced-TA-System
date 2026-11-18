@@ -10,6 +10,7 @@ type ConfirmDialogProps = {
   title: string
   description: ReactNode
   confirmLabel?: string
+  pendingLabel?: string
   isPending?: boolean
   onConfirm: () => void
   icon?: IconComponent
@@ -23,6 +24,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = '删除',
+  pendingLabel,
   isPending = false,
   onConfirm,
   icon: Icon = Trash2,
@@ -58,7 +60,7 @@ export function ConfirmDialog({
               <PendingButton
                 variant={tone === 'brand' ? 'primary' : 'danger'}
                 isPending={isPending}
-                pendingLabel={tone === 'brand' ? '处理中' : '删除中'}
+                pendingLabel={pendingLabel ?? (tone === 'brand' ? '处理中' : '删除中')}
                 onPress={onConfirm}
               >
                 {confirmLabel}

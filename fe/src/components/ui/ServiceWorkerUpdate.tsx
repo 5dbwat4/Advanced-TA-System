@@ -68,7 +68,7 @@ export function ServiceWorkerUpdate() {
     const timer = window.setInterval(checkForUpdate, UPDATE_INTERVAL_MS)
 
     navigator.serviceWorker
-      .register(`${import.meta.env.BASE_URL}sw.js`)
+      .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
       .then((reg) => {
         registration = reg
         watch(reg)

@@ -27,7 +27,7 @@ const ROLE_LABELS: Record<Role, string> = {
 
 export default function Setup() {
   const navigate = useNavigate()
-  const { user, loading, refresh, completeSetup, adoptSession } = useAuth()
+  const { user, loading, refresh, completeSetup, adoptSession, logout } = useAuth()
   const onboardingInfo = useAppStore((state) => state.onboardingInfo)
   const setOnboarding = useAppStore((state) => state.setOnboarding)
   const setOnboardingInfo = useAppStore((state) => state.setOnboardingInfo)
@@ -130,6 +130,14 @@ export default function Setup() {
     setOnboardingInfo(null)
     clearPendingInvite()
     navigate(target, { replace: true })
+  }
+
+  const abandon = () => {
+    clearPendingInvite()
+    setOnboarding(false)
+    setOnboardingInfo(null)
+    logout()
+    navigate('/login', { replace: true })
   }
 
   const submit = async (event: React.FormEvent) => {
@@ -382,6 +390,12 @@ export default function Setup() {
             </PendingButton>
           </form>
         )}
+
+        <div className="mt-4 flex justify-center">
+          <Button size="sm" variant="ghost" onPress={abandon}>
+            放弃
+          </Button>
+        </div>
       </motion.div>
     </div>
   )

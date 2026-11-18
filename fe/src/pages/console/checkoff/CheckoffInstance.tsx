@@ -1,7 +1,9 @@
 import { Button, Spinner } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
+import { CheckoffQueueDrawer } from '@/components/checkoff/CheckoffQueueDrawer'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
 import { MasterSlavePanel } from '@/components/checkoff/MasterSlavePanel'
@@ -79,6 +81,7 @@ export function CheckoffInstance({
     initial?.experiment ?? null,
   )
   const [student, setStudent] = useState<CheckoffStudent | null>(initial?.student ?? null)
+  const [activeStartedAt, setActiveStartedAt] = useState<string | null>(null)
   const [questions, setQuestions] = useState<CheckoffQuestion[]>([])
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
@@ -150,8 +153,13 @@ export function CheckoffInstance({
   // 仅当前激活的 tab 更新「正在验收」状态，避免多个 tab 互相覆盖
   useEffect(() => {
     if (!active) return
-    if (student) notifyCheckoffStarted({ classId, studentName: student.name })
-    else clearCheckoffPresence(classId)
+    if (student) {
+      notifyCheckoffStarted({
+        classId,
+        studentId: student.userId,
+        studentName: student.name,
+      })
+    } else clearCheckoffPresence(classId)
   }, [active, classId, student])
 
   useEffect(() => {
@@ -176,7 +184,6 @@ export function CheckoffInstance({
 
   const selectExperiment = useCallback((next: CheckoffExperiment) => {
     setExperiment(next)
-    setStudent(null)
     setDrawn([])
     setMarks({})
     setExistingScores([])
@@ -190,6 +197,7 @@ export function CheckoffInstance({
 
   const selectStudent = useCallback((next: CheckoffStudent, nextScores: Score[]) => {
     setStudent(next)
+    setActiveStartedAt(new Date().toISOString())
     setExistingScores(nextScores)
     setDrawn([])
     setMarks({})
@@ -197,6 +205,41 @@ export function CheckoffInstance({
     setSearching(false)
     setStep(2)
   }, [])
+
+  const startQueueStudent = useCallback(
+    async (next: CheckoffStudent, experimentId: string) => {
+      const target = experiments.find((item) => item.id === experimentId)
+      if (!target) {
+        toast.error('该学生选择的实验不在当前验收范围内')
+        return
+      }
+      try {
+        const response = await fetchCheckoff({
+          classId,
+          experimentId,
+          includeQuestions: true,
+        })
+        const found = response.students.find((item) => item.userId === next.userId)
+        if (!found) {
+          toast.error('未找到该学生')
+          return
+        }
+        if (experiment?.id !== target.id) {
+          selectExperiment(target)
+        }
+        setQuestions(response.questions ?? [])
+        setQuestionsLoaded(true)
+        setQuestionsError(null)
+        selectStudent(
+          found,
+          response.scores.filter((score) => score.userId === next.userId),
+        )
+      } catch (err) {
+        toast.error(getErrorMessage(err, '开始验收失败'))
+      }
+    },
+    [classId, experiment, experiments, selectExperiment, selectStudent],
+  )
 
   const mark = useCallback((questionId: string, next: QuestionMark) => {
     setMarks((prev) => ({
@@ -234,7 +277,8 @@ export function CheckoffInstance({
   )
 
   const handleSaved = useCallback(() => {
-    clearCheckoffPresence(classId)
+    setActiveStartedAt(null)
+    clearCheckoffPresence(classId, { finished: true })
     onSaved(id)
   }, [classId, id, onSaved])
 
@@ -309,6 +353,8 @@ export function CheckoffInstance({
         onStep={handleStep}
         hasExperiment={Boolean(experiment)}
         hasStudent={Boolean(student)}
+        experimentLabel={experiment ? `${experiment.mark} · ${experiment.title}` : null}
+        studentLabel={student?.name ?? null}
         layoutId={`checkoff-step-pill-${id}`}
       />
 
@@ -414,6 +460,15 @@ export function CheckoffInstance({
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {active && (
+        <CheckoffQueueDrawer
+          classId={classId}
+          activeStudentId={student?.userId ?? null}
+          activeStartedAt={activeStartedAt}
+          onStart={startQueueStudent}
+        />
+      )}
     </div>
   )
 }
