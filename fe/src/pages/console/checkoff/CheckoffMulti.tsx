@@ -10,18 +10,20 @@ import {
 } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Link2 from '~icons/lucide/link-2'
+import ListOrdered from '~icons/lucide/list-ordered'
 import MoreHorizontal from '~icons/lucide/more-horizontal'
 import Plus from '~icons/lucide/plus'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
 import X from '~icons/lucide/x'
 import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
+import { CheckoffQueuePanel } from '@/components/checkoff/CheckoffQueuePanel'
 import { PreferenceOnboarding } from '@/components/checkoff/PreferenceOnboarding'
 import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
@@ -29,12 +31,14 @@ import {
   fetchCheckoff,
   fetchClassSettings,
   type CheckoffExperiment,
+  type CheckoffQueueEntry,
   type ClassSettings,
   type UserPreferences,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import {
   destroyCheckoffSession,
+  useCheckoffQueue,
   useCheckoffWatch,
   type CheckoffStartedEvent,
 } from '@/lib/checkoff-socket'
@@ -44,6 +48,7 @@ import {
   createTabId,
   loadMultiTabs,
   saveMultiTabs,
+  type CheckoffPendingPick,
   type MultiTabsState,
 } from '@/lib/checkoff-multi'
 import { getErrorMessage } from '@/lib/error'
@@ -65,11 +70,37 @@ export default function CheckoffMulti() {
   const [ratioError, setRatioError] = useState(false)
   const [tabsState, setTabsState] = useState<MultiTabsState>(loadMultiTabs)
   const [meta, setMeta] = useState<Record<string, CheckoffTabMeta>>({})
+  const queueState = useOverlayState()
+  // 排队面板点击后要下发给目标 tab 的定位指令（只发给 tabId 对应的那个 tab）
+  const [pendingPick, setPendingPick] = useState<CheckoffPendingPick | null>(null)
+  const pickSeqRef = useRef(0)
 
   const handleCheckoffStarted = useCallback((event: CheckoffStartedEvent) => {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
   }, [])
   useCheckoffWatch(classId, handleCheckoffStarted)
+
+  // 排队快照：REST 初始 + checkoff:queue 实时替换（队列按实验、全班共享）
+  const {
+    entries: queueEntries,
+    loading: queueLoading,
+    reload: reloadQueue,
+  } = useCheckoffQueue(classId)
+
+  // 当前激活 tab 的实验：徽标人数与面板分组都优先按它
+  const activeExperimentId = meta[tabsState.activeId]?.experimentId ?? null
+  const queueCount = useMemo(
+    () =>
+      activeExperimentId
+        ? queueEntries.filter((entry) => entry.experimentId === activeExperimentId).length
+        : queueEntries.length,
+    [queueEntries, activeExperimentId],
+  )
+
+  const openQueue = useCallback(() => {
+    queueState.open()
+    reloadQueue()
+  }, [queueState, reloadQueue])
 
   useEffect(() => {
     saveMultiTabs(tabsState)
@@ -133,6 +164,7 @@ export default function CheckoffMulti() {
         delete next[id]
         return next
       })
+      setPendingPick((prev) => (prev?.tabId === id ? null : prev))
       setTabsState((prev) => {
         const index = prev.tabs.findIndex((tab) => tab.id === id)
         const remaining = prev.tabs.filter((tab) => tab.id !== id)
@@ -160,6 +192,72 @@ export default function CheckoffMulti() {
   const activateTab = useCallback((id: string) => {
     setTabsState((prev) => (prev.activeId === id ? prev : { ...prev, activeId: id }))
   }, [])
+
+  /**
+   * 排队面板点击某条 → 定位到对应 tab：
+   * 1) 已有 tab 正在验收这个学生 → 只激活（绝不重置进行中的录入）；
+   * 2) 同实验且空闲的 tab → 激活并下发定位指令；
+   * 3) 还没选实验的空白 tab → 复用它，避免每次定位都多开一个 tab；
+   * 4) 未到 tab 上限 → 新建 tab 并下发定位指令；
+   * 5) 已满且没有可用 tab → 报错，不做破坏性重置。
+   * 真正的「切实验 + 预填学号」由目标 tab 自己消费 pendingPick 完成。
+   */
+  const handlePickQueueEntry = useCallback(
+    (entry: CheckoffQueueEntry) => {
+      queueState.close()
+      const tabs = tabsState.tabs
+
+      // 队列快照可能比实验列表旧（实验刚被删除 / 改期）：先确认目标实验仍在
+      if (experiments.length > 0 && !experiments.some((item) => item.id === entry.experimentId)) {
+        toast.error('该实验已不存在，请刷新后重试')
+        return
+      }
+
+      const sameStudent = tabs.find((tab) => {
+        const info = meta[tab.id]
+        return info?.experimentId === entry.experimentId && info?.studentUserId === entry.userId
+      })
+      if (sameStudent) {
+        activateTab(sameStudent.id)
+        toast.success(`已定位到 ${entry.name}`)
+        return
+      }
+
+      const idleSameExperiment = tabs.find((tab) => {
+        const info = meta[tab.id]
+        return info?.experimentId === entry.experimentId && !info.studentUserId
+      })
+      // 没有任何实验的空白 tab：直接复用（定位会把它切到目标实验）
+      const emptyTab = tabs.find((tab) => {
+        const info = meta[tab.id]
+        // 必须已经回报过 meta（info 存在）且确实没有实验/学生，避免误选尚未汇报状态的 tab
+        return info != null && !info.experimentId && !info.studentUserId
+      })
+
+      let targetId = idleSameExperiment?.id ?? emptyTab?.id
+      if (!targetId) {
+        if (tabs.length >= CHECKOFF_MULTI_MAX_TABS) {
+          toast.error(`最多同时开启 ${CHECKOFF_MULTI_MAX_TABS} 个验收 tab，请先关闭一个`)
+          return
+        }
+        const newId = createTabId()
+        setTabsState((prev) => ({ tabs: [...prev.tabs, { id: newId }], activeId: newId }))
+        targetId = newId
+      } else {
+        activateTab(targetId)
+      }
+
+      pickSeqRef.current += 1
+      setPendingPick({
+        tabId: targetId,
+        experimentId: entry.experimentId,
+        studentId: entry.studentId,
+        seq: pickSeqRef.current,
+      })
+      toast.success(`已定位到 ${entry.name}`)
+    },
+    [tabsState.tabs, meta, experiments, queueState, activateTab],
+  )
 
   const copyTabLink = useCallback(
     async (id: string) => {
@@ -231,6 +329,16 @@ export default function CheckoffMulti() {
       title="群面"
       actions={
         <>
+          <div className="relative">
+            <IconAction label="排队情况" onPress={openQueue}>
+              <ListOrdered width={15} height={15} className="shrink-0" />
+            </IconAction>
+            {queueCount > 0 && (
+              <span className="tabular pointer-events-none absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                {queueCount > 99 ? '99+' : queueCount}
+              </span>
+            )}
+          </div>
           <IconAction label="偏好" onPress={prefsState.open}>
             <Settings2 width={15} height={15} className="shrink-0" />
           </IconAction>
@@ -356,11 +464,40 @@ export default function CheckoffMulti() {
             markdownStyle={markdownStyle}
             theme={theme}
             active={tabsState.activeId === tab.id}
+            pendingPick={pendingPick?.tabId === tab.id ? pendingPick : null}
             onMetaChange={handleMetaChange}
             onSaved={handleSaved}
           />
         ))}
       </div>
+
+      <Modal state={queueState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <ListOrdered width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>排队情况</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <CheckoffQueuePanel
+                  entries={queueEntries}
+                  loading={queueLoading}
+                  currentExperimentId={activeExperimentId}
+                  onPick={handlePickQueueEntry}
+                  onRefresh={reloadQueue}
+                  classId={currentClass.id}
+                  currentUserId={user.id}
+                  experiments={experiments}
+                />
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       <Modal state={prefsState}>
         <Modal.Backdrop>

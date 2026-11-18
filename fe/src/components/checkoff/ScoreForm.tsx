@@ -6,6 +6,7 @@ import Check from '~icons/lucide/check'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
 import Info from '~icons/lucide/info'
 import MessageCircleQuestion from '~icons/lucide/message-circle-question'
+import { CheckoffTimer, formatElapsed } from '@/components/checkoff/CheckoffTimer'
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import { RemarkField } from '@/components/remarks/RemarkField'
 import { AvatarImage } from '@/components/ui/AvatarImage'
@@ -103,6 +104,7 @@ export function ScoreForm({
   onSaved,
   active = true,
   saveLabel = '保存并下一位',
+  answerStartedAt = null,
 }: {
   experimentId: string
   student: CheckoffStudent
@@ -115,6 +117,8 @@ export function ScoreForm({
   active?: boolean
   /** 保存按钮 / 快捷键提示文案（群面保存后关闭 tab） */
   saveLabel?: string
+  /** 开始答题的时间戳（毫秒）：用于显示用时并随成绩提交 */
+  answerStartedAt?: number | null
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
   const [saving, setSaving] = useState(false)
@@ -151,17 +155,30 @@ export function ScoreForm({
 
   const save = useCallback(async () => {
     const scores = SCORED_TYPES.map((type) => ({ type: type.value, score: values[type.value] }))
+    // 用时只在确实有开始时间时提交（旧行为：不传 durationMs 服务端按无计时处理）
+    const durationMs =
+      answerStartedAt != null ? Math.max(0, Date.now() - answerStartedAt) : undefined
     setSaving(true)
     try {
-      await submitCheckoff({ experimentId, userId: student.userId, scores })
-      toast.success(`已保存 · ${student.name}`)
+      await submitCheckoff({
+        experimentId,
+        userId: student.userId,
+        scores,
+        durationMs,
+        startedAt: answerStartedAt != null ? new Date(answerStartedAt).toISOString() : undefined,
+      })
+      toast.success(
+        durationMs != null
+          ? `已保存 · ${student.name} · 用时 ${formatElapsed(durationMs)}`
+          : `已保存 · ${student.name}`,
+      )
       onSaved()
     } catch (error) {
       toast.error(getErrorMessage(error, '保存失败'))
     } finally {
       setSaving(false)
     }
-  }, [values, experimentId, student, onSaved])
+  }, [values, experimentId, student, onSaved, answerStartedAt])
 
   useEffect(() => {
     if (!active) return
@@ -187,6 +204,7 @@ export function ScoreForm({
           <span className="font-semibold text-fg">{student.name}</span>
           <span className="tabular ml-2 text-xs text-fg-muted">{student.studentId}</span>
         </div>
+        <CheckoffTimer startedAt={answerStartedAt} compact />
         <span className="text-xs text-fg-subtle">默认 100，可输入 0~100 以外的分数</span>
       </div>
 

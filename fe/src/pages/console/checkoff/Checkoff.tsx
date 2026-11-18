@@ -12,12 +12,14 @@ import {
 } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
 import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
+import { CheckoffQueuePanel } from '@/components/checkoff/CheckoffQueuePanel'
+import { CheckoffTimer, formatElapsed } from '@/components/checkoff/CheckoffTimer'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
@@ -31,6 +33,7 @@ import { StudentFinder } from '@/components/checkoff/StudentFinder'
 import Dices from '~icons/lucide/dices'
 import Eye from '~icons/lucide/eye'
 import EyeOff from '~icons/lucide/eye-off'
+import ListOrdered from '~icons/lucide/list-ordered'
 import MoreHorizontal from '~icons/lucide/more-horizontal'
 import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
@@ -41,13 +44,16 @@ import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
 import { Markdown } from '@/components/ui/Markdown'
 import {
+  clearCheckoffQuestions,
   fetchBankQuestions,
   fetchCheckoff,
   fetchCheckoffRecords,
   fetchClassSettings,
   listBanks,
+  shareCheckoffQuestions,
   type CheckoffExperiment,
   type CheckoffQuestion,
+  type CheckoffQueueEntry,
   type CheckoffRecord,
   type CheckoffStudent,
   type ClassSettings,
@@ -62,6 +68,7 @@ import {
   clearCheckoffPresence,
   notifyCheckoffStarted,
   useCheckoffMaster,
+  useCheckoffQueue,
   useCheckoffWatch,
   type CheckoffMeta,
   type CheckoffStartedEvent,
@@ -139,9 +146,14 @@ export default function Checkoff() {
   const [selectedCustomCard, setSelectedCustomCard] = useState<CustomCard | null>(null)
   const [activeCustomCardSlotId, setActiveCustomCardSlotId] = useState<string | null>(null)
   const [cardRailOpen, setCardRailOpen] = useState(false)
+  // 答题计时：选中学生时置为 Date.now()，保存 / 换实验 / 回退到选人后清零
+  const [answerStartedAt, setAnswerStartedAt] = useState<number | null>(null)
+  // 排队面板点击某条后，把该学生学号预填进「定位学生」的搜索框
+  const [finderPresetQuery, setFinderPresetQuery] = useState('')
 
   const prefsState = useOverlayState()
   const presenceState = useOverlayState()
+  const queueState = useOverlayState()
   const bankState = useOverlayState()
   const specialDrawState = useOverlayState()
   const customCardState = useOverlayState()
@@ -199,6 +211,99 @@ export default function Checkoff() {
 
   const peers = useCheckoffWatch(classId, handleCheckoffStarted)
 
+  // 排队快照：REST 初始 + checkoff:queue 实时替换（队列按实验、全班共享）
+  const {
+    entries: queueEntries,
+    loading: queueLoading,
+    reload: reloadQueue,
+  } = useCheckoffQueue(classId)
+
+  // 徽标优先显示当前实验的排队人数；未选实验时显示全班人数
+  const queueCount = useMemo(
+    () =>
+      experiment
+        ? queueEntries.filter((entry) => entry.experimentId === experiment.id).length
+        : queueEntries.length,
+    [queueEntries, experiment],
+  )
+
+  const openQueue = useCallback(() => {
+    queueState.open()
+    reloadQueue()
+  }, [queueState, reloadQueue])
+
+  /**
+   * 把本次抽到的题目同步给学生（B3）：抽题结果变化时防抖上报，失败静默（辅助功能，不打断验收）。
+   * 进入评分（step 4）后保持可见，验收结束由后端自动删除；回退 / 换学生 / 换实验 / 关页面时收回。
+   * 同一时刻只让一个学生可见，因此换目标时先收回上一个。
+   */
+  const sharedTargetRef = useRef<{ experimentId: string; userId: string } | null>(null)
+  // 防抖窗口内还没发出去的抽题结果（点「下一步」很快时要补发，不能丢）
+  const pendingShareRef = useRef<{
+    experimentId: string
+    userId: string
+    questionIds: string[]
+  } | null>(null)
+
+  // 收回当前已推送的题目（幂等：没有推送过就什么都不做）
+  const revokeSharedQuestions = useCallback(() => {
+    const target = sharedTargetRef.current
+    if (!target) return
+    sharedTargetRef.current = null
+    void clearCheckoffQuestions(target).catch(() => {})
+  }, [])
+
+  const pushSharedQuestions = useCallback(
+    (payload: { experimentId: string; userId: string; questionIds: string[] }) => {
+      const previous = sharedTargetRef.current
+      if (
+        previous &&
+        (previous.experimentId !== payload.experimentId || previous.userId !== payload.userId)
+      ) {
+        void clearCheckoffQuestions(previous).catch(() => {})
+      }
+      sharedTargetRef.current = { experimentId: payload.experimentId, userId: payload.userId }
+      void shareCheckoffQuestions(payload).catch(() => {})
+    },
+    [],
+  )
+
+  // 关闭页面（导航离开 / 关闭 tab）时收回
+  useEffect(() => () => revokeSharedQuestions(), [revokeSharedQuestions])
+
+  useEffect(() => {
+    // 进入评分：把防抖窗口内还没发出去的抽题结果立刻补发（保持学生可见）
+    if (step > 3) {
+      const pending = pendingShareRef.current
+      pendingShareRef.current = null
+      if (pending) pushSharedQuestions(pending)
+      return
+    }
+    // 未到抽题步骤 / 没有学生 / 已回到选人 → 收回之前推送的题目
+    if (step < 3 || !experiment || !student) {
+      pendingShareRef.current = null
+      revokeSharedQuestions()
+      return
+    }
+
+    const questionIds = drawn.map((question) => question.id)
+
+    // 抽题结果被清空（重新抽题前 / 取消某题）→ 立刻收回，不必等防抖
+    if (questionIds.length === 0) {
+      pendingShareRef.current = null
+      revokeSharedQuestions()
+      return
+    }
+
+    const payload = { experimentId: experiment.id, userId: student.userId, questionIds }
+    pendingShareRef.current = payload
+    const timer = window.setTimeout(() => {
+      pendingShareRef.current = null
+      pushSharedQuestions(payload)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [step, experiment, student, drawn, pushSharedQuestions, revokeSharedQuestions])
+
   const openPresence = useCallback(() => {
     presenceState.open()
     if (!classId) return
@@ -208,11 +313,6 @@ export default function Checkoff() {
       .catch((error) => toast.error(getErrorMessage(error, '加载记录失败')))
       .finally(() => setRecordsLoading(false))
   }, [classId, presenceState])
-
-  // 回到「选择实验 / 定位学生」表示不再验收，清空在场信息
-  useEffect(() => {
-    if (classId && step <= 1) clearCheckoffPresence(classId)
-  }, [classId, step])
 
   // 「使用其它题目集」：本地覆盖实验设定的题目集，直接拉取该题库的题目
   useEffect(() => {
@@ -388,20 +488,57 @@ export default function Checkoff() {
     }
   }, [classId])
 
-  const selectExperiment = useCallback(async (next: CheckoffExperiment) => {
-    setExperiment(next)
-    setStudent(null)
-    setDrawn([])
-    setMarks({})
-    setExistingScores([])
-    setQuestions([])
-    setQuestionsLoaded(false)
-    setQuestionsError(null)
-    setQuestionIndex(0)
-    setSearching(false)
-    setAiOral(null)
-    setStep(1)
-  }, [])
+  // 正在验收的学生 userId：student 被清空（保存 / 返回）后仍保留上一次的值，
+  // 用于离开验收时精确解除该学生排队记录的「验收中」状态
+  const checkingStudentRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (student) checkingStudentRef.current = student.userId
+  }, [student])
+
+  /**
+   * 离开验收：只解除「本次正在验收的那个学生」的排队状态（恢复为已叫号 / 排队中）并清空在场信息。
+   * 没有正在验收的学生时不做任何事——关页 / 断线由后端清理，避免误清同一助教其它标签页
+   * （群面）里正在验收的学生。
+   */
+  const clearChecking = useCallback(
+    (studentId?: string | null) => {
+      if (!classId) return
+      const target = studentId ?? checkingStudentRef.current
+      if (!target) return
+      checkingStudentRef.current = null
+      clearCheckoffPresence(classId, target)
+    },
+    [classId],
+  )
+
+  // 回到「选择实验 / 定位学生」表示不再验收，清空在场信息
+  useEffect(() => {
+    if (classId && step <= 1) clearChecking()
+  }, [classId, step, clearChecking])
+
+  const selectExperiment = useCallback(
+    async (next: CheckoffExperiment) => {
+      setExperiment(next)
+      setStudent(null)
+      setDrawn([])
+      setMarks({})
+      setExistingScores([])
+      setQuestions([])
+      setQuestionsLoaded(false)
+      setQuestionsError(null)
+      setQuestionIndex(0)
+      setSearching(false)
+      setAiOral(null)
+      setStep(1)
+      setAnswerStartedAt(null)
+      // 换实验后旧的搜索预填词不再有意义（排队面板点击时会重新赋值）
+      setFinderPresetQuery('')
+      // 切换实验视为不再验收：解除上一个学生的「验收中」状态
+      if (student) clearChecking(student.userId)
+    },
+    [clearChecking, student],
+  )
 
   useEffect(() => {
     if (experiment || !preselectId || experiments.length === 0) return
@@ -419,16 +556,50 @@ export default function Checkoff() {
       setSearching(false)
       setAiOral(null)
       setStep(2)
-      if (classId) notifyCheckoffStarted({ classId, studentName: next.name })
+      setAnswerStartedAt(Date.now())
+      // 带上学生 userId 与实验 id：后端据此把该学生该实验的排队记录置为「验收中」
+      if (classId) {
+        notifyCheckoffStarted({
+          classId,
+          studentName: next.name,
+          studentId: next.userId,
+          experimentId: experiment?.id,
+        })
+      }
     },
-    [classId],
+    [classId, experiment],
   )
 
   const mark = useCallback((id: string, next: QuestionMark) => {
     setMarks((prev) => ({ ...prev, [id]: prev[id] === next ? undefined : next }))
   }, [])
 
+  // 排队面板点击某条：先切到对应实验，再把学号预填进「定位学生」搜索框。
+  // 不自动选中学生——助教仍需线下叫人并自行点选，避免误保存。
+  const handlePickQueueEntry = useCallback(
+    (entry: CheckoffQueueEntry) => {
+      queueState.close()
+      if (entry.experimentId !== experiment?.id) {
+        const match = experiments.find((item) => item.id === entry.experimentId)
+        if (match) void selectExperiment(match)
+      } else if (step !== 1) {
+        // 当前已在验收别的学生：回到「定位学生」才能看到预填结果（当前学生未保存的录入会被放弃）
+        setAnswerStartedAt(null)
+        setSearching(false)
+        setStep(1)
+      }
+      setFinderPresetQuery(entry.studentId)
+      toast.success(`已定位到 ${entry.name}`)
+    },
+    [experiment, experiments, queueState, selectExperiment, step],
+  )
+
   const handleSaved = useCallback(() => {
+    // 保存后后端已删除该学生的排队记录与题目可见记录：这里只解除在场 / 「验收中」状态，
+    // 并把推送记录清空，避免回退到选人时再发一次无意义的收回请求
+    clearChecking(student?.userId)
+    sharedTargetRef.current = null
+    pendingShareRef.current = null
     setStudent(null)
     setDrawn([])
     setMarks({})
@@ -437,13 +608,16 @@ export default function Checkoff() {
     setSearching(false)
     setAiOral(null)
     setStep(1)
-    if (classId) clearCheckoffPresence(classId)
-  }, [classId])
+    setAnswerStartedAt(null)
+    setFinderPresetQuery('')
+  }, [clearChecking, student])
 
   const handleStep = useCallback(
     (next: number) => {
       if (questionsError && next === 3) return
       if (next === 1) setSearching(false)
+      // 回到「选择实验 / 定位学生」视为重新选人，答题计时清零
+      if (next <= 1) setAnswerStartedAt(null)
       setStep(next)
     },
     [questionsError],
@@ -609,6 +783,17 @@ export default function Checkoff() {
     <CheckoffLayout
       actions={
         <>
+            <div className="relative">
+              <IconAction label="排队情况" onPress={openQueue}>
+                <ListOrdered width={15} height={15} className="shrink-0" />
+              </IconAction>
+              {queueCount > 0 && (
+                <span className="tabular pointer-events-none absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                  {queueCount > 99 ? '99+' : queueCount}
+                </span>
+              )}
+            </div>
+            {step >= 2 && <CheckoffTimer startedAt={answerStartedAt} />}
             <IconAction label="偏好" onPress={prefsState.open}>
               <Settings2 width={15} height={15} className="shrink-0" />
             </IconAction>
@@ -788,6 +973,7 @@ export default function Checkoff() {
                 experimentId={experiment.id}
                 reloadKey={finderReloadKey}
                 includeQuestions={!bankOverrideId}
+                presetQuery={finderPresetQuery}
                 onSelect={selectStudent}
                 onQuestionsLoaded={(loaded) => {
                   setQuestions(loaded)
@@ -853,6 +1039,7 @@ export default function Checkoff() {
                 marks={marks}
                 existingScores={existingScores}
                 ratio={scoreRatio}
+                answerStartedAt={answerStartedAt}
                 onSaved={handleSaved}
               />
             )}
@@ -989,12 +1176,41 @@ export default function Checkoff() {
                           <div className="tabular text-sm font-bold text-fg">{record.score}</div>
                           <div className="text-[11px] text-fg-subtle">
                             {record.graderName ?? '—'} · {formatLocaleDateTime(record.updatedAt)}
+                            {record.durationMs != null &&
+                              ` · 用时 ${formatElapsed(record.durationMs)}`}
                           </div>
                         </div>
                       </div>
                     ))
                   )}
                 </section>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+      <Modal state={queueState}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                  <ListOrdered width={18} height={18} className="shrink-0" />
+                </Modal.Icon>
+                <Modal.Heading>排队情况</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <CheckoffQueuePanel
+                  entries={queueEntries}
+                  loading={queueLoading}
+                  currentExperimentId={experiment?.id ?? null}
+                  onPick={handlePickQueueEntry}
+                  onRefresh={reloadQueue}
+                  classId={currentClass.id}
+                  currentUserId={user.id}
+                  experiments={experiments}
+                />
               </Modal.Body>
             </Modal.Dialog>
           </Modal.Container>

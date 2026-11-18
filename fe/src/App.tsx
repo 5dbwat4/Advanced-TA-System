@@ -64,6 +64,7 @@ const StudentScores = lazy(() => import('@/pages/student/StudentScores'))
 const StudentSettings = lazy(() => import('@/pages/student/StudentSettings'))
 const StudentUnlock = lazy(() => import('@/pages/student/StudentUnlock'))
 const StudentPreviewView = lazy(() => import('@/pages/student/StudentPreviewView'))
+const StudentQueue = lazy(() => import('@/pages/student/StudentQueue'))
 const StudentReport = lazy(() => import('@/pages/console/scores/StudentReport'))
 const Terms = lazy(() => import('@/pages/public/Terms'))
 const ViewerCourseSettings = lazy(() => import('@/pages/viewer/ViewerCourseSettings'))
@@ -118,6 +119,7 @@ export default function App() {
           <Route element={<RequireStudent />}>
             <Route path="/student-console" element={<StudentShell />}>
               <Route index element={<StudentOverview />} />
+              <Route path="queue" element={<StudentQueue />} />
               <Route path="scores" element={<StudentScores />} />
               <Route path="experiments/:id" element={<StudentExperiment />} />
               <Route path="settings" element={<StudentSettings />} />

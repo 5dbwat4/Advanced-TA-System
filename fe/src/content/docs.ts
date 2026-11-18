@@ -31,6 +31,7 @@ const PREFERRED_ORDER = [
   'add-new-user-for-your-course',
   'viewer-main',
   'how-to-read-student-summary',
+  'checkoff-and-queue',
 ]
 
 function normalizePath(input: string): string {

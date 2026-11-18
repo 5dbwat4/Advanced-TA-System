@@ -1,9 +1,15 @@
 import { Spinner } from '@heroui/react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
+import ChevronRight from '~icons/lucide/chevron-right'
+import FileQuestion from '~icons/lucide/file-question'
 import { ExperimentGantt } from '@/components/experiments/ExperimentGantt'
-import { fetchStudentOverview, type StudentOverview } from '@/lib/api'
+import {
+  fetchStudentCheckoffQuestions,
+  fetchStudentOverview,
+  type StudentOverview,
+} from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 
 export default function StudentOverview() {
@@ -11,6 +17,8 @@ export default function StudentOverview() {
   const [data, setData] = useState<StudentOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  /** 助教是否已把本次验收题目推送给我（用于顶部提示条） */
+  const [hasSharedQuestions, setHasSharedQuestions] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -24,6 +32,12 @@ export default function StudentOverview() {
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
+    // 题目提示条只是附加信息：失败静默，不影响概览主体
+    fetchStudentCheckoffQuestions()
+      .then((result) => {
+        if (!cancelled) setHasSharedQuestions(result.items.length > 0)
+      })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -51,6 +65,8 @@ export default function StudentOverview() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      {hasSharedQuestions && <SharedQuestionsBanner />}
+
       <section className="rounded-3xl border border-line bg-elevated/80 p-6 shadow-2xl backdrop-blur-xl">
         <div className="text-xs font-semibold tracking-widest text-fg-subtle">
           {data.class?.name ?? '未绑定班级'}
@@ -72,6 +88,31 @@ export default function StudentOverview() {
         />
       </div>
     </div>
+  )
+}
+
+/** 存在可见的验收题目时，在概览页顶部提示去「排队验收」查看 */
+function SharedQuestionsBanner() {
+  return (
+    <Link
+      to="/student-console/queue"
+      className="group mb-4 flex items-center gap-3 rounded-2xl border border-brand-500/30 bg-brand-500/5 p-4 transition-colors hover:border-brand-500/50 hover:bg-brand-500/10"
+    >
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500/15 to-amber-500/10 text-brand-600 dark:text-brand-300">
+        <FileQuestion width={17} height={17} className="shrink-0" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold">助教已推送本次验收题目，点击查看</div>
+        <div className="mt-0.5 text-[11px] text-fg-subtle">
+          题目只有题面；请先自行思考，验收结束后自动不可见。
+        </div>
+      </div>
+      <ChevronRight
+        width={16}
+        height={16}
+        className="shrink-0 text-fg-subtle transition-transform group-hover:translate-x-0.5"
+      />
+    </Link>
   )
 }
 

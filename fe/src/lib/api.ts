@@ -852,6 +852,179 @@ export function fetchStudentExperiment(id: string): Promise<StudentPreviewData> 
   return apiFetch<StudentPreviewData>(`/api/student/experiments/${encodeURIComponent(id)}`)
 }
 
+/** 排队状态：WAITING=排队中（未被叫号） NOTIFIED=排队中（已被叫号） CHECKING=验收中 */
+export type CheckoffQueueState = 'WAITING' | 'NOTIFIED' | 'CHECKING'
+
+/** 队列里的助教信息（叫号 / 正在验收） */
+export type CheckoffQueuePerson = {
+  id: string
+  name: string
+  avatar: number | null
+}
+
+/** 排队条目（助教端排队面板使用；队列按实验、全班共享） */
+export type CheckoffQueueEntry = {
+  id: string
+  userId: string
+  name: string
+  studentId: string
+  avatar: number | null
+  experimentId: string
+  experimentMark: string
+  experimentTitle: string
+  state: CheckoffQueueState
+  /** 实验内位次（1-based） */
+  position: number
+  joinedAt: string
+  notifiedBy: CheckoffQueuePerson | null
+  notifiedAt: string | null
+  checkingBy: CheckoffQueuePerson | null
+  checkingAt: string | null
+}
+
+/** 本班全部排队条目（按实验、位次排序） */
+export function fetchCheckoffQueue(
+  classId: string,
+): Promise<{ entries: CheckoffQueueEntry[] }> {
+  return apiFetch<{ entries: CheckoffQueueEntry[] }>(
+    `/api/checkoff/queue?classId=${encodeURIComponent(classId)}`,
+  )
+}
+
+/** 助教手动把学生加入队列（插队 / 补录；已存在时返回 already） */
+export function insertCheckoffQueue(body: {
+  experimentId: string
+  userId: string
+}): Promise<{ ok: true; already?: boolean }> {
+  return apiFetch<{ ok: true; already?: boolean }>('/api/checkoff/queue', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 助教调整某实验的队列顺序（entryIds 为该实验全部条目的完整顺序） */
+export function reorderCheckoffQueue(body: {
+  experimentId: string
+  entryIds: string[]
+}): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/checkoff/queue/order', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 助教叫号：提醒学生准备验收 */
+export function notifyCheckoffQueueEntry(entryId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(
+    `/api/checkoff/queue/${encodeURIComponent(entryId)}/notify`,
+    { method: 'POST' },
+  )
+}
+
+/** 助教撤回叫号 */
+export function cancelCheckoffQueueNotify(entryId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(
+    `/api/checkoff/queue/${encodeURIComponent(entryId)}/notify`,
+    { method: 'DELETE' },
+  )
+}
+
+/** 学生端排队验收：当前开放验收的实验 + 本人排队状态（只含本人信息） */
+export type StudentQueueExperiment = {
+  id: string
+  mark: string
+  title: string
+  publishTime: string | null
+  checkoffDeadline: string | null
+  /** 是否已有验收成绩（功能测试 / 验收问答任一） */
+  checkedOff: boolean
+  myEntry: {
+    id: string
+    state: CheckoffQueueState
+    joinedAt: string
+    notifiedAt: string | null
+    notifiedBy: CheckoffQueuePerson | null
+    checkingBy: CheckoffQueuePerson | null
+  } | null
+  /** 叫号助教的当前状态（仅 myEntry.notifiedBy 存在时返回） */
+  taStatus: {
+    name: string
+    avatar: number | null
+    checking: boolean
+    pendingNotifiedCount: number
+  } | null
+}
+
+export function fetchStudentCheckoffQueue(): Promise<{
+  serverTime: string
+  experiments: StudentQueueExperiment[]
+}> {
+  return apiFetch<{ serverTime: string; experiments: StudentQueueExperiment[] }>(
+    '/api/student/checkoff-queue',
+  )
+}
+
+/** 学生加入某实验的排队（幂等：已排队时保持原加入时间与位置） */
+export function joinStudentCheckoffQueue(experimentId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/student/checkoff-queue', {
+    method: 'POST',
+    body: JSON.stringify({ experimentId }),
+  })
+}
+
+/** 学生取消本人的排队 */
+export function cancelStudentCheckoffQueue(experimentId: string): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>(
+    `/api/student/checkoff-queue/${encodeURIComponent(experimentId)}`,
+    { method: 'DELETE' },
+  )
+}
+
+/** 助教推送给学生的本次验收题目（只有题面，不含答案） */
+export type StudentQuestionItem = {
+  experimentId: string
+  mark: string
+  title: string
+  sharedAt: string
+  questions: Array<{ id: string; question: string }>
+}
+
+/** 学生端：查看助教推送给自己的验收题目 */
+export function fetchStudentCheckoffQuestions(): Promise<{
+  serverTime: string
+  items: StudentQuestionItem[]
+}> {
+  return apiFetch<{ serverTime: string; items: StudentQuestionItem[] }>(
+    '/api/student/checkoff-questions',
+  )
+}
+
+/** 助教端：把本次抽到的题目同步给学生（空数组 = 收回） */
+export function shareCheckoffQuestions(body: {
+  experimentId: string
+  userId: string
+  questionIds: string[]
+}): Promise<{ ok: true }> {
+  return apiFetch<{ ok: true }>('/api/checkoff/questions-out', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+/** 助教端：收回某学生某实验的题目 */
+export function clearCheckoffQuestions(body: {
+  experimentId: string
+  userId: string
+}): Promise<{ ok: true }> {
+  const search = new URLSearchParams({
+    experimentId: body.experimentId,
+    userId: body.userId,
+  })
+  return apiFetch<{ ok: true }>(`/api/checkoff/questions-out?${search.toString()}`, {
+    method: 'DELETE',
+  })
+}
+
 export function unlockStudent(body: {
   username: string
   name?: string
@@ -1088,6 +1261,10 @@ export function submitCheckoff(body: {
   experimentId: string
   userId: string
   scores: { type: number; score: number | null }[]
+  /** 答题用时（毫秒）：从选中学生开始计时；旧客户端可不传 */
+  durationMs?: number
+  /** 开始答题时间（ISO）；不传时服务端按 durationMs 倒推 */
+  startedAt?: string
 }): Promise<{ ok: true }> {
   return apiFetch<{ ok: true }>('/api/checkoff', {
     method: 'POST',
@@ -1105,6 +1282,8 @@ export type CheckoffRecord = {
   experimentTitle: string
   graderName: string | null
   updatedAt: string
+  /** 该次验收的答题用时（毫秒）；无记录时为 null */
+  durationMs: number | null
 }
 
 /** 最近验收提交的成绩（本班，最多 10 条） */
