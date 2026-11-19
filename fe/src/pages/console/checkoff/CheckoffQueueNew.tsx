@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils'
 
 type StudentScope = 'all' | 'whitelist' | 'blacklist'
 type JumpMode = 'after3' | 'anywhere' | 'none'
-type StartMode = 'now' | 'scheduled'
+type StartModeChoice = 'now' | 'scheduled' | 'unchanged'
 
 function keysToArray(value: Key | Key[] | null): string[] {
   if (value == null) return []
@@ -96,7 +96,7 @@ export default function CheckoffQueueNew() {
   const [studentIds, setStudentIds] = useState<string[]>([])
   const [allowSelfMoveDown, setAllowSelfMoveDown] = useState(true)
   const [jumpMode, setJumpMode] = useState<JumpMode>('none')
-  const [startMode, setStartMode] = useState<StartMode>('now')
+  const [startMode, setStartMode] = useState<StartModeChoice>(isEditing ? 'unchanged' : 'now')
   const [startAt, setStartAt] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -131,8 +131,8 @@ export default function CheckoffQueueNew() {
     setStudentIds(settings.studentIds)
     setAllowSelfMoveDown(settings.allowSelfMoveDown)
     setJumpMode(settings.jumpMode)
-    setStartMode(settings.startMode)
-    setStartAt(settings.startMode === 'scheduled' ? settings.startAt : null)
+    setStartMode('unchanged')
+    setStartAt(settings.startAt || null)
   }, [editingSession])
 
   const acceptedSet = useMemo(() => new Set(acceptedIds), [acceptedIds])
@@ -246,7 +246,7 @@ export default function CheckoffQueueNew() {
   const canSubmit =
     acceptedIds.length > 0 &&
     (studentScope === 'all' || studentIds.length > 0) &&
-    (startMode === 'now' || startAt !== null)
+    (startMode === 'now' || startMode === 'unchanged' || startAt !== null)
 
   const submit = async () => {
     if (!classId) return
@@ -263,6 +263,8 @@ export default function CheckoffQueueNew() {
       return
     }
 
+    const nowStartAt = new Date().toISOString()
+    const nextStartAt = startMode === 'scheduled' ? (startAt ?? nowStartAt) : nowStartAt
     const settings = {
       acceptedExperimentIds: acceptedIds,
       priorityExperimentIds: priorityIds,
@@ -273,13 +275,7 @@ export default function CheckoffQueueNew() {
       studentIds,
       allowSelfMoveDown,
       jumpMode,
-      startMode,
-      startAt:
-        startMode === 'scheduled'
-          ? startAt
-          : isEditing && editingSession?.settings.startMode === 'now'
-            ? editingSession.settings.startAt
-            : null,
+      ...(startMode === 'unchanged' ? {} : { startAt: nextStartAt }),
     }
 
     setSubmitting(true)
@@ -288,7 +284,10 @@ export default function CheckoffQueueNew() {
         await updateCheckoffSessionSettings(editSessionId, settings)
         toast.success('设置已保存')
       } else {
-        await createCheckoffSession({ classId, settings })
+        await createCheckoffSession({
+          classId,
+          settings: { ...settings, startAt: nextStartAt },
+        })
         toast.success('排队已创建')
       }
       navigate('/console/checkoff-queue')
@@ -660,10 +659,20 @@ export default function CheckoffQueueNew() {
               orientation="horizontal"
               value={startMode}
               onChange={(value) => {
-                setStartMode(value as StartMode)
+                setStartMode(value as StartModeChoice)
                 if (value === 'now') setStartAt(null)
               }}
             >
+              {isEditing && (
+                <Radio value="unchanged">
+                  <Radio.Content>
+                    <Radio.Control>
+                      <Radio.Indicator />
+                    </Radio.Control>
+                    不修改
+                  </Radio.Content>
+                </Radio>
+              )}
               <Radio value="now">
                 <Radio.Content>
                   <Radio.Control>

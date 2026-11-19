@@ -126,7 +126,7 @@ export default function CheckoffMulti() {
   const closeTab = useCallback(
     (id: string) => {
       destroyCheckoffSession(meta[id]?.token)
-      clearInstanceStorage(id)
+      clearInstanceStorage(id, user?.id, classId)
       setMeta((prev) => {
         if (!(id in prev)) return prev
         const next = { ...prev }
@@ -147,7 +147,7 @@ export default function CheckoffMulti() {
         }
       })
     },
-    [meta],
+    [classId, meta, user?.id],
   )
 
   const handleSaved = useCallback(

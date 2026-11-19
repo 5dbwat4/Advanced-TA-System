@@ -22,13 +22,14 @@ const sessionSettingsSchema = z.object({
   studentIds: idListSchema.default([]),
   allowSelfMoveDown: z.boolean().default(true),
   jumpMode: z.enum(['after3', 'anywhere', 'none']).default('none'),
-  startMode: z.enum(['now', 'scheduled']).default('now'),
-  startAt: z.string().trim().nullable().optional(),
+  startAt: z.string().trim().min(1).optional(),
 })
 
 const createSessionSchema = z.object({
   classId: z.string().trim().min(1),
-  settings: sessionSettingsSchema,
+  settings: sessionSettingsSchema.extend({
+    startAt: z.string().trim().min(1),
+  }),
 })
 
 const updateSessionSettingsSchema = z.object({
@@ -143,13 +144,8 @@ async function normalizeSettings(
     }
   }
 
-  let startAt: Date
-  if (input.startMode === 'scheduled') {
-    if (!input.startAt) return { ok: false, message: '请选择定时开始时间' }
-    startAt = new Date(input.startAt)
-  } else {
-    startAt = input.startAt ? new Date(input.startAt) : new Date()
-  }
+  if (!input.startAt) return { ok: false, message: '请选择开始时间' }
+  const startAt = new Date(input.startAt)
   if (Number.isNaN(startAt.getTime())) {
     return { ok: false, message: '开始时间无效' }
   }
@@ -295,7 +291,14 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级' })
       }
 
-      const normalized = await normalizeSettings(session.classId, parsed.data.settings)
+      const existingSettings = parseSessionSettings(session.settings)
+      const normalized = await normalizeSettings(session.classId, {
+        ...parsed.data.settings,
+        startAt:
+          parsed.data.settings.startAt === undefined
+            ? existingSettings.startAt
+            : parsed.data.settings.startAt,
+      })
       if (!normalized.ok) {
         return reply.code(400).send({ error: 'INVALID_SETTINGS', message: normalized.message })
       }

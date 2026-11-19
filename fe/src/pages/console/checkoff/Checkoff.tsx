@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { AiAudioGrade } from '@/components/checkoff/AiAudioGrade'
 import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
 import { CheckoffQueueDrawer } from '@/components/checkoff/CheckoffQueueDrawer'
+import { CheckoffResumeDialog } from '@/components/checkoff/CheckoffResumeDialog'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { CustomCardRail } from '@/components/checkoff/CustomCardRail'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
@@ -68,6 +69,14 @@ import {
   type CheckoffStartedEvent,
   type SlaveCardState,
 } from '@/lib/checkoff-socket'
+import {
+  clearCheckoffResume,
+  loadCheckoffResume,
+  saveCheckoffResume,
+  singleCheckoffResumeKey,
+  type CheckoffResumeSnapshot,
+} from '@/lib/checkoff-resume'
+import { CHECKOFF_MULTI_MAX_TABS, pushMultiInstance } from '@/lib/checkoff-multi'
 import {
   createDefaultCustomCards,
   type CustomCard,
@@ -141,13 +150,18 @@ export default function Checkoff() {
   const [selectedCustomCard, setSelectedCustomCard] = useState<CustomCard | null>(null)
   const [activeCustomCardSlotId, setActiveCustomCardSlotId] = useState<string | null>(null)
   const [cardRailOpen, setCardRailOpen] = useState(false)
+  const [resume, setResume] = useState<CheckoffResumeSnapshot | null>(null)
+  const [resumeFor, setResumeFor] = useState<string | null>(null)
 
   const prefsState = useOverlayState()
   const presenceState = useOverlayState()
   const bankState = useOverlayState()
   const specialDrawState = useOverlayState()
   const customCardState = useOverlayState()
+  const resumeState = useOverlayState()
   const { bankId: bankOverrideId, save: saveBankOverride } = useCheckoffBankOverride()
+  const resumeKey =
+    user?.id && classId ? singleCheckoffResumeKey(user.id, classId) : null
 
   const isMulti = user?.preferences?.device === 'multi'
   const master = useCheckoffMaster(isMulti, user?.id)
@@ -216,6 +230,51 @@ export default function Checkoff() {
     if (classId && step <= 1) clearCheckoffPresence(classId)
   }, [classId, step])
 
+  useEffect(() => {
+    if (!resumeKey || resumeFor === resumeKey) return
+    setResumeFor(resumeKey)
+    const snapshot = loadCheckoffResume(resumeKey)
+    setResume(snapshot)
+    resumeState.setOpen(snapshot !== null)
+  }, [resumeFor, resumeKey, resumeState])
+
+  useEffect(() => {
+    if (resume && !resumeState.isOpen) resumeState.open()
+  }, [resume, resumeState, resumeState.isOpen])
+
+  useEffect(() => {
+    if (!resumeKey || resumeFor !== resumeKey || resume) return
+    if (!student || !experiment || step < 2) {
+      clearCheckoffResume(resumeKey)
+      return
+    }
+    saveCheckoffResume(resumeKey, {
+      savedAt: new Date().toISOString(),
+      student,
+      experiment,
+      step,
+      drawn,
+      marks,
+      existingScores,
+      questionIndex,
+      aiOral,
+      activeStartedAt,
+    })
+  }, [
+    activeStartedAt,
+    aiOral,
+    drawn,
+    existingScores,
+    experiment,
+    marks,
+    questionIndex,
+    resume,
+    resumeFor,
+    resumeKey,
+    step,
+    student,
+  ])
+
   // 「使用其它题目集」：本地覆盖实验设定的题目集，直接拉取该题库的题目
   useEffect(() => {
     if (!experiment || !bankOverrideId) return
@@ -244,6 +303,41 @@ export default function Checkoff() {
       cancelled = true
     }
   }, [experiment, bankOverrideId, finderReloadKey])
+
+  useEffect(() => {
+    if (
+      !classId ||
+      !experiment ||
+      step !== 3 ||
+      questionsLoaded ||
+      specialMachine ||
+      bankOverrideId
+    ) {
+      return
+    }
+    let cancelled = false
+    setQuestionsError(null)
+    fetchCheckoff({ classId, experimentId: experiment.id, includeQuestions: true })
+      .then((res) => {
+        if (cancelled) return
+        setQuestions(res.questions ?? [])
+        setQuestionsLoaded(true)
+      })
+      .catch((error) => {
+        if (!cancelled) setQuestionsError(getErrorMessage(error, '加载题目失败'))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    bankOverrideId,
+    classId,
+    experiment,
+    finderReloadKey,
+    questionsLoaded,
+    specialMachine,
+    step,
+  ])
 
   useEffect(() => {
     if (!specialMachine) {
@@ -431,6 +525,73 @@ export default function Checkoff() {
     },
     [classId],
   )
+
+  const discardResume = useCallback(() => {
+    if (resumeKey) clearCheckoffResume(resumeKey)
+    setResume(null)
+    resumeState.close()
+  }, [resumeKey, resumeState])
+
+  const restoreResume = useCallback(() => {
+    const snapshot = resume
+    setResume(null)
+    resumeState.close()
+    if (!snapshot) return
+    setExperiment(snapshot.experiment)
+    setStudent(snapshot.student)
+    setActiveStartedAt(snapshot.activeStartedAt ?? snapshot.savedAt)
+    setDrawn(snapshot.drawn)
+    setMarks(snapshot.marks)
+    setExistingScores(snapshot.existingScores)
+    setQuestionIndex(snapshot.questionIndex)
+    setAiOral(snapshot.aiOral)
+    setStep(snapshot.step)
+    setSearching(false)
+    setQuestionsLoaded(false)
+    setQuestionsError(null)
+    if (classId) {
+      notifyCheckoffStarted({
+        classId,
+        studentId: snapshot.student.userId,
+        studentName: snapshot.student.name,
+      })
+    }
+    toast.success(isMulti ? '已恢复，验收从机需要重新连接' : '已恢复')
+  }, [classId, isMulti, resume, resumeState])
+
+  const openMulti = useCallback(() => {
+    if (experiment) {
+      const id = pushMultiInstance({
+        experiment,
+        student,
+        step,
+        drawn,
+        marks,
+        existingScores,
+        questionIndex,
+        activeStartedAt,
+        aiOral,
+      })
+      if (!id) {
+        toast.error(`群面最多同时开启 ${CHECKOFF_MULTI_MAX_TABS} 个验收 tab`)
+        return
+      }
+      if (resumeKey) clearCheckoffResume(resumeKey)
+    }
+    navigate('/console/checkoff-multi')
+  }, [
+    activeStartedAt,
+    aiOral,
+    drawn,
+    existingScores,
+    experiment,
+    marks,
+    navigate,
+    questionIndex,
+    resumeKey,
+    step,
+    student,
+  ])
 
   const startQueueStudent = useCallback(
     async (next: CheckoffStudent, experimentId: string) => {
@@ -679,7 +840,7 @@ export default function Checkoff() {
                     if (key === 'presence') openPresence()
                     else if (key === 'bank') openBankPicker()
                     else if (key === 'special') openSpecialDrawIntro()
-                    else if (key === 'multi') navigate('/console/checkoff-multi')
+                    else if (key === 'multi') openMulti()
                     else if (key === 'master-panel') setMasterPanelVisible((visible) => !visible)
                   }}
                 >
@@ -1122,6 +1283,12 @@ export default function Checkoff() {
         activeStudentId={student?.userId ?? null}
         activeStartedAt={activeStartedAt}
         onStart={startQueueStudent}
+      />
+      <CheckoffResumeDialog
+        state={resumeState}
+        snapshot={resume}
+        onRestore={restoreResume}
+        onDiscard={discardResume}
       />
     </CheckoffLayout>
   )

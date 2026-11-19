@@ -26,7 +26,6 @@ export type CheckoffSessionSettings = {
   studentIds: string[]
   allowSelfMoveDown: boolean
   jumpMode: 'after3' | 'anywhere' | 'none'
-  startMode: 'now' | 'scheduled'
   startAt: string
 }
 
@@ -73,7 +72,6 @@ export function parseSessionSettings(raw: string): CheckoffSessionSettings {
       data.jumpMode === 'after3' || data.jumpMode === 'anywhere'
         ? data.jumpMode
         : 'none',
-    startMode: data.startMode === 'scheduled' ? 'scheduled' : 'now',
     startAt: typeof data.startAt === 'string' ? data.startAt : '',
   }
 }

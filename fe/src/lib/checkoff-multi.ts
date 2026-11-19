@@ -1,5 +1,6 @@
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import type { CheckoffExperiment, CheckoffQuestion, CheckoffStudent, Score } from '@/lib/api'
+import { clearCheckoffResume, multiCheckoffResumeKey } from '@/lib/checkoff-resume'
 
 export const CHECKOFF_MULTI_TABS_KEY = 'tasaas.checkoffMulti.tabs.v1'
 export const CHECKOFF_MULTI_MAX_TABS = 8
@@ -22,6 +23,8 @@ export type CheckoffInstanceSnapshot = {
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
   questionIndex: number
+  activeStartedAt?: string | null
+  aiOral?: { nonce: number; score: number; comment: string } | null
 }
 
 export function createTabId(): string {
@@ -100,6 +103,9 @@ export function loadInstanceSnapshot(id: string): CheckoffInstanceSnapshot | nul
           : {},
       existingScores: Array.isArray(parsed.existingScores) ? parsed.existingScores : [],
       questionIndex: Math.max(0, rawIndex),
+      activeStartedAt:
+        typeof parsed.activeStartedAt === 'string' ? parsed.activeStartedAt : null,
+      aiOral: parsed.aiOral ?? null,
     }
   } catch {
     return null
@@ -114,7 +120,26 @@ export function saveInstanceSnapshot(id: string, snapshot: CheckoffInstanceSnaps
   }
 }
 
-export function clearInstanceStorage(id: string): void {
+export function pushMultiInstance(snapshot: CheckoffInstanceSnapshot): string | null {
+  let tabs: MultiTab[] = []
+  try {
+    if (sessionStorage.getItem(CHECKOFF_MULTI_TABS_KEY)) {
+      tabs = loadMultiTabs().tabs
+    }
+  } catch {
+    return null
+  }
+  if (tabs.length >= CHECKOFF_MULTI_MAX_TABS) return null
+  const id = createTabId()
+  saveInstanceSnapshot(id, snapshot)
+  saveMultiTabs({ tabs: [...tabs, { id }], activeId: id })
+  return id
+}
+
+export function clearInstanceStorage(id: string, userId?: string, classId?: string): void {
+  if (userId && classId) {
+    clearCheckoffResume(multiCheckoffResumeKey(id, userId, classId))
+  }
   try {
     sessionStorage.removeItem(instanceStorageKey(id))
     sessionStorage.removeItem(sessionStorageKey(id))

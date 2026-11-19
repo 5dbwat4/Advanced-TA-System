@@ -190,8 +190,7 @@ export type CheckoffSessionSettings = {
   studentIds: string[]
   allowSelfMoveDown: boolean
   jumpMode: 'after3' | 'anywhere' | 'none'
-  startMode: 'now' | 'scheduled'
-  startAt: string | null
+  startAt: string
 }
 
 export type CheckoffQueueEntry = {
@@ -1168,7 +1167,7 @@ export function fetchCheckoff(params: {
 
 export function updateCheckoffSessionSettings(
   sessionId: string,
-  settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt: string | null },
+  settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt?: string },
 ): Promise<{ session: CheckoffSession }> {
   return apiFetch<{ session: CheckoffSession }>(
     `/api/checkoff/sessions/${encodeURIComponent(sessionId)}/settings`,
@@ -1189,7 +1188,7 @@ export function fetchCheckoffSessions(
 
 export function createCheckoffSession(body: {
   classId: string
-  settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt: string | null }
+  settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt: string }
 }): Promise<{ session: CheckoffSession }> {
   return apiFetch<{ session: CheckoffSession }>('/api/checkoff/sessions', {
     method: 'POST',

@@ -1,9 +1,10 @@
-import { Button, Spinner } from '@heroui/react'
+import { Button, Spinner, useOverlayState } from '@heroui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { CheckoffQueueDrawer } from '@/components/checkoff/CheckoffQueueDrawer'
+import { CheckoffResumeDialog } from '@/components/checkoff/CheckoffResumeDialog'
 import { DemoStep } from '@/components/checkoff/DemoStep'
 import { ExperimentPicker } from '@/components/checkoff/ExperimentPicker'
 import { MasterSlavePanel } from '@/components/checkoff/MasterSlavePanel'
@@ -33,6 +34,13 @@ import {
   saveInstanceSnapshot,
   sessionStorageKey,
 } from '@/lib/checkoff-multi'
+import {
+  clearCheckoffResume,
+  loadCheckoffResume,
+  multiCheckoffResumeKey,
+  saveCheckoffResume,
+  type CheckoffResumeSnapshot,
+} from '@/lib/checkoff-resume'
 import { getErrorMessage } from '@/lib/error'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio } from '@/lib/scoring'
 
@@ -76,12 +84,23 @@ export function CheckoffInstance({
   onMetaChange,
   onSaved,
 }: CheckoffInstanceProps) {
-  const [initial] = useState(() => loadInstanceSnapshot(id))
+  const resumeKey = multiCheckoffResumeKey(id, userId, classId)
+  const [initialResume] = useState(() => loadCheckoffResume(resumeKey))
+  const [initial] = useState(() => (initialResume ? null : loadInstanceSnapshot(id)))
+  const [resume, setResume] = useState<CheckoffResumeSnapshot | null>(initialResume)
+  const resumeState = useOverlayState()
   const [experiment, setExperiment] = useState<CheckoffExperiment | null>(
     initial?.experiment ?? null,
   )
   const [student, setStudent] = useState<CheckoffStudent | null>(initial?.student ?? null)
-  const [activeStartedAt, setActiveStartedAt] = useState<string | null>(null)
+  const [activeStartedAt, setActiveStartedAt] = useState<string | null>(
+    initial?.activeStartedAt ?? null,
+  )
+  const [aiOral, setAiOral] = useState<{
+    nonce: number
+    score: number
+    comment: string
+  } | null>(initial?.aiOral ?? null)
   const [questions, setQuestions] = useState<CheckoffQuestion[]>([])
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
@@ -118,6 +137,7 @@ export function CheckoffInstance({
   )
 
   useEffect(() => {
+    if (resume) return
     saveInstanceSnapshot(id, {
       experiment,
       student,
@@ -126,8 +146,59 @@ export function CheckoffInstance({
       marks,
       existingScores,
       questionIndex,
+      activeStartedAt,
+      aiOral,
     })
-  }, [id, experiment, student, step, drawn, marks, existingScores, questionIndex])
+  }, [
+    activeStartedAt,
+    aiOral,
+    id,
+    experiment,
+    student,
+    step,
+    drawn,
+    marks,
+    existingScores,
+    questionIndex,
+    resume,
+  ])
+
+  useEffect(() => {
+    if (!resume) {
+      if (!student || !experiment || step < 2) {
+        clearCheckoffResume(resumeKey)
+      } else {
+        saveCheckoffResume(resumeKey, {
+          savedAt: new Date().toISOString(),
+          student,
+          experiment,
+          step,
+          drawn,
+          marks,
+          existingScores,
+          questionIndex,
+          aiOral,
+          activeStartedAt,
+        })
+      }
+    }
+  }, [
+    activeStartedAt,
+    aiOral,
+    drawn,
+    existingScores,
+    experiment,
+    marks,
+    questionIndex,
+    resume,
+    resumeKey,
+    step,
+    student,
+  ])
+
+  useEffect(() => {
+    resumeState.setOpen(active && resume !== null)
+  }, [active, resume, resumeState, resumeState.isOpen])
 
   // 刷新后恢复到抽题 / 评分步骤时，补拉题目池（正常流程由 StudentFinder 首次加载）
   useEffect(() => {
@@ -192,6 +263,7 @@ export function CheckoffInstance({
     setQuestionsError(null)
     setQuestionIndex(0)
     setSearching(false)
+    setAiOral(null)
     setStep(1)
   }, [])
 
@@ -203,8 +275,35 @@ export function CheckoffInstance({
     setMarks({})
     setQuestionIndex(0)
     setSearching(false)
+    setAiOral(null)
     setStep(2)
   }, [])
+
+  const discardResume = useCallback(() => {
+    clearCheckoffResume(resumeKey)
+    setResume(null)
+    resumeState.close()
+  }, [resumeKey, resumeState])
+
+  const restoreResume = useCallback(() => {
+    const snapshot = resume
+    setResume(null)
+    resumeState.close()
+    if (!snapshot) return
+    setExperiment(snapshot.experiment)
+    setStudent(snapshot.student)
+    setActiveStartedAt(snapshot.activeStartedAt ?? snapshot.savedAt)
+    setDrawn(snapshot.drawn)
+    setMarks(snapshot.marks)
+    setExistingScores(snapshot.existingScores)
+    setQuestionIndex(snapshot.questionIndex)
+    setAiOral(snapshot.aiOral)
+    setStep(snapshot.step)
+    setSearching(false)
+    setQuestionsLoaded(false)
+    setQuestionsError(null)
+    toast.success('已恢复，验收从机需要重新连接')
+  }, [resume, resumeState])
 
   const startQueueStudent = useCallback(
     async (next: CheckoffStudent, experimentId: string) => {
@@ -448,7 +547,7 @@ export function CheckoffInstance({
               <ScoreForm
                 experimentId={experiment.id}
                 student={student}
-                aiOral={null}
+                aiOral={aiOral}
                 marks={marks}
                 existingScores={existingScores}
                 ratio={scoreRatio}
@@ -469,6 +568,12 @@ export function CheckoffInstance({
           onStart={startQueueStudent}
         />
       )}
+      <CheckoffResumeDialog
+        state={resumeState}
+        snapshot={resume}
+        onRestore={restoreResume}
+        onDiscard={discardResume}
+      />
     </div>
   )
 }

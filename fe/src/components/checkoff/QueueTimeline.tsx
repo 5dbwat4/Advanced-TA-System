@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent } from 'react'
 
 import Bell from '~icons/lucide/bell'
@@ -24,6 +24,21 @@ import { IconAction } from '@/components/ui/IconAction'
 import { cn } from '@/lib/utils'
 
 const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
+
+const AUTO_SCROLL_DELAY = 10000
+const PROGRAMMATIC_SCROLL_GUARD = 1200
+
+function findScrollParent(start: HTMLElement | null): HTMLElement | null {
+  let node = start?.parentElement ?? null
+  while (node) {
+    const style = window.getComputedStyle(node)
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
+      return node
+    }
+    node = node.parentElement
+  }
+  return null
+}
 
 export type QueueTimelineEntry = {
   userId: string
@@ -305,8 +320,18 @@ export function QueueTimeline({
   const [optimisticWaiting, setOptimisticWaiting] = useState<string[] | null>(null)
   const [dragActiveId, setDragActiveId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const topRef = useRef<HTMLDivElement>(null)
+  const boundaryRef = useRef<HTMLDivElement>(null)
+  const previousFinishedKey = useRef<string | null>(null)
+  const manualScrollTimer = useRef<number | null>(null)
+  const programmaticScrollUntil = useRef(0)
   const entriesKey = entries
     .map((entry) => `${entry.userId}:${entry.status}:${entry.finishedAt ?? ''}`)
+    .join('|')
+  const finishedKey = entries
+    .filter((entry) => entry.status === 'finished')
+    .map((entry) => `${entry.userId}:${entry.finishedAt ?? ''}`)
+    .sort()
     .join('|')
   const previousEntriesKey = useRef(entriesKey)
   const sensors = useSensors(
@@ -323,6 +348,50 @@ export function QueueTimeline({
     previousEntriesKey.current = entriesKey
     setOptimisticWaiting(null)
   }, [entriesKey])
+
+  const scrollToBoundary = useCallback(() => {
+    programmaticScrollUntil.current = Date.now() + PROGRAMMATIC_SCROLL_GUARD
+    ;(boundaryRef.current ?? topRef.current)?.scrollIntoView({
+      block: 'start',
+      behavior: 'smooth',
+    })
+  }, [])
+
+  const scheduleReturnToBoundary = useCallback(() => {
+    if (manualScrollTimer.current !== null) {
+      window.clearTimeout(manualScrollTimer.current)
+    }
+    manualScrollTimer.current = window.setTimeout(() => {
+      manualScrollTimer.current = null
+      scrollToBoundary()
+    }, AUTO_SCROLL_DELAY)
+  }, [scrollToBoundary])
+
+  useEffect(() => {
+    const handleScroll = (event: Event) => {
+      if (Date.now() < programmaticScrollUntil.current) return
+      const anchor = boundaryRef.current ?? topRef.current
+      if (!anchor || !(event.target instanceof Node)) return
+      const scroller = findScrollParent(anchor)
+      if (!scroller || event.target !== scroller) return
+      scheduleReturnToBoundary()
+    }
+    document.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('scroll', handleScroll, true)
+      if (manualScrollTimer.current !== null) {
+        window.clearTimeout(manualScrollTimer.current)
+        manualScrollTimer.current = null
+      }
+    }
+  }, [scheduleReturnToBoundary])
+
+  useEffect(() => {
+    if (previousFinishedKey.current !== finishedKey && manualScrollTimer.current === null) {
+      scrollToBoundary()
+    }
+    previousFinishedKey.current = finishedKey
+  }, [finishedKey, scrollToBoundary])
 
   if (entries.length === 0) {
     return (
@@ -421,7 +490,7 @@ export function QueueTimeline({
       onDragEnd={handleDragEnd}
     >
       <div className={cn('max-h-[26rem] overflow-x-hidden overflow-y-auto pe-1', className)}>
-        <div className="relative flex flex-col gap-3 pl-10">
+        <div ref={topRef} className="relative flex flex-col gap-3 pl-10">
           <div className="pointer-events-none absolute bottom-0 left-2 top-0 w-px bg-line" />
 
           {finished.map((entry) => (
@@ -435,6 +504,10 @@ export function QueueTimeline({
               onToggle={onToggle}
             />
           ))}
+
+          {finished.length > 0 && (current || waiting.length > 0) ? (
+            <div ref={boundaryRef} aria-hidden className="-mt-3 h-0" />
+          ) : null}
 
           {current && (
             <div
