@@ -96,11 +96,6 @@ export function CheckoffInstance({
   const [activeStartedAt, setActiveStartedAt] = useState<string | null>(
     initial?.activeStartedAt ?? null,
   )
-  const [aiOral, setAiOral] = useState<{
-    nonce: number
-    score: number
-    comment: string
-  } | null>(initial?.aiOral ?? null)
   const [questions, setQuestions] = useState<CheckoffQuestion[]>([])
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
@@ -147,11 +142,9 @@ export function CheckoffInstance({
       existingScores,
       questionIndex,
       activeStartedAt,
-      aiOral,
     })
   }, [
     activeStartedAt,
-    aiOral,
     id,
     experiment,
     student,
@@ -177,14 +170,12 @@ export function CheckoffInstance({
           marks,
           existingScores,
           questionIndex,
-          aiOral,
           activeStartedAt,
         })
       }
     }
   }, [
     activeStartedAt,
-    aiOral,
     drawn,
     existingScores,
     experiment,
@@ -263,7 +254,6 @@ export function CheckoffInstance({
     setQuestionsError(null)
     setQuestionIndex(0)
     setSearching(false)
-    setAiOral(null)
     setStep(1)
   }, [])
 
@@ -275,7 +265,6 @@ export function CheckoffInstance({
     setMarks({})
     setQuestionIndex(0)
     setSearching(false)
-    setAiOral(null)
     setStep(2)
   }, [])
 
@@ -297,7 +286,6 @@ export function CheckoffInstance({
     setMarks(snapshot.marks)
     setExistingScores(snapshot.existingScores)
     setQuestionIndex(snapshot.questionIndex)
-    setAiOral(snapshot.aiOral)
     setStep(snapshot.step)
     setSearching(false)
     setQuestionsLoaded(false)
@@ -547,7 +535,6 @@ export function CheckoffInstance({
               <ScoreForm
                 experimentId={experiment.id}
                 student={student}
-                aiOral={aiOral}
                 marks={marks}
                 existingScores={existingScores}
                 ratio={scoreRatio}

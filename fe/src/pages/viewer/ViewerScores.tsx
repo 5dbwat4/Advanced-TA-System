@@ -130,7 +130,7 @@ export default function ViewerScores() {
                     <Link
                       to={`/viewer/scores/students/${student.userId}`}
                       className="block transition-colors hover:text-brand-600 dark:hover:text-brand-300"
-                      title="查看学情报告"
+                      title="查看学生详情"
                     >
                       <div className="font-bold">{student.name}</div>
                       <div className="tabular text-xs text-fg-muted">{student.studentId || '—'}</div>

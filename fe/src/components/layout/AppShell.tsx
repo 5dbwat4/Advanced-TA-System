@@ -10,14 +10,12 @@ import LogOut from '~icons/lucide/log-out'
 import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
-import { AiAssistant } from '@/components/ai/AiAssistant'
 import { ClassAccountMenu } from '@/components/layout/ClassAccountMenu'
 import { QuestionBasket } from '@/components/questions/QuestionBasket'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { AI_ENABLED } from '@/lib/ai-feature'
 import { useAuth } from '@/lib/auth'
 import { MOBILE_NAV_ITEMS, MORE_PATH, NAV_ITEMS, isMoreSection } from '@/lib/nav'
 import { useAppStore, useCurrentClass, useHasXzzdPermission } from '@/lib/store'
@@ -283,7 +281,6 @@ export function AppShell() {
       </div>
 
       <QuestionBasket />
-      {AI_ENABLED && <AiAssistant />}
     </div>
   )
 }

@@ -24,7 +24,6 @@ export type CheckoffInstanceSnapshot = {
   existingScores: Score[]
   questionIndex: number
   activeStartedAt?: string | null
-  aiOral?: { nonce: number; score: number; comment: string } | null
 }
 
 export function createTabId(): string {
@@ -105,7 +104,6 @@ export function loadInstanceSnapshot(id: string): CheckoffInstanceSnapshot | nul
       questionIndex: Math.max(0, rawIndex),
       activeStartedAt:
         typeof parsed.activeStartedAt === 'string' ? parsed.activeStartedAt : null,
-      aiOral: parsed.aiOral ?? null,
     }
   } catch {
     return null

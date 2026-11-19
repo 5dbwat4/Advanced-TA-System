@@ -12,7 +12,6 @@ export type CheckoffResumeSnapshot = {
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
   questionIndex: number
-  aiOral: { nonce: number; score: number; comment: string } | null
   activeStartedAt: string | null
 }
 
@@ -57,7 +56,6 @@ export function loadCheckoffResume(key: string): CheckoffResumeSnapshot | null {
       existingScores: Array.isArray(parsed.existingScores) ? parsed.existingScores : [],
       questionIndex:
         typeof parsed.questionIndex === 'number' ? Math.max(0, Math.round(parsed.questionIndex)) : 0,
-      aiOral: parsed.aiOral ?? null,
       activeStartedAt:
         typeof parsed.activeStartedAt === 'string' ? parsed.activeStartedAt : null,
     }

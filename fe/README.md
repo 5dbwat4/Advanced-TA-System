@@ -32,9 +32,7 @@ Run from the monorepo root with `pnpm dev:fe` / `pnpm build:fe` instead.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill in what you need. AI features
-(assistant, report pre-grading, oral-answer grading, learning reports) are
-disabled unless `VITE_ENABLE_AI` is set to `true` (or `1`).
+Copy `.env.example` to `.env.local` and fill in what you need.
 
 ## Layout
 

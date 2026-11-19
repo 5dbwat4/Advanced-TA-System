@@ -1,97 +1,28 @@
 import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
 
-import AlertTriangle from '~icons/lucide/alert-triangle'
 import ArrowLeft from '~icons/lucide/arrow-left'
-import Award from '~icons/lucide/award'
-import CheckCircle2 from '~icons/lucide/check-circle-2'
 import ChevronRight from '~icons/lucide/chevron-right'
-import Minus from '~icons/lucide/minus'
-import Sparkles from '~icons/lucide/sparkles'
-import Target from '~icons/lucide/target'
-import TrendingDown from '~icons/lucide/trending-down'
-import TrendingUp from '~icons/lucide/trending-up'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { PendingButton } from '@/components/ui/PendingButton'
-import { useAiConfig } from '@/lib/ai-config'
-import { AI_ENABLED } from '@/lib/ai-feature'
-import {
-  generateLearningReport,
-  type LearningReport,
-} from '@/lib/ai-learning-report'
 import { fetchStudentExperimentReport, type StudentPreviewData } from '@/lib/api'
-import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
-import { formatLocaleDateTime } from '@/lib/format'
 import { SCORE_TYPES } from '@/lib/scores'
 import { loadStudentCases, type StudentCaseSet } from '@/lib/student-cases'
 import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { StudentPreviewContent } from '@/pages/student/StudentPreviewView'
 
-const TREND_META = {
-  up: {
-    label: '进步',
-    icon: TrendingUp,
-    className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  },
-  steady: {
-    label: '稳定',
-    icon: Minus,
-    className: 'bg-brand-500/10 text-brand-600 dark:text-brand-300',
-  },
-  down: {
-    label: '需关注',
-    icon: TrendingDown,
-    className: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  },
-} as const
-
-const PERFORMANCE_META = {
-  excellent: {
-    label: '优秀',
-    className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  },
-  good: {
-    label: '良好',
-    className: 'bg-brand-500/10 text-brand-600 dark:text-brand-300',
-  },
-  needs_work: {
-    label: '待提升',
-    className: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  },
-} as const
-
-const reportStorageKey = (userId: string) => `tasaas.learning-report.${userId}`
-
-function readCachedReport(userId: string): { report: LearningReport; savedAt: number } | null {
-  try {
-    const raw = window.localStorage.getItem(reportStorageKey(userId))
-    if (!raw) return null
-    const value = JSON.parse(raw) as { report?: LearningReport; savedAt?: number }
-    return value?.report ? { report: value.report, savedAt: value.savedAt ?? 0 } : null
-  } catch {
-    return null
-  }
-}
-
 export default function StudentReport({ readonly = false }: { readonly?: boolean }) {
   const { userId } = useParams<{ userId: string }>()
   const currentClass = useCurrentClass()
   const classId = currentClass?.id ?? null
   const navigate = useNavigate()
-  const { user } = useAuth()
-  const aiConfig = useAiConfig(user?.id)
   const backPath = readonly ? '/viewer/scores' : '/console/scores'
 
   const [data, setData] = useState<StudentCaseSet | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [report, setReport] = useState<LearningReport | null>(null)
-  const [savedAt, setSavedAt] = useState<number | null>(null)
-  const [generating, setGenerating] = useState(false)
 
   const previewState = useOverlayState({
     onOpenChange: (open) => {
@@ -116,9 +47,6 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
       .then((result) => {
         if (cancelled) return
         setData(result)
-        const cached = readCachedReport(userId)
-        setReport(cached?.report ?? null)
-        setSavedAt(cached?.savedAt ?? null)
       })
       .catch((err) => {
         if (!cancelled) setError(getErrorMessage(err, '加载学生信息失败'))
@@ -130,30 +58,6 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
       cancelled = true
     }
   }, [classId, userId])
-
-  const generate = async () => {
-    if (!data || !userId) return
-    setGenerating(true)
-    try {
-      const result = await generateLearningReport({
-        studentName: data.student.name,
-        cases: data.cases,
-        config: aiConfig,
-      })
-      setReport(result)
-      const timestamp = Date.now()
-      setSavedAt(timestamp)
-      window.localStorage.setItem(
-        reportStorageKey(userId),
-        JSON.stringify({ report: result, savedAt: timestamp }),
-      )
-      toast.success('学情报告已生成')
-    } catch (err) {
-      toast.error(getErrorMessage(err, '生成学情报告失败'))
-    } finally {
-      setGenerating(false)
-    }
-  }
 
   const openPreview = async (experimentId: string) => {
     if (!userId) return
@@ -208,7 +112,7 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
         <ArrowLeft width={15} height={15} className="shrink-0" />
         {readonly ? '返回分数列表' : '返回分数和名单'}
       </Button>
-      <PageHeader title={`${data.student.name} · 学情报告`} />
+      <PageHeader title={`${data.student.name} · 学生详情`} />
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-line bg-elevated p-5">
@@ -221,15 +125,6 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
               {data.student.studentId} · {currentClass?.name ?? '当前班级'}
             </div>
           </div>
-          {AI_ENABLED && !readonly && (
-            <PendingButton
-              isPending={generating}
-              onPress={() => void generate()}
-              icon={Sparkles}
-            >
-              {report ? '重新生成学情报告' : '生成学情报告'}
-            </PendingButton>
-          )}
         </div>
 
         <section className="flex flex-col gap-3">
@@ -284,124 +179,6 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
           )}
         </section>
 
-        {AI_ENABLED && report ? (
-          <section className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-bold">AI 学情报告</h2>
-              <span className="text-[11px] text-fg-subtle">
-                {savedAt ? `生成于 ${formatLocaleDateTime(new Date(savedAt).toISOString())}` : ''}
-              </span>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-brand-950 to-brand-900 p-6 text-white">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-lg bg-white/10 px-2 py-0.5 text-[11px] font-semibold">
-                  总览
-                </span>
-                {(() => {
-                  const meta = TREND_META[report.trend]
-                  const Icon = meta.icon
-                  return (
-                    <span className={cn('rounded-lg px-2 py-0.5 text-[11px] font-semibold', meta.className)}>
-                      <Icon width={12} height={12} className="mr-1 inline shrink-0" />
-                      {meta.label}
-                    </span>
-                  )
-                })()}
-              </div>
-              <div className="mt-3 text-xl font-bold">{report.headline}</div>
-              <p className="mt-2 text-sm leading-relaxed text-white/70">{report.summary}</p>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
-                <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 width={15} height={15} className="shrink-0" />
-                  优势
-                </div>
-                <ul className="mt-3 flex flex-col gap-2">
-                  {report.strengths.map((item, index) => (
-                    <li key={index} className="text-xs leading-relaxed text-fg-muted">
-                      · {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
-                <div className="flex items-center gap-2 text-sm font-bold text-amber-600 dark:text-amber-300">
-                  <AlertTriangle width={15} height={15} className="shrink-0" />
-                  待提升
-                </div>
-                <ul className="mt-3 flex flex-col gap-2">
-                  {report.weaknesses.map((item, index) => (
-                    <li key={index} className="text-xs leading-relaxed text-fg-muted">
-                      · {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              {report.experiments.map((item) => {
-                const meta = PERFORMANCE_META[item.performance]
-                return (
-                  <div key={item.experimentId} className="rounded-2xl border border-line bg-elevated p-5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Award width={15} height={15} className="shrink-0 text-brand-600 dark:text-brand-300" />
-                      <span className="text-sm font-bold">{item.title}</span>
-                      <span className={cn('ms-auto rounded-md px-2 py-0.5 text-[11px] font-semibold', meta.className)}>
-                        {meta.label}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs leading-relaxed text-fg-muted">{item.highlight}</p>
-                    {item.deductions.length > 0 && (
-                      <div className="mt-3 flex flex-col gap-1.5">
-                        <div className="text-[11px] font-semibold text-fg-subtle">主要扣分</div>
-                        {item.deductions.map((deduction, index) => (
-                          <div key={index} className="rounded-lg bg-sunken px-3 py-1.5 text-[11px] text-fg-muted">
-                            {deduction}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="mt-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-3 py-2 text-[11px] leading-relaxed text-fg-muted">
-                      <span className="font-semibold text-brand-600 dark:text-brand-300">建议：</span>
-                      {item.advice}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="rounded-2xl border border-line bg-elevated p-5">
-              <div className="flex items-center gap-2 text-sm font-bold">
-                <Target width={15} height={15} className="shrink-0 text-brand-600 dark:text-brand-300" />
-                行动计划
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {report.actionPlan.map((item, index) => (
-                  <div key={index} className="rounded-xl border border-line bg-sunken p-3">
-                    <div className="text-xs font-semibold text-fg">{item.title}</div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-fg-muted">{item.detail}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <p className="rounded-2xl border border-line bg-sunken p-4 text-xs leading-relaxed text-fg-muted">
-              {report.closing}
-            </p>
-          </section>
-        ) : AI_ENABLED && !readonly ? (
-          <div className="rounded-2xl border border-dashed border-line p-10 text-center">
-            <Sparkles width={22} height={22} className="mx-auto shrink-0 text-fg-subtle" />
-            <div className="mt-2 text-sm font-semibold">还没有学情报告</div>
-            <div className="mt-1 text-xs text-fg-subtle">
-              点击上方「生成学情报告」，将全部报告评分、评语和扣分项交给 AI 汇总。
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <Modal state={previewState}>

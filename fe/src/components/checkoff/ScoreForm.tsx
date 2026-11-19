@@ -96,7 +96,6 @@ function ScoreInput({
 export function ScoreForm({
   experimentId,
   student,
-  aiOral,
   marks,
   existingScores,
   ratio,
@@ -106,7 +105,6 @@ export function ScoreForm({
 }: {
   experimentId: string
   student: CheckoffStudent
-  aiOral: { nonce: number; score: number; comment: string } | null
   marks: Record<string, QuestionMark | undefined>
   existingScores: Score[]
   ratio: number[]
@@ -118,7 +116,6 @@ export function ScoreForm({
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
   const [saving, setSaving] = useState(false)
-  const [remarkSync, setRemarkSync] = useState<{ nonce: number; text: string } | null>(null)
 
   useEffect(() => {
     const next: Record<number, number> = { 0: DEFAULT_SCORE, 1: DEFAULT_SCORE }
@@ -126,14 +123,8 @@ export function ScoreForm({
       const found = existingScores.find((score) => score.type === type.value)
       if (found) next[type.value] = found.score
     }
-    if (aiOral) next[1] = aiOral.score
     setValues(next)
-  }, [student.userId, existingScores, aiOral])
-
-  useEffect(() => {
-    if (!aiOral) return
-    setRemarkSync({ nonce: aiOral.nonce, text: aiOral.comment })
-  }, [aiOral])
+  }, [student.userId, existingScores])
 
   // 仅取功能测试 / 验收问答的权重；两者都为 0 时退化为等权，避免总分为空
   const rawWeights = SCORED_TYPES.map((type) => ratio[type.value] ?? 0)
@@ -259,7 +250,6 @@ export function ScoreForm({
           userId={student.userId}
           experimentId={experimentId}
           type={REMARK_TYPE_CHECKOFF}
-          sync={remarkSync ?? undefined}
         />
       </div>
 

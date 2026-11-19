@@ -774,7 +774,7 @@ export default function FocusStudents() {
                             <Link
                               to={`/console/scores/students/${item.userId}`}
                               className="block font-bold transition-colors hover:text-brand-600 dark:hover:text-brand-300"
-                              title="查看学情报告"
+                              title="查看学生详情"
                             >
                               {name}
                             </Link>
