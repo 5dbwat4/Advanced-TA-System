@@ -1,5 +1,5 @@
-import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import type { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser'
+import type { DecodeHintType } from '@zxing/library'
 import { Button, Input, ListBox, Select } from '@heroui/react'
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -46,15 +46,29 @@ const STATUS_META: Record<
   error: { label: '失败', className: 'text-danger', icon: CircleAlert },
 }
 
-function createReader(): BrowserMultiFormatReader {
+let browserModulePromise: Promise<typeof import('@zxing/browser')> | null = null
+let libraryModulePromise: Promise<typeof import('@zxing/library')> | null = null
+
+function loadZxingBrowser() {
+  browserModulePromise ??= import('@zxing/browser')
+  return browserModulePromise
+}
+
+function loadZxingLibrary() {
+  libraryModulePromise ??= import('@zxing/library')
+  return libraryModulePromise
+}
+
+async function createReader(): Promise<BrowserMultiFormatReader> {
+  const [browser, library] = await Promise.all([loadZxingBrowser(), loadZxingLibrary()])
   const hints = new Map<DecodeHintType, unknown>()
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.CODE_128,
-    BarcodeFormat.CODE_39,
-    BarcodeFormat.QR_CODE,
+  hints.set(library.DecodeHintType.POSSIBLE_FORMATS, [
+    library.BarcodeFormat.CODE_128,
+    library.BarcodeFormat.CODE_39,
+    library.BarcodeFormat.QR_CODE,
   ])
-  hints.set(DecodeHintType.TRY_HARDER, true)
-  return new BrowserMultiFormatReader(hints)
+  hints.set(library.DecodeHintType.TRY_HARDER, true)
+  return new browser.BrowserMultiFormatReader(hints)
 }
 
 function cameraErrorMessage(error: unknown): string {
@@ -168,6 +182,7 @@ export default function BoardScan() {
 
   const refreshDevices = useCallback(async () => {
     try {
+      const { BrowserMultiFormatReader } = await loadZxingBrowser()
       const list = await BrowserMultiFormatReader.listVideoInputDevices()
       setDevices(list)
     } catch {
@@ -184,7 +199,7 @@ export default function BoardScan() {
     setCameraError(null)
     setStarting(true)
     try {
-      const reader = readerRef.current ?? createReader()
+      const reader = readerRef.current ?? (await createReader())
       readerRef.current = reader
       const controls = await reader.decodeFromVideoDevice(
         deviceIdRef.current ?? undefined,

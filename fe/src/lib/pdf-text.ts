@@ -1,14 +1,9 @@
-import { PDFWorker, getDocument } from 'pdfjs-dist'
-import pdfWorkerSource from 'pdfjs-dist/build/pdf.worker.min.mjs?raw'
+import { getDocument } from 'pdfjs-dist'
 
-const workerBlobUrl = URL.createObjectURL(
-  new Blob([pdfWorkerSource], { type: 'text/javascript' }),
-)
+import '@/lib/pdf-worker'
 
 export async function extractPdfText(bytes: Uint8Array): Promise<string> {
-  const worker = new Worker(workerBlobUrl, { type: 'module' })
-  const pdfWorker = PDFWorker.create({ port: worker })
-  const task = getDocument({ data: bytes.slice(), worker: pdfWorker })
+  const task = getDocument({ data: bytes.slice() })
 
   try {
     const pdf = await task.promise
@@ -27,6 +22,5 @@ export async function extractPdfText(bytes: Uint8Array): Promise<string> {
     return pages.filter(Boolean).join('\n\n')
   } finally {
     void task.destroy().catch(() => undefined)
-    worker.terminate()
   }
 }

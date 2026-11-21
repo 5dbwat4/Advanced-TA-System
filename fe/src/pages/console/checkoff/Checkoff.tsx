@@ -3,9 +3,6 @@ import {
   Button,
   Dropdown,
   Label,
-  ListBox,
-  Modal,
-  Select,
   Spinner,
   toast as herouiToast,
   useOverlayState,
@@ -16,7 +13,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { CheckoffBankPickerModal } from '@/components/checkoff/CheckoffBankPickerModal'
+import { CheckoffCustomCardModal } from '@/components/checkoff/CheckoffCustomCardModal'
 import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
+import { CheckoffOptionBanners } from '@/components/checkoff/CheckoffOptionBanners'
+import { CheckoffPrefsModal } from '@/components/checkoff/CheckoffPrefsModal'
+import { CheckoffPresenceModal } from '@/components/checkoff/CheckoffPresenceModal'
 import { CheckoffQueueDrawer } from '@/components/checkoff/CheckoffQueueDrawer'
 import { CheckoffResumeDialog } from '@/components/checkoff/CheckoffResumeDialog'
 import { DemoStep } from '@/components/checkoff/DemoStep'
@@ -37,10 +39,8 @@ import NotebookText from '~icons/lucide/notebook-text'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
 import Users from '~icons/lucide/users'
-import { AvatarImage } from '@/components/ui/AvatarImage'
 import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
-import { Markdown } from '@/components/ui/Markdown'
 import {
   fetchBankQuestions,
   fetchCheckoff,
@@ -80,8 +80,6 @@ import {
   type CustomCard,
 } from '@/lib/custom-cards'
 import { getErrorMessage } from '@/lib/error'
-import { formatLocaleDateTime } from '@/lib/format'
-import { SCORE_TYPES } from '@/lib/scores'
 import { DEFAULT_SCORE_RATIO, resolveScoreRatio, type ScoreRatio } from '@/lib/scoring'
 import {
   clearSpecialDrawMachine,
@@ -93,15 +91,6 @@ import {
   type SpecialDrawMachine,
 } from '@/lib/special-draw'
 import { useCurrentClass } from '@/lib/store'
-import { cn } from '@/lib/utils'
-
-/** 分数类型 → 中文标签 */
-const TYPE_LABELS = new Map<number, string>(
-  SCORE_TYPES.map((type) => [type.value, type.label]),
-)
-
-/** 「跟随实验设置」在题目集下拉中的哨兵值 */
-const FOLLOW_BANK = '__follow__'
 
 export default function Checkoff() {
   const currentClass = useCurrentClass()
@@ -878,40 +867,15 @@ export default function Checkoff() {
         </div>
       )}
 
-      {specialMachine && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/25 bg-brand-500/5 px-3 py-2 text-xs">
-          <Dices width={15} height={15} className="shrink-0 text-brand-600 dark:text-brand-300" />
-          <span className="font-semibold text-fg">特殊的抽题方式已启用</span>
-          <div className="ml-auto flex items-center gap-1">
-            <Button size="sm" variant="ghost" onPress={openSpecialDrawIntro}>
-              编辑
-            </Button>
-            <Button size="sm" variant="ghost" onPress={resetSpecialDraw}>
-              恢复默认
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {bankOverrideId && !specialMachine && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/25 bg-brand-500/5 px-3 py-2 text-xs">
-          <NotebookText
-            width={15}
-            height={15}
-            className="shrink-0 text-brand-600 dark:text-brand-300"
-          />
-          <span className="font-semibold text-fg">已使用其它题目集</span>
-          {bankOverrideName && <span className="text-fg-muted">{bankOverrideName}</span>}
-          <div className="ml-auto flex items-center gap-1">
-            <Button size="sm" variant="ghost" onPress={openBankPicker}>
-              编辑
-            </Button>
-            <Button size="sm" variant="ghost" onPress={resetBankOverride}>
-              恢复默认
-            </Button>
-          </div>
-        </div>
-      )}
+      <CheckoffOptionBanners
+        specialMachine={specialMachine}
+        bankOverrideActive={Boolean(bankOverrideId)}
+        bankOverrideName={bankOverrideName}
+        onEditSpecialDraw={openSpecialDrawIntro}
+        onResetSpecialDraw={resetSpecialDraw}
+        onEditBank={openBankPicker}
+        onResetBank={resetBankOverride}
+      />
 
       <div className="relative">
         <StepIndicator
@@ -1045,25 +1009,16 @@ export default function Checkoff() {
         </AnimatePresence>
       </div>
 
-      <Modal state={prefsState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-3xl">
-              <Modal.CloseTrigger />
-              <Modal.Body>
-                <PreferenceOnboarding
-                  initial={preferences}
-                  onSubmit={savePreferences}
-                  onCancel={prefsState.close}
-                  layout="rows"
-                />
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-      <Modal
+      <CheckoffPrefsModal
+        state={prefsState}
+        preferences={preferences}
+        onSubmit={savePreferences}
+        onCancel={prefsState.close}
+      />
+      <CheckoffCustomCardModal
         state={customCardState}
+        card={selectedCustomCard}
+        markdownStyle={markdownStyle}
         onOpenChange={(open) => {
           customCardState.setOpen(open)
           if (!open) {
@@ -1071,176 +1026,21 @@ export default function Checkoff() {
             setActiveCustomCardSlotId(null)
           }
         }}
-      >
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-2xl">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <NotebookText width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>自定义 Card</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                {selectedCustomCard?.content.trim() ? (
-                  <Markdown source={selectedCustomCard.content} style={markdownStyle} />
-                ) : (
-                  <p className="py-8 text-center text-sm text-fg-subtle">这张 Card 暂无内容</p>
-                )}
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-      <Modal state={presenceState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-lg">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <Users width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>现在谁正在验收</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="flex flex-col gap-5">
-                <section className="flex flex-col gap-2">
-                  <div className="text-xs font-semibold tracking-wider text-fg-subtle">
-                    正在线上 {peers.length}
-                  </div>
-                  {peers.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-line py-4 text-center text-xs text-fg-subtle">
-                      暂无其他人在验收页
-                    </p>
-                  ) : (
-                    peers.map((peer) => (
-                      <div
-                        key={peer.userId}
-                        className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
-                      >
-                        <AvatarImage
-                          id={peer.avatar}
-                          size={32}
-                          fallback={peer.name.slice(0, 1)}
-                        />
-                        <div className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
-                          {peer.name}
-                          {peer.userId === user?.id && (
-                            <span className="ml-1 text-xs font-normal text-fg-subtle">（我）</span>
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            'shrink-0 text-xs',
-                            peer.studentName
-                              ? 'font-medium text-brand-600 dark:text-brand-300'
-                              : 'text-fg-subtle',
-                          )}
-                        >
-                          {peer.studentName ? `正在验收 ${peer.studentName}` : '空闲'}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </section>
-
-                <section className="flex flex-col gap-2">
-                  <div className="text-xs font-semibold tracking-wider text-fg-subtle">最近保存</div>
-                  {recordsLoading ? (
-                    <div className="flex justify-center py-4">
-                      <Spinner size="sm" />
-                    </div>
-                  ) : records.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-line py-4 text-center text-xs text-fg-subtle">
-                      暂无记录
-                    </p>
-                  ) : (
-                    records.map((record, index) => (
-                      <div
-                        key={`${record.userId}-${record.type}-${record.updatedAt}-${index}`}
-                        className="flex items-center gap-3 rounded-xl border border-line px-3 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-fg">
-                            {record.studentName}
-                          </div>
-                          <div className="truncate text-xs text-fg-muted">
-                            {record.experimentMark ? `${record.experimentMark} · ` : ''}
-                            {record.experimentTitle} · {TYPE_LABELS.get(record.type) ?? record.type}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <div className="tabular text-sm font-bold text-fg">{record.score}</div>
-                          <div className="text-[11px] text-fg-subtle">
-                            {record.graderName ?? '—'} · {formatLocaleDateTime(record.updatedAt)}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </section>
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-      <Modal state={bankState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <NotebookText width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>使用其它题目集</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="flex flex-col gap-3">
-                <p className="text-xs text-fg-subtle">
-                  选择后将覆盖实验设定的题目集；此设置仅保存在当前设备。
-                </p>
-                <Select
-                  aria-label="题目集"
-                  className="w-full"
-                  placeholder="跟随实验设置"
-                  value={draftBank ?? FOLLOW_BANK}
-                  onChange={(key) =>
-                    setDraftBank(key == null || key === FOLLOW_BANK ? null : String(key))
-                  }
-                >
-                  <Select.Trigger>
-                    <Select.Value />
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox>
-                      <ListBox.Item id={FOLLOW_BANK} textValue="跟随实验设置">
-                        跟随实验设置
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                      {banks.map((bank) => (
-                        <ListBox.Item key={bank.id} id={bank.id} textValue={bank.name}>
-                          {bank.name}
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      ))}
-                    </ListBox>
-                  </Select.Popover>
-                </Select>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">
-                  取消
-                </Button>
-                <Button variant="primary" onPress={confirmBankOverride}>
-                  保存
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      />
+      <CheckoffPresenceModal
+        state={presenceState}
+        peers={peers}
+        records={records}
+        recordsLoading={recordsLoading}
+        currentUserId={user?.id}
+      />
+      <CheckoffBankPickerModal
+        state={bankState}
+        banks={banks}
+        value={draftBank}
+        onChange={setDraftBank}
+        onConfirm={confirmBankOverride}
+      />
       <SpecialDrawIntroModal
         state={specialDrawState}
         onEdit={openSpecialDrawEditor}

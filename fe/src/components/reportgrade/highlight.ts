@@ -1,82 +1,44 @@
-import hljs from 'highlight.js/lib/core'
 import type { LanguageFn } from 'highlight.js'
-
-import bash from 'highlight.js/lib/languages/bash'
-import c from 'highlight.js/lib/languages/c'
-import cmake from 'highlight.js/lib/languages/cmake'
-import cpp from 'highlight.js/lib/languages/cpp'
-import csharp from 'highlight.js/lib/languages/csharp'
-import css from 'highlight.js/lib/languages/css'
-import dart from 'highlight.js/lib/languages/dart'
-import go from 'highlight.js/lib/languages/go'
-import ini from 'highlight.js/lib/languages/ini'
-import java from 'highlight.js/lib/languages/java'
-import javascript from 'highlight.js/lib/languages/javascript'
-import json from 'highlight.js/lib/languages/json'
-import kotlin from 'highlight.js/lib/languages/kotlin'
-import latex from 'highlight.js/lib/languages/latex'
-import less from 'highlight.js/lib/languages/less'
-import lua from 'highlight.js/lib/languages/lua'
-import makefile from 'highlight.js/lib/languages/makefile'
-import markdown from 'highlight.js/lib/languages/markdown'
-import matlab from 'highlight.js/lib/languages/matlab'
-import perl from 'highlight.js/lib/languages/perl'
-import php from 'highlight.js/lib/languages/php'
-import python from 'highlight.js/lib/languages/python'
-import r from 'highlight.js/lib/languages/r'
-import ruby from 'highlight.js/lib/languages/ruby'
-import rust from 'highlight.js/lib/languages/rust'
-import scss from 'highlight.js/lib/languages/scss'
-import sql from 'highlight.js/lib/languages/sql'
-import swift from 'highlight.js/lib/languages/swift'
-import typescript from 'highlight.js/lib/languages/typescript'
-import verilog from 'highlight.js/lib/languages/verilog'
-import vhdl from 'highlight.js/lib/languages/vhdl'
-import x86asm from 'highlight.js/lib/languages/x86asm'
-import xml from 'highlight.js/lib/languages/xml'
-import yaml from 'highlight.js/lib/languages/yaml'
 
 import { fileExtension } from './shared'
 
-const LANGUAGES: Record<string, LanguageFn> = {
-  bash,
-  c,
-  cmake,
-  cpp,
-  csharp,
-  css,
-  dart,
-  go,
-  ini,
-  java,
-  javascript,
-  json,
-  kotlin,
-  latex,
-  less,
-  lua,
-  makefile,
-  markdown,
-  matlab,
-  perl,
-  php,
-  python,
-  r,
-  ruby,
-  rust,
-  scss,
-  sql,
-  swift,
-  typescript,
-  verilog,
-  vhdl,
-  x86asm,
-  xml,
-  yaml,
-}
+type LanguageLoader = () => Promise<{ default: LanguageFn }>
 
-for (const [name, language] of Object.entries(LANGUAGES)) {
-  hljs.registerLanguage(name, language)
+const LANGUAGE_LOADERS: Record<string, LanguageLoader> = {
+  bash: () => import('highlight.js/lib/languages/bash'),
+  c: () => import('highlight.js/lib/languages/c'),
+  cmake: () => import('highlight.js/lib/languages/cmake'),
+  cpp: () => import('highlight.js/lib/languages/cpp'),
+  csharp: () => import('highlight.js/lib/languages/csharp'),
+  css: () => import('highlight.js/lib/languages/css'),
+  dart: () => import('highlight.js/lib/languages/dart'),
+  go: () => import('highlight.js/lib/languages/go'),
+  ini: () => import('highlight.js/lib/languages/ini'),
+  java: () => import('highlight.js/lib/languages/java'),
+  javascript: () => import('highlight.js/lib/languages/javascript'),
+  json: () => import('highlight.js/lib/languages/json'),
+  kotlin: () => import('highlight.js/lib/languages/kotlin'),
+  latex: () => import('highlight.js/lib/languages/latex'),
+  less: () => import('highlight.js/lib/languages/less'),
+  lua: () => import('highlight.js/lib/languages/lua'),
+  makefile: () => import('highlight.js/lib/languages/makefile'),
+  markdown: () => import('highlight.js/lib/languages/markdown'),
+  matlab: () => import('highlight.js/lib/languages/matlab'),
+  perl: () => import('highlight.js/lib/languages/perl'),
+  php: () => import('highlight.js/lib/languages/php'),
+  python: () => import('highlight.js/lib/languages/python'),
+  r: () => import('highlight.js/lib/languages/r'),
+  ruby: () => import('highlight.js/lib/languages/ruby'),
+  rust: () => import('highlight.js/lib/languages/rust'),
+  scss: () => import('highlight.js/lib/languages/scss'),
+  sql: () => import('highlight.js/lib/languages/sql'),
+  swift: () => import('highlight.js/lib/languages/swift'),
+  typescript: () => import('highlight.js/lib/languages/typescript'),
+  verilog: () => import('highlight.js/lib/languages/verilog'),
+  vhdl: () => import('highlight.js/lib/languages/vhdl'),
+  x86asm: () => import('highlight.js/lib/languages/x86asm'),
+  xml: () => import('highlight.js/lib/languages/xml'),
+  yaml: () => import('highlight.js/lib/languages/yaml'),
 }
 
 const EXTENSION_LANGUAGE: Record<string, string> = {
@@ -136,17 +98,37 @@ const EXTENSION_LANGUAGE: Record<string, string> = {
   m: 'matlab',
 }
 
+let corePromise: Promise<typeof import('highlight.js/lib/core')> | null = null
+const registered = new Set<string>()
+
+function loadCore() {
+  corePromise ??= import('highlight.js/lib/core')
+  return corePromise
+}
+
 /** 按文件名推断 highlight.js 语言 id，未知返回 null */
 export function highlightLanguage(name: string): string | null {
   if (name.toLowerCase() === 'makefile') return 'makefile'
   return EXTENSION_LANGUAGE[fileExtension(name)] ?? null
 }
 
-/** 高亮并返回 HTML；失败或语言未注册时返回 null，由调用方退回纯文本 */
-export function highlightCode(text: string, language: string | null): string | null {
-  if (!language || !hljs.getLanguage(language)) return null
+/** 按需加载语言并高亮；失败或语言未注册时返回 null，由调用方退回纯文本 */
+export async function highlightCode(
+  text: string,
+  language: string | null,
+): Promise<string | null> {
+  if (!language) return null
+  const loader = LANGUAGE_LOADERS[language]
+  if (!loader) return null
+
   try {
-    return hljs.highlight(text, { language, ignoreIllegals: true }).value
+    const core = (await loadCore()).default
+    if (!registered.has(language)) {
+      const module = await loader()
+      core.registerLanguage(language, module.default)
+      registered.add(language)
+    }
+    return core.highlight(text, { language, ignoreIllegals: true }).value
   } catch {
     return null
   }

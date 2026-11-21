@@ -1,29 +1,26 @@
-import MDEditor from '@uiw/react-md-editor'
-import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense } from 'react'
 
-type Props = {
+export type MarkdownEditorProps = {
   value: string
   onChange: (value: string) => void
   height?: number
 }
 
-export function MarkdownEditor({ value, onChange, height = 240 }: Props) {
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
+const MarkdownEditorImpl = lazy(() =>
+  import('./MarkdownEditorImpl').then((module) => ({ default: module.MarkdownEditorImpl })),
+)
 
-  useEffect(() => setMounted(true), [])
-
-  const mode = mounted && resolvedTheme === 'dark' ? 'dark' : 'light'
-
+export function MarkdownEditor(props: MarkdownEditorProps) {
   return (
-    <div data-color-mode={mode}>
-      <MDEditor
-        value={value}
-        onChange={(next) => onChange(next ?? '')}
-        height={height}
-        preview="live"
-      />
-    </div>
+    <Suspense
+      fallback={
+        <div
+          className="animate-pulse rounded-xl border border-line bg-sunken"
+          style={{ height: props.height ?? 240 }}
+        />
+      }
+    >
+      <MarkdownEditorImpl {...props} />
+    </Suspense>
   )
 }

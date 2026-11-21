@@ -1,47 +1,26 @@
-import {
-  Alert,
-  Button,
-  ListBox,
-  Modal,
-  Select,
-  Skeleton,
-  Spinner,
-  Tooltip,
-  useOverlayState,
-} from '@heroui/react'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Button, Skeleton, useOverlayState } from '@heroui/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-
 import ArrowLeft from '~icons/lucide/arrow-left'
-import ArrowUp from '~icons/lucide/arrow-up'
-import CalendarClock from '~icons/lucide/calendar-clock'
-import Check from '~icons/lucide/check'
 import ClipboardCheck from '~icons/lucide/clipboard-check'
-import ExternalLink from '~icons/lucide/external-link'
 import FlaskConical from '~icons/lucide/flask-conical'
-import GraduationCap from '~icons/lucide/graduation-cap'
-import MessageSquareText from '~icons/lucide/message-square-text'
-import NotebookText from '~icons/lucide/notebook-text'
-import Pencil from '~icons/lucide/pencil'
-import Percent from '~icons/lucide/percent'
-import SlidersHorizontal from '~icons/lucide/sliders-horizontal'
-import Table from '~icons/lucide/table'
-import TriangleAlert from '~icons/lucide/triangle-alert'
-import Users from '~icons/lucide/users'
-import X from '~icons/lucide/x'
-import { ScoreRatioEditor } from '@/components/settings/ScoreRatioEditor'
+
+import { ExperimentBankSection } from '@/components/experiments/ExperimentBankSection'
+import { ExperimentBindHomeworkModal } from '@/components/experiments/ExperimentBindHomeworkModal'
+import { ExperimentPreferencesModal } from '@/components/experiments/ExperimentPreferencesModal'
+import { ExperimentScoreTable } from '@/components/experiments/ExperimentScoreTable'
+import { ExperimentScoringSection } from '@/components/experiments/ExperimentScoringSection'
+import { ExperimentTimelineSection } from '@/components/experiments/ExperimentTimelineSection'
+import { ExperimentXzzdSection } from '@/components/experiments/ExperimentXzzdSection'
 import { QuestionBankPickerModal } from '@/components/questions/QuestionBankPickerModal'
 import { EmptyState } from '@/components/ui/Card'
-import { DateTimePicker } from '@/components/ui/DateTimePicker'
-import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   apiFetch,
   fetchCheckoff,
   fetchClassSettings,
   fetchClassTables,
-  fetchExperimentHomeworks,
   listBanks,
   updateClassSettings,
   updateExperiment,
@@ -49,26 +28,11 @@ import {
   type ClassSettings,
   type Experiment,
   type QuestionBank,
-  type ZjuamHomework,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
-import { formatDateTime, formatLocaleDateTime } from '@/lib/format'
-import { SCORE_TYPES, scoreKey } from '@/lib/scores'
-import { DEFAULT_SCORE_RATIO, resolveScoreRatio, weightedTotal } from '@/lib/scoring'
+import { scoreKey } from '@/lib/scores'
+import { DEFAULT_SCORE_RATIO, resolveScoreRatio } from '@/lib/scoring'
 import { useDebouncedSave } from '@/lib/use-class-settings'
-
-const MORE_BANKS_KEY = '__more__'
-
-function TimeStat({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div>
-      <div className="text-xs font-semibold text-fg-muted">{label}</div>
-      <div className={value ? 'tabular mt-1.5 text-sm' : 'tabular mt-1.5 text-sm text-fg-subtle'}>
-        {formatDateTime(value, '未指定')}
-      </div>
-    </div>
-  )
-}
 
 export default function ExperimentDetail({ readonly = false }: { readonly?: boolean }) {
   const { id } = useParams<{ id: string }>()
@@ -83,13 +47,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
 
-  const [homeworks, setHomeworks] = useState<ZjuamHomework[]>([])
-  const [homeworksLoading, setHomeworksLoading] = useState(false)
-  const [homeworksError, setHomeworksError] = useState<string | null>(null)
-  const [checkoutDraft, setCheckoutDraft] = useState<string | null>(null)
-  const [reportDraft, setReportDraft] = useState<string | null>(null)
-  const [savingXzzd, setSavingXzzd] = useState(false)
-
   const [publishDraft, setPublishDraft] = useState<string | null>(null)
   const [checkoffDeadlineDraft, setCheckoffDeadlineDraft] = useState<string | null>(null)
   const [reportDeadlineDraft, setReportDeadlineDraft] = useState<string | null>(null)
@@ -99,20 +56,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
   const bindState = useOverlayState()
   const preferencesState = useOverlayState()
   const banksState = useOverlayState()
-
-  const loadHomeworks = useCallback(async () => {
-    if (!id) return
-    setHomeworksLoading(true)
-    setHomeworksError(null)
-    try {
-      const { homeworks: list } = await fetchExperimentHomeworks(id)
-      setHomeworks(list)
-    } catch (error) {
-      setHomeworksError(getErrorMessage(error, '获取学在浙大作业失败'))
-    } finally {
-      setHomeworksLoading(false)
-    }
-  }, [id])
 
   const load = useCallback(async (experimentId: string) => {
     if (readonly) {
@@ -158,7 +101,12 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
     setRatio(resolveScoreRatio(settingsRes.settings, experimentId))
     setStudents(checkoff.students)
     setScores(
-      new Map(checkoff.scores.map((item) => [scoreKey(item.userId, item.type, item.indId), item.score])),
+      new Map(
+        checkoff.scores.map((item) => [
+          scoreKey(item.userId, item.type, item.indId),
+          item.score,
+        ]),
+      ),
     )
   }, [readonly])
 
@@ -222,15 +170,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
     banksState.close()
   }
 
-  const scoreOf = (userId: string, type: number) =>
-    experiment ? scores.get(scoreKey(userId, type, experiment.id)) : undefined
-
-  const totalOf = (userId: string) =>
-    weightedTotal(
-      [scoreOf(userId, 0) ?? null, scoreOf(userId, 1) ?? null, scoreOf(userId, 2) ?? null],
-      ratio,
-    )
-
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl space-y-3">
@@ -268,30 +207,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
   ).length
 
   const unifiedRatio = settings?.scoreRatioUnified ?? false
-
-  const openBindModal = () => {
-    setCheckoutDraft(experiment.xzzdBindIdCheckout)
-    setReportDraft(experiment.xzzdBindIdReport)
-    void loadHomeworks()
-    bindState.open()
-  }
-
-  const saveXzzdBind = async () => {
-    setSavingXzzd(true)
-    try {
-      const { experiment: updated } = await updateExperiment(experiment.id, {
-        xzzdBindIdCheckout: checkoutDraft,
-        xzzdBindIdReport: reportDraft,
-      })
-      setExperiment(updated)
-      toast.success('已保存学在浙大作业绑定')
-      bindState.close()
-    } catch (error) {
-      toast.error(getErrorMessage(error, '保存失败'))
-    } finally {
-      setSavingXzzd(false)
-    }
-  }
 
   const dirty =
     experiment !== null &&
@@ -366,440 +281,73 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
         }
       />
 
-      {!readonly && (
-        <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <NotebookText
-              width={16}
-              height={16}
-              className="shrink-0 text-brand-600 dark:text-brand-300"
-            />
-            <span className="text-sm font-bold">抽题题目集</span>
-          </div>
-          <Select
-            className="min-w-[14rem]"
-            aria-label="抽题题目集"
-            isDisabled={binding}
-            value={bank?.id ?? null}
-            placeholder="未绑定题目集"
-            onChange={(key) => {
-              if (key === MORE_BANKS_KEY) {
-                banksState.open()
-                return
-              }
-              void bind(key == null ? '' : String(key))
-            }}
-            onClear={() => void bind('')}
-          >
-            <Select.Trigger>
-              <Select.Value />
-              <Select.ClearButton />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                {recentBanks.map((item) => (
-                  <ListBox.Item key={item.id} id={item.id} textValue={item.name}>
-                    {item.name}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-                <ListBox.Item key={MORE_BANKS_KEY} id={MORE_BANKS_KEY} textValue="查看更多……">
-                  <span className="text-brand-600 dark:text-brand-300">查看更多……</span>
-                </ListBox.Item>
-              </ListBox>
-            </Select.Popover>
-          </Select>
-          {binding && <Spinner size="sm" />}
-          {bankQuestionCount !== null && (
-            <span className="tabular rounded-lg bg-brand-500/10 px-2.5 py-1 text-xs font-semibold text-brand-600 dark:text-brand-300">
-              {bankQuestionCount} 题
-            </span>
-          )}
-          <Link
-            to="/console/questions?tab=sets"
-            className="ml-auto text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300"
-          >
-            管理题目集 →
-          </Link>
-        </div>
-        {!bank && (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-            <TriangleAlert width={13} height={13} className="shrink-0" />
-            未绑定题目集时，验收抽题将没有题目。
-          </p>
-        )}
-        </div>
-      )}
+      <ExperimentBankSection
+        readonly={readonly}
+        binding={binding}
+        bank={bank}
+        recentBanks={recentBanks}
+        bankQuestionCount={bankQuestionCount}
+        onBind={bind}
+        onOpenBanks={banksState.open}
+      />
 
-      <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <CalendarClock
-              width={16}
-              height={16}
-              className="shrink-0 text-brand-600 dark:text-brand-300"
-            />
-            <span className="text-sm font-bold">时间线</span>
-          </div>
-          {!readonly && (
-          <div className="ml-auto flex items-center gap-2">
-            {showTimelineEditor ? (
-              <>
-                {hasTimeline && (
-                  <IconAction
-                    label="取消编辑"
-                    tooltip="取消"
-                    placement="bottom"
-                    variant="secondary"
-                    isDisabled={savingTimeline}
-                    onPress={cancelEditTimeline}
-                  >
-                    <X width={15} height={15} className="shrink-0" />
-                  </IconAction>
-                )}
-                <IconAction
-                  label="保存时间线"
-                  tooltip="保存"
-                  placement="bottom"
-                  isDisabled={!dirty}
-                  isPending={savingTimeline}
-                  onPress={saveTimeline}
-                >
-                  <Check width={16} height={16} className="shrink-0" />
-                </IconAction>
-              </>
-            ) : (
-              <IconAction
-                label="编辑时间线"
-                tooltip="编辑"
-                placement="bottom"
-                variant="secondary"
-                onPress={() => setEditingTimeline(true)}
-              >
-                <Pencil width={15} height={15} className="shrink-0" />
-              </IconAction>
-            )}
-          </div>
-          )}
-        </div>
-        {showTimelineEditor ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <DateTimePicker
-              label="公开时间"
-              value={publishDraft}
-              onChange={setPublishDraft}
-              isDisabled={savingTimeline}
-            />
-            <DateTimePicker
-              label="验收截止时间"
-              value={checkoffDeadlineDraft}
-              onChange={setCheckoffDeadlineDraft}
-              isDisabled={savingTimeline}
-            />
-            <DateTimePicker
-              label="报告提交截止时间"
-              value={reportDeadlineDraft}
-              onChange={setReportDeadlineDraft}
-              isDisabled={savingTimeline}
-            />
-          </div>
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <TimeStat label="公开时间" value={experiment.publishTime} />
-            <TimeStat label="验收截止时间" value={experiment.checkoffDeadline} />
-            <TimeStat label="报告提交截止时间" value={experiment.reportDeadline} />
-          </div>
-        )}
-      </div>
+      <ExperimentTimelineSection
+        readonly={readonly}
+        experiment={experiment}
+        publishDraft={publishDraft}
+        checkoffDeadlineDraft={checkoffDeadlineDraft}
+        reportDeadlineDraft={reportDeadlineDraft}
+        onPublishChange={setPublishDraft}
+        onCheckoffDeadlineChange={setCheckoffDeadlineDraft}
+        onReportDeadlineChange={setReportDeadlineDraft}
+        savingTimeline={savingTimeline}
+        showTimelineEditor={showTimelineEditor}
+        hasTimeline={hasTimeline}
+        dirty={dirty}
+        onEdit={() => setEditingTimeline(true)}
+        onCancel={cancelEditTimeline}
+        onSave={saveTimeline}
+      />
 
-      <div className="mb-4 rounded-2xl border border-line bg-elevated p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Percent
-              width={16}
-              height={16}
-              className="shrink-0 text-brand-600 dark:text-brand-300"
-            />
-            <span className="text-sm font-bold">实验计分方式</span>
-          </div>
-          {!readonly && savingRatio && <Spinner size="sm" />}
-          {unifiedRatio && (
-            <span className="text-xs text-fg-subtle">
-              已启用课程统一评分占比，
-              {readonly ? (
-                '以课程设置为准'
-              ) : (
-                <Link
-                  to="/console/courses/settings#scoring"
-                  className="font-semibold text-brand-600 transition-colors hover:underline dark:text-brand-300"
-                >
-                  前往设置修改
-                </Link>
-              )}
-            </span>
-          )}
-        </div>
-        <div className="mt-4">
-          <ScoreRatioEditor
-            value={ratio}
-            onChange={changeRatio}
-            disabled={readonly || unifiedRatio}
-          />
-          {!readonly && ratioSave.saveFailed && (
-            <Alert className="mt-3" status="warning">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Description>自动保存失败，修改尚未保存</Alert.Description>
-              </Alert.Content>
-            </Alert>
-          )}
-        </div>
-      </div>
+      <ExperimentScoringSection
+        readonly={readonly}
+        ratio={ratio}
+        unifiedRatio={unifiedRatio}
+        savingRatio={savingRatio}
+        saveFailed={ratioSave.saveFailed}
+        onChange={changeRatio}
+      />
 
-      {!readonly && (
-        <div className="mb-4 rounded-2xl border border-line bg-elevated">
-        <div className="flex w-full items-center gap-3 rounded-2xl p-5 text-left">
-          <GraduationCap
-            width={16}
-            height={16}
-            className="shrink-0 text-brand-600 dark:text-brand-300"
-          />
-          <span className="text-sm font-bold">学在浙大作业</span>
-          <span className="ml-auto text-xs text-fg-subtle">
-            {xzzdBoundCount === 0 ? '未绑定' : `已绑定 ${xzzdBoundCount}/2`}
-          </span>
-        </div>
-        <div className="flex flex-col gap-4 border-t border-line p-5">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-line p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-fg-muted">验收</span>
-              <HomeworkTag
-                id={experiment.xzzdBindIdCheckout}
-                courseId={experiment.klass?.xzzdClassId ?? null}
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-fg-muted">报告</span>
-              <HomeworkTag
-                id={experiment.xzzdBindIdReport}
-                courseId={experiment.klass?.xzzdClassId ?? null}
-              />
-            </div>
-            <Button className="sm:ml-auto" size="sm" variant="secondary" onPress={openBindModal}>
-              {xzzdBoundCount > 0 ? '重新绑定' : '绑定'}
-            </Button>
-          </div>
+      <ExperimentXzzdSection
+        readonly={readonly}
+        experiment={experiment}
+        boundCount={xzzdBoundCount}
+        onBind={bindState.open}
+        onPush={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
+        onOpenPreferences={preferencesState.open}
+      />
 
-          <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-line p-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-xs font-semibold text-fg-muted">上次同步时间</p>
-              <SyncStat
-                icon={<ArrowUp width={14} height={14} className="shrink-0" />}
-                tooltip="向上游推送成绩时间"
-                time={formatLocaleDateTime(experiment.lastXzzdUpSyncAt, '—')}
-              />
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="secondary"
-                onPress={() => navigate(`/console/experiments/${experiment.id}/xzzd-push`)}
-              >
-                向上游推送成绩
-              </Button>
-              <IconAction
-                label="偏好设置"
-                variant="secondary"
-                size="md"
-                onPress={preferencesState.open}
-              >
-                <SlidersHorizontal width={16} height={16} className="shrink-0" />
-              </IconAction>
-            </div>
-          </div>
-        </div>
-        </div>
-      )}
+      <ExperimentScoreTable
+        students={students}
+        scores={scores}
+        experimentId={experiment.id}
+        ratio={ratio}
+        onViewRemarks={() =>
+          navigate(
+            readonly
+              ? `/viewer/experiments/${experiment.id}/remarks`
+              : `/console/remarks/experiments/${experiment.id}`,
+          )
+        }
+      />
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-bold">
-          <Table width={16} height={16} className="shrink-0" />
-          学生得分
-          <span className="tabular text-xs font-normal text-fg-subtle">{students.length} 人</span>
-        </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          isDisabled={!id}
-          onPress={() => {
-            if (!id) return
-            navigate(
-              readonly
-                ? `/viewer/experiments/${id}/remarks`
-                : `/console/remarks/experiments/${id}`,
-            )
-          }}
-        >
-          <MessageSquareText width={15} height={15} className="shrink-0" />
-          查看评语
-        </Button>
-      </div>
+      <ExperimentBindHomeworkModal
+        state={bindState}
+        experiment={experiment}
+        onSaved={setExperiment}
+      />
 
-      {students.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="暂无学生"
-          hint="请先到「分数和名单」导入学生名单"
-        />
-      ) : (
-        <div className="max-h-[70vh] overflow-auto rounded-2xl border border-line">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="sticky left-0 top-0 z-30 border-b border-r border-line bg-elevated px-4 py-2 text-left font-semibold">
-                  学生
-                </th>
-                {SCORE_TYPES.map((type) => (
-                  <th
-                    key={type.value}
-                    className="sticky top-0 z-20 border-b border-r border-line bg-elevated px-4 py-2 text-center font-semibold"
-                  >
-                    {type.label}
-                  </th>
-                ))}
-                <th className="sticky top-0 z-20 border-b border-line bg-elevated px-4 py-2 text-center font-semibold">
-                  总评
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.userId} className="transition-colors hover:bg-sunken/40">
-                  <td className="sticky left-0 z-10 border-b border-r border-line bg-elevated px-4 py-2">
-                    <div className="font-bold">{student.name}</div>
-                    <div className="tabular text-xs text-fg-muted">{student.studentId}</div>
-                  </td>
-                  {SCORE_TYPES.map((type) => {
-                    const value = scoreOf(student.userId, type.value)
-                    return (
-                      <td
-                        key={type.value}
-                        className="tabular border-b border-r border-line px-4 py-2 text-center"
-                      >
-                        {value ?? <span className="text-fg-subtle">—</span>}
-                      </td>
-                    )
-                  })}
-                  <td className="tabular border-b border-line px-4 py-2 text-center font-bold">
-                    {totalOf(student.userId)?.toFixed(1) ?? (
-                      <span className="font-normal text-fg-subtle">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <Modal state={bindState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <GraduationCap width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>绑定学在浙大作业</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="flex flex-col gap-4">
-                {homeworksLoading ? (
-                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-fg-muted">
-                    <Spinner size="sm" />
-                    正在从学在浙大获取作业…
-                  </div>
-                ) : homeworksError ? (
-                  <div className="flex flex-col items-start gap-3 py-1">
-                    <p className="text-sm text-danger">{homeworksError}</p>
-                    <Button size="sm" variant="secondary" onPress={() => void loadHomeworks()}>
-                      重试
-                    </Button>
-                  </div>
-                ) : homeworks.length === 0 ? (
-                  <p className="py-1 text-sm text-fg-muted">该课程暂无可绑定的作业。</p>
-                ) : (
-                  <>
-                    <HomeworkSelect
-                      label="验收作业"
-                      value={checkoutDraft}
-                      homeworks={homeworks}
-                      disabled={savingXzzd}
-                      onChange={setCheckoutDraft}
-                    />
-                    <HomeworkSelect
-                      label="报告作业"
-                      value={reportDraft}
-                      homeworks={homeworks}
-                      disabled={savingXzzd}
-                      onChange={setReportDraft}
-                    />
-                    <p className="text-[11px] text-fg-subtle">
-                      验收与报告是两个不同的学在浙大作业，可分别绑定；不绑定可点击右侧清除。
-                    </p>
-                  </>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">
-                  取消
-                </Button>
-                <Button
-                  isPending={savingXzzd}
-                  isDisabled={homeworksLoading || Boolean(homeworksError)}
-                  onPress={saveXzzdBind}
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        <Check width={16} height={16} className="shrink-0" />
-                      )}
-                      保存
-                    </>
-                  )}
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-
-      <Modal state={preferencesState}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                  <SlidersHorizontal width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>偏好设置</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <p className="text-sm text-fg-muted">功能开发中。</p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">
-                  关闭
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <ExperimentPreferencesModal state={preferencesState} />
 
       <QuestionBankPickerModal
         state={banksState}
@@ -807,87 +355,6 @@ export default function ExperimentDetail({ readonly = false }: { readonly?: bool
         selectedBankId={bank?.id ?? null}
         onSelect={selectBank}
       />
-    </div>
-  )
-}
-
-function HomeworkTag({ id, courseId }: { id: string | null; courseId: string | null }) {
-  if (!id) return <span className="text-xs text-fg-subtle">未绑定</span>
-  const className =
-    'tabular inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-300'
-  if (!courseId) {
-    return <span className={className}>学在浙大 #{id}</span>
-  }
-  return (
-    <a
-      href={`https://courses.zju.edu.cn/course/${courseId}/learning-activity/full-screen#/${id}`}
-      target="_blank"
-      rel="noreferrer"
-      className={`${className} transition-colors hover:bg-brand-500/20`}
-    >
-      学在浙大 #{id}
-      <ExternalLink width={11} height={11} className="shrink-0" />
-    </a>
-  )
-}
-
-type SyncStatProps = {
-  icon: ReactNode
-  tooltip: string
-  time: string
-}
-
-function SyncStat({ icon, tooltip, time }: SyncStatProps) {
-  return (
-    <Tooltip delay={0}>
-      <Tooltip.Trigger className="inline-flex w-fit items-center gap-2 text-fg-muted">
-        {icon}
-        <span className="tabular text-xs">{time}</span>
-      </Tooltip.Trigger>
-      <Tooltip.Content placement="top" showArrow>
-        {tooltip}
-      </Tooltip.Content>
-    </Tooltip>
-  )
-}
-
-type HomeworkSelectProps = {
-  label: string
-  value: string | null
-  homeworks: ZjuamHomework[]
-  disabled: boolean
-  onChange: (value: string | null) => void
-}
-
-function HomeworkSelect({ label, value, homeworks, disabled, onChange }: HomeworkSelectProps) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-xs font-semibold text-fg-muted">{label}</label>
-      <Select
-        className="w-full"
-        aria-label={label}
-        isDisabled={disabled}
-        value={value}
-        placeholder="未绑定"
-        onChange={(key) => onChange(key == null ? null : String(key))}
-        onClear={() => onChange(null)}
-      >
-        <Select.Trigger>
-          <Select.Value />
-          <Select.ClearButton />
-          <Select.Indicator />
-        </Select.Trigger>
-        <Select.Popover>
-          <ListBox>
-            {homeworks.map((homework) => (
-              <ListBox.Item key={homework.id} id={String(homework.id)} textValue={homework.title}>
-                {homework.title}
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-            ))}
-          </ListBox>
-        </Select.Popover>
-      </Select>
     </div>
   )
 }

@@ -1,6 +1,13 @@
 import { Alert, Button, ProgressBar, Spinner, Tooltip } from '@heroui/react'
-import { unzipSync } from 'fflate'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import Database from '~icons/lucide/database'
 import Download from '~icons/lucide/download'
@@ -19,7 +26,6 @@ import { cn } from '@/lib/utils'
 
 import { isAttachmentCached, loadAttachmentBytes } from './cache'
 import { highlightCode, highlightLanguage } from './highlight'
-import { PdfViewer } from './PdfViewer'
 import {
   detectFileKind,
   downloadPercent,
@@ -35,6 +41,10 @@ import {
 const TEXT_PREVIEW_LIMIT = 200_000
 /** 超过该大小下载前需要用户确认 */
 const LARGE_FILE_BYTES = 50 * 1024 * 1024
+
+const PdfViewer = lazy(() =>
+  import('./PdfViewer').then((module) => ({ default: module.PdfViewer })),
+)
 
 type LoadedFile = {
   attachmentId: number
@@ -369,25 +379,41 @@ function DownloadingHint({
 }
 
 function ZipViewer({ bytes, attachmentId }: { bytes: Uint8Array; attachmentId: number }) {
-  const entries = useMemo(() => {
-    try {
-      return Object.entries(unzipSync(bytes))
-        .filter(([name, data]) => !name.endsWith('/') && data.length > 0)
-        .filter(([name]) => !isNoiseEntry(name))
-        .map(([name, data]) => ({ name, data }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    } catch {
-      return []
+  const [entries, setEntries] = useState<{ name: string; data: Uint8Array }[] | null>(null)
+  const [activeName, setActiveName] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setEntries(null)
+    void import('fflate')
+      .then(({ unzipSync }) => {
+        if (cancelled) return
+        try {
+          const next = Object.entries(unzipSync(bytes))
+            .filter(([name, data]) => !name.endsWith('/') && data.length > 0)
+            .filter(([name]) => !isNoiseEntry(name))
+            .map(([name, data]) => ({ name, data }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+          setEntries(next)
+        } catch {
+          setEntries([])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEntries([])
+      })
+    return () => {
+      cancelled = true
     }
   }, [bytes])
 
-  const [activeName, setActiveName] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const active = entries.find((entry) => entry.name === activeName) ?? entries[0] ?? null
-
+  if (entries === null) return <CenteredHint text="正在解析压缩包…" spinner />
   if (entries.length === 0) {
     return <CenteredHint text="压缩包内没有可预览的文件" />
   }
+
+  const active = entries.find((entry) => entry.name === activeName) ?? entries[0] ?? null
 
   return (
     <div className="relative flex h-full min-h-0">
@@ -468,7 +494,20 @@ function FileViewer({
   storageKey?: string
 }) {
   const kind = detectFileKind(name)
-  if (kind === 'pdf') return <PdfViewer bytes={bytes} storageKey={storageKey} />
+  if (kind === 'pdf') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-subtle">
+            <Spinner size="sm" />
+            正在加载 PDF 预览…
+          </div>
+        }
+      >
+        <PdfViewer bytes={bytes} storageKey={storageKey} />
+      </Suspense>
+    )
+  }
   if (kind === 'image') return <ImagePreview name={name} bytes={bytes} />
   if (isProbablyText(bytes)) return <TextPreview name={name} bytes={bytes} />
   return (
@@ -508,7 +547,17 @@ function TextPreview({ name, bytes }: { name: string; bytes: Uint8Array }) {
       ),
     [bytes],
   )
-  const html = useMemo(() => highlightCode(text, highlightLanguage(name)), [name, text])
+  const [html, setHtml] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setHtml(null)
+    void highlightCode(text, highlightLanguage(name)).then((next) => {
+      if (!cancelled) setHtml(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [name, text])
   const preRef = useRef<HTMLPreElement>(null)
 
   useLayoutEffect(() => {

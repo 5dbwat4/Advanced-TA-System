@@ -1,6 +1,6 @@
-import { Alert, Button, Modal, TextArea, useOverlayState } from '@heroui/react'
+import { Alert, Button, Modal, Spinner, TextArea, useOverlayState } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -10,7 +10,6 @@ import Plus from '~icons/lucide/plus'
 import Share2 from '~icons/lucide/share-2'
 import Trash2 from '~icons/lucide/trash-2'
 import Upload from '~icons/lucide/upload'
-import { SpecialDrawPreview } from '@/components/special-draw/SpecialDrawPreview'
 import { specialDrawMachineSummary } from '@/components/special-draw/special-draw-ui'
 import { IconAction } from '@/components/ui/IconAction'
 import { listBanks } from '@/lib/api'
@@ -30,6 +29,21 @@ import {
 import { cn } from '@/lib/utils'
 
 type ModalState = ReturnType<typeof useOverlayState>
+
+const SpecialDrawPreview = lazy(() =>
+  import('@/components/special-draw/SpecialDrawPreview').then((module) => ({
+    default: module.SpecialDrawPreview,
+  })),
+)
+
+function PreviewFallback() {
+  return (
+    <div className="flex h-80 items-center justify-center gap-2 rounded-xl border border-line bg-sunken text-xs text-fg-subtle">
+      <Spinner size="sm" />
+      正在加载预览…
+    </div>
+  )
+}
 
 export function SpecialDrawIntroModal({
   state,
@@ -260,7 +274,9 @@ export function SpecialDrawIntroModal({
 
                 {selectedSaved && (
                   <div className="flex flex-col gap-3">
-                    <SpecialDrawPreview machine={selectedSaved.machine} />
+                    <Suspense fallback={<PreviewFallback />}>
+                      <SpecialDrawPreview machine={selectedSaved.machine} />
+                    </Suspense>
                     <Button className="w-full" variant="primary" onPress={confirmSaved}>
                       确认应用
                     </Button>
@@ -310,7 +326,9 @@ export function SpecialDrawIntroModal({
                       </Alert.Content>
                     </Alert>
                   ) : (
-                    <SpecialDrawPreview machine={preview.machine} />
+                    <Suspense fallback={<PreviewFallback />}>
+                      <SpecialDrawPreview machine={preview.machine} />
+                    </Suspense>
                   )}
                 </div>
               </Modal.Body>
