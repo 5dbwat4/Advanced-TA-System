@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
+import { requireViewerRole } from '../lib/class-access.js'
 import { hashPassword } from '../lib/password.js'
 import { prisma } from '../lib/prisma.js'
 import {
@@ -166,7 +167,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   /** 更新观察者专属偏好（nav 展示开关，随账号存储） */
   fastify.put(
     '/viewer-preferences',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireViewerRole] },
     async (request, reply) => {
       const parsed = viewerPreferencesSchema.safeParse(request.body)
       if (!parsed.success) {

@@ -3,7 +3,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { removeQuestionsFromBanks } from '../lib/banks.js'
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import {
   filterExistingTagIds,
@@ -41,7 +41,7 @@ const listQuestionsQuerySchema = z.object({
 
 export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
   /** 题目列表（支持关键词搜索 + 分页，含出题人） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const parsedQuery = listQuestionsQuerySchema.safeParse(request.query)
     if (!parsedQuery.success) {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
@@ -75,8 +75,7 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 新建题目（所有 staff 均可上传，出题人 = 当前用户） */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
@@ -103,8 +102,7 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 更新题目（仅出题人；其他 staff 可复制一份再改） */
-  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
@@ -144,8 +142,7 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 复制题目（任意 staff，出题人 = 当前用户） */
-  fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
@@ -177,8 +174,7 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除题目（仅出题人），并清理所有题库中的引用 */
-  fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })

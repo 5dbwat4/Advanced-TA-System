@@ -3,10 +3,10 @@ import type { Class, User } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole, requireViewerOrStaff } from '../lib/class-access.js'
 import { hashPassword } from '../lib/password.js'
 import { prisma } from '../lib/prisma.js'
-import { INVITABLE_ROLES, isStaff, isViewer } from '../lib/roles.js'
+import { INVITABLE_ROLES } from '../lib/roles.js'
 
 const createTaSchema = z.object({
   /** 学号 */
@@ -79,8 +79,7 @@ function toTa(user: TaWithClass) {
 
 export const staffRoutes: FastifyPluginAsync = async (fastify) => {
   /** 助教列表 */
-  fastify.get('/tas', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/tas', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const tas = await prisma.user.findMany({
       where: { role: 'TA' },
@@ -92,12 +91,7 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 当前课程的 Staff 名单（教师 / 助教 / 观察者） */
-  fastify.get('/members', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || (!isStaff(role) && !isViewer(role))) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权查看 Staff 名单' })
-    }
-
+  fastify.get('/members', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const parsed = listMembersQuerySchema.safeParse(request.query)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '课程参数无效' })
@@ -136,8 +130,7 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
    * TODO: 单班模型下应按班级预置（`{ studentId, classId }`）或取消该接口，
    * 目前保留既有行为，按全局学号去重。
    */
-  fastify.post('/tas', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/tas', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createTaSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -165,8 +158,7 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
    * 为当前班级添加助教：创建【学号 + 班级】记录，并生成一次性初始密码。
    * 该账号首次登录后仍需在 /setup 设置用户名，并可绑定密码 / WebAuthn。
    */
-  fastify.post('/tas/class', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/tas/class', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createTaSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -230,8 +222,7 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * 为当前班级添加指定角色的用户：创建【学工号 + 班级】记录，并生成一次性初始密码。
    */
-  fastify.post('/users/class', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/users/class', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createMemberSchema.safeParse(request.body)
     if (!parsed.success) {

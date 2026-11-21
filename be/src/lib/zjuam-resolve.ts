@@ -18,7 +18,8 @@ export async function resolveZjuamCredentials(
   if (!password && user?.zjuamPassword) {
     try {
       password = decryptSecret(user.zjuamPassword)
-    } catch {
+    } catch (error) {
+      console.warn(`Failed to decrypt saved ZJUAM password for ${userId}:`, error)
       password = undefined
     }
   }

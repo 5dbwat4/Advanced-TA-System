@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { myClassIds, requireStaffRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { emitScoreChange } from '../lib/realtime.js'
 import { toScoreDto } from '../lib/score.js'
@@ -66,8 +66,6 @@ async function resolveContext(
   reply: FastifyReply,
   body: unknown,
 ): Promise<SyncContext | null> {
-  if (!requireStaff(request, reply)) return null
-
   const { id } = request.params as { id: string }
   const experiment = await prisma.experiment.findUnique({
     where: { id },
@@ -170,8 +168,8 @@ async function loadLocalState(experimentId: string, classId: string, type: numbe
 export const xzzdSyncRoutes: FastifyPluginAsync = async (fastify) => {
   /** 预览：拉取学在浙大旧作业成绩并映射到本地学生，不写库 */
   fastify.post(
-    '/:id/xzzd-sync/preview',
-    { onRequest: [fastify.authenticate] },
+    '/:id/preview',
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const context = await resolveContext(request, reply, request.body)
       if (!context) return reply
@@ -220,8 +218,8 @@ export const xzzdSyncRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 执行同步：重新拉取上游数据并按冲突策略写入本地成绩 */
   fastify.post(
-    '/:id/xzzd-sync/apply',
-    { onRequest: [fastify.authenticate] },
+    '/:id/apply',
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const parsedApply = applySchema.safeParse(request.body ?? {})
       if (!parsedApply.success) {

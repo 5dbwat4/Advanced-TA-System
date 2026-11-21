@@ -3,7 +3,11 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import { compareExperimentMark } from '../lib/banks.js'
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import {
+  myClassIds,
+  requireStaffRole,
+  requireViewerOrStaff,
+} from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { REMARK_TYPE_CHECKOFF, REMARK_TYPE_REPORT } from '../lib/remark.js'
 import { studentViewUrl as buildStudentViewUrl } from '../lib/student-view.js'
@@ -134,8 +138,6 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
     experimentId: string,
     body: unknown,
   ): Promise<XzzdPushContext | null> {
-    if (!requireStaff(request, reply)) return null
-
     const experiment = await prisma.experiment.findUnique({
       where: { id: experimentId },
       include: { klass: { select: { xzzdClassId: true } } },
@@ -311,7 +313,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
   }
 
   /** 实验列表 */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.get('/', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request) => {
     const classIds = await myClassIds(request)
     const experiments = await prisma.experiment.findMany({
       where: { classId: { in: classIds } },
@@ -328,7 +330,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.get(
     '/with-current',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const query = request.query as { classId?: unknown }
       const classId = typeof query.classId === 'string' ? query.classId : ''
@@ -367,7 +369,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   /** 实验详情 */
-  fastify.get('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/:id', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const experiment = await prisma.experiment.findUnique({
       where: { id },
@@ -389,10 +391,8 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post(
     '/:id/xzzd-homeworks',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
-
       const { id } = request.params as { id: string }
       const experiment = await prisma.experiment.findUnique({
         where: { id },
@@ -446,7 +446,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post(
     '/:id/xzzd-submissions/:personId',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const { id, personId: rawPersonId } = request.params as { id: string; personId: string }
       const personId = Number(rawPersonId)
@@ -477,7 +477,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post(
     '/:id/xzzd-push/preview',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const context = await resolveXzzdPushContext(request, reply, id, request.body)
@@ -504,7 +504,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post(
     '/:id/xzzd-push/stream',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const context = await resolveXzzdPushContext(request, reply, id, request.body)
@@ -712,7 +712,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post(
     '/:id/xzzd-push/assemble',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
       const { id } = request.params as { id: string }
       const context = await resolveXzzdPushContext(request, reply, id, request.body)
@@ -790,8 +790,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   /** 新建实验 */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createExperimentSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -846,8 +845,7 @@ export const experimentsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 更新实验（改编号 / 标题 / 绑定题库 / 绑定学在浙大作业），需属于该实验班级 */
-  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
 

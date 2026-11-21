@@ -9,7 +9,7 @@ import {
   parseBankQuestions,
   serializeBank,
 } from '../lib/banks.js'
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import {
   filterExistingTagIds,
@@ -38,7 +38,7 @@ const listBanksQuerySchema = z.object({
 
 export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   /** 题库列表（可选按标签过滤） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const parsedQuery = listBanksQuerySchema.safeParse(request.query)
     if (!parsedQuery.success) {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
@@ -54,8 +54,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 题库内的题目（按题目集内顺序，含出题人） */
-  fastify.get('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/:id/questions', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const bank = await prisma.questionBank.findUnique({
@@ -82,9 +81,8 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 新建题库（所有人 = staff 均可） */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub } = request.user as { sub?: string }
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
+
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -109,8 +107,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 重命名题库（任意 staff；前端对非 owner 会先确认） */
-  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const parsed = nameSchema.safeParse(request.body)
@@ -139,9 +136,8 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 复制题库（任意 staff，新 owner = 当前用户） */
-  fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { sub } = request.user as { sub?: string }
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
+
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -172,8 +168,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除题库（任意 staff；绑定它的实验会自动解绑） */
-  fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
 
@@ -188,8 +183,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 追加题目（去重，忽略不存在的题目 id） */
-  fastify.post('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/:id/questions', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const parsed = idsSchema.safeParse(request.body)
@@ -229,8 +223,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 移除题目 */
-  fastify.delete('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/:id/questions', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const parsed = idsSchema.safeParse(request.body)
@@ -261,8 +254,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 覆盖 / 重排题目列表 */
-  fastify.put('/:id/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.put('/:id/questions', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const parsed = idsSchema.safeParse(request.body)

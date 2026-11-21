@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { env } from '../env.js'
+import { requireViewerOrStaff } from '../lib/class-access.js'
 import { verifyCaptcha } from '../lib/hcaptcha.js'
 import { prisma } from '../lib/prisma.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
@@ -719,7 +720,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 当前学号已绑定的全部课程账号（含助教 / 学生身份） */
-  fastify.get('/accounts', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/accounts', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const payload = request.user as { sub: string }
     const current = await prisma.user.findUnique({
       where: { id: payload.sub },
@@ -743,7 +744,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /** 在同学号的多个课程账号之间切换 */
   fastify.post(
     '/accounts/switch',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireViewerOrStaff] },
     async (request, reply) => {
       const parsed = switchAccountSchema.safeParse(request.body)
       if (!parsed.success) {

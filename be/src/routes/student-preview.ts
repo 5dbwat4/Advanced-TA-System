@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { myClassIds, requireViewerOrStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { buildStudentReport } from '../lib/student-report.js'
 import type { StudentViewPayload } from '../lib/student-view.js'
@@ -39,11 +39,8 @@ export const studentPreviewRoutes: FastifyPluginAsync = async (fastify) => {
   /** 助教 / 观察者查看某学生在某实验下的成绩详情（只读） */
   fastify.get(
     '/experiment',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireViewerOrStaff] },
     async (request, reply) => {
-      const { role } = request.user as { role?: string }
-      if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
-
       const { userId, experimentId } = request.query as {
         userId?: string
         experimentId?: string

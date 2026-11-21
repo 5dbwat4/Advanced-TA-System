@@ -2,7 +2,7 @@ import { Prisma, type DevBoard } from '@prisma/client'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { myClassIds, requireStaffRole } from '../lib/class-access.js'
 import {
   loadBoardUsers,
   resolveBoardUserIds,
@@ -94,7 +94,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   }
 
   /** 开发板列表（班级内） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const parsed = listQuerySchema.safeParse(request.query)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
@@ -115,8 +115,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 新建开发板（助教 / 教师） */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createBodySchema.safeParse(request.body ?? {})
     if (!parsed.success) {
@@ -153,8 +152,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 修改开发板信息 */
-  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsedParams = boardParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -197,8 +195,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除开发板 */
-  fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsedParams = boardParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -213,8 +210,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 借出开发板（登记合用学生与联系电话） */
-  fastify.post('/:id/borrow', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/:id/borrow', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsedParams = boardParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -247,8 +243,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 归还开发板（保留登记的合用学生与电话） */
-  fastify.post('/:id/return', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/:id/return', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsedParams = boardParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -267,8 +262,7 @@ export const devboardsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 批量导入开发板（按学号匹配合用学生；逐行校验，返回失败明细） */
-  fastify.post('/import', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/import', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = importBodySchema.safeParse(request.body ?? {})
     if (!parsed.success) {

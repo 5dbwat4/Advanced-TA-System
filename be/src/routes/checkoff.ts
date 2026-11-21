@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { compareExperimentMark, parseBankQuestions } from '../lib/banks.js'
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { myClassIds, requireStaffRole } from '../lib/class-access.js'
 import { orderQueueEntries, parseSessionStats } from '../lib/checkoff-queue.js'
 import { prisma } from '../lib/prisma.js'
 import { describeScoreChange, sendPushToUser } from '../lib/push.js'
@@ -24,8 +24,7 @@ const submitSchema = z.object({
 
 export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
   /** 验收面板数据（实验 / 学生 / 已有分数，可内嵌指定实验的题目） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const query = request.query as { classId?: unknown; experimentId?: unknown; includeQuestions?: unknown }
     const classId = typeof query.classId === 'string' ? query.classId : ''
@@ -122,8 +121,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 实验题目列表（含答案） */
-  fastify.get('/questions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/questions', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const query = request.query as { experimentId?: unknown }
     const experimentId = typeof query.experimentId === 'string' ? query.experimentId : ''
@@ -172,8 +170,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 最近验收提交的成绩（本班，按更新时间倒序，最多 10 条） */
-  fastify.get('/records', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/records', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const query = request.query as { classId?: unknown }
     const classId = typeof query.classId === 'string' ? query.classId : ''
@@ -218,8 +215,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 提交验收成绩（助教 / 教师） */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub: string }
 
     const parsed = submitSchema.safeParse(request.body)
@@ -340,7 +336,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (queueSession) {
       const stats = parseSessionStats(queueSession.stats)
-      if (stats.entries.some((entry) => entry.userId === userId)) {
+      if (!stats.closedAt && stats.entries.some((entry) => entry.userId === userId)) {
         const finishedAt = new Date().toISOString()
         const entries = orderQueueEntries(
           stats.entries.map((entry) =>

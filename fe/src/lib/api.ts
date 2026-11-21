@@ -4,6 +4,21 @@ import type { CustomCards } from '@/lib/custom-cards'
 import { getZjuamCredential } from '@/lib/zjuam'
 
 const TOKEN_KEY = 'tasaas.token'
+const API_TIMEOUT_MS = 30_000
+export const AUTH_UNAUTHORIZED_EVENT = 'tasaas:auth-unauthorized'
+const PUBLIC_AUTH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/zjuam/login',
+  '/api/auth/zjuam/select-class',
+  '/api/auth/select',
+  '/api/auth/student/exchange',
+  '/api/auth/passkey/authentication-verify',
+  '/api/auth/passkey/authentication-options',
+]
+
+function isPublicAuthPath(path: string): boolean {
+  return PUBLIC_AUTH_PATHS.some((prefix) => path.startsWith(prefix))
+}
 
 export type Role = 'TA' | 'TEACHER' | 'VIEWER' | 'STUDENT'
 
@@ -208,6 +223,7 @@ export type CheckoffQueueEntry = {
 
 export type CheckoffSessionStats = {
   entries: CheckoffQueueEntry[]
+  closedAt: string | null
   [key: string]: unknown
 }
 
@@ -216,10 +232,11 @@ export type CheckoffSession = {
   classId: string
   settings: CheckoffSessionSettings
   stats: CheckoffSessionStats
+  closedAt: string | null
   createdAt: string
 }
 
-export type StudentCheckoffQueueEntry = CheckoffQueueEntry & { position: number }
+export type StudentCheckoffQueueEntry = CheckoffQueueEntry
 
 export type StudentCheckoffQueueTimelineEntry = {
   userId: string
@@ -361,13 +378,36 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(path, { ...init, headers }).catch(() => {
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, API_TIMEOUT_MS)
+  const onAbort = () => controller.abort()
+  if (init.signal) {
+    if (init.signal.aborted) controller.abort()
+    else init.signal.addEventListener('abort', onAbort, { once: true })
+  }
+
+  let res: Response | null = null
+  let text = ''
+  try {
+    res = await fetch(path, { ...init, headers, signal: controller.signal })
+    text = await res.text()
+  } catch {
+    if (timedOut) throw new ApiError(0, 'REQUEST_TIMEOUT', '请求超时，请稍后重试')
+    if (init.signal?.aborted) throw new ApiError(0, 'REQUEST_ABORTED', '请求已取消')
     throw new ApiError(0, 'NETWORK_ERROR', '网络错误，请检查连接后重试')
-  })
+  } finally {
+    clearTimeout(timer)
+    init.signal?.removeEventListener('abort', onAbort)
+  }
+
+  if (!res) throw new ApiError(0, 'NETWORK_ERROR', '网络错误，请检查连接后重试')
 
   let data: unknown = null
   let parseFailed = false
-  const text = await res.text()
   if (text) {
     try {
       data = JSON.parse(text)
@@ -388,6 +428,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         : parseFailed
           ? '请求失败，且响应不是有效的 JSON'
           : '请求失败，请稍后重试'
+    if (res.status === 401 && token && !isPublicAuthPath(path) && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
+    }
     throw new ApiError(res.status, code, message)
   }
 
@@ -1186,6 +1229,15 @@ export function fetchCheckoffSessions(
   )
 }
 
+export function closeCheckoffSession(
+  sessionId: string,
+): Promise<{ session: CheckoffSession }> {
+  return apiFetch<{ session: CheckoffSession }>(
+    `/api/checkoff/sessions/${encodeURIComponent(sessionId)}/close`,
+    { method: 'POST' },
+  )
+}
+
 export function createCheckoffSession(body: {
   classId: string
   settings: Omit<CheckoffSessionSettings, 'startAt'> & { startAt: string }
@@ -1201,6 +1253,8 @@ export type CheckoffQueueAction =
   | { action: 'precall'; userIds: string[]; called: boolean }
   | { action: 'remove'; userIds: string[] }
   | { action: 'reorder'; userId: string; toIndex: number }
+  | { action: 'requeue'; userId: string }
+  | { action: 'finish'; userId: string }
 
 export function updateCheckoffQueue(
   sessionId: string,
@@ -1222,8 +1276,8 @@ export function fetchStudentCheckoffQueue(): Promise<StudentCheckoffQueueView> {
 export function joinStudentCheckoffQueue(body: {
   experimentId: string
   taId?: string | null
-}): Promise<{ ok: true; entry: CheckoffQueueEntry; position: number }> {
-  return apiFetch<{ ok: true; entry: CheckoffQueueEntry; position: number }>(
+}): Promise<{ ok: true; entry: CheckoffQueueEntry }> {
+  return apiFetch<{ ok: true; entry: CheckoffQueueEntry }>(
     '/api/student/checkoff-queue',
     {
       method: 'POST',

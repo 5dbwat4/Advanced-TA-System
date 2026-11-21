@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { serializeTag, tagInclude } from '../lib/tags.js'
 
@@ -11,7 +11,7 @@ const nameSchema = z.object({
 
 export const tagsRoutes: FastifyPluginAsync = async (fastify) => {
   /** 标签列表（含题目 / 题目集绑定数量） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async () => {
+  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async () => {
     const tags = await prisma.tag.findMany({
       include: tagInclude,
       orderBy: { name: 'asc' },
@@ -20,7 +20,7 @@ export const tagsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 标签详情 */
-  fastify.get('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const tag = await prisma.tag.findUnique({ where: { id }, include: tagInclude })
     if (!tag) {
@@ -30,8 +30,7 @@ export const tagsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 新建标签 */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = nameSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -47,8 +46,7 @@ export const tagsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 重命名标签 */
-  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const parsed = nameSchema.safeParse(request.body)
@@ -71,8 +69,7 @@ export const tagsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除标签（自动解除题目 / 题目集上的绑定） */
-  fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { id } = request.params as { id: string }
     const existing = await prisma.tag.findUnique({ where: { id } })

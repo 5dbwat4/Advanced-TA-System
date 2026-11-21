@@ -557,6 +557,7 @@ export function CheckoffInstance({
       )}
       <CheckoffResumeDialog
         state={resumeState}
+        classId={classId}
         snapshot={resume}
         onRestore={restoreResume}
         onDiscard={discardResume}

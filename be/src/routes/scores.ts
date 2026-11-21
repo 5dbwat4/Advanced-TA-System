@@ -1,7 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import {
+  myClassIds,
+  requireStaffRole,
+  requireViewerOrStaff,
+} from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { describeScoreChange, sendPushToUser } from '../lib/push.js'
 import { emitReportScore, emitScoreChange } from '../lib/realtime.js'
@@ -26,7 +30,7 @@ const listScoresQuerySchema = z.object({
 
 export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
   /** 分数列表（仅当前用户所属班级，可按 classId 过滤） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const parsedQuery = listScoresQuerySchema.safeParse(request.query)
     if (!parsedQuery.success) {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })
@@ -67,8 +71,7 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 新建 / 更新分数（助教 / 教师） */
-  fastify.put('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.put('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub: string }
 
     const parsed = putScoreSchema.safeParse(request.body)
@@ -145,8 +148,7 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除分数（助教 / 教师） */
-  fastify.delete('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub: string }
 
     const parsed = deleteScoreSchema.safeParse(request.body)

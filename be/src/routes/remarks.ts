@@ -1,7 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import {
+  myClassIds,
+  requireStaffRole,
+  requireViewerOrStaff,
+} from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { REMARK_TYPE_CHECKOFF, toRemarkDto } from '../lib/remark.js'
 
@@ -20,9 +24,7 @@ const saveSchema = z.object({
 
 export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
   /** 读取某学生某实验某类型的备注（观察者只读可见） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
+  fastify.get('/', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
 
     const parsed = querySchema.safeParse(request.query)
     if (!parsed.success) {
@@ -44,11 +46,8 @@ export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
   /** 读取某实验下所有学生的附言（含全部类型），供「查看评语」页批量展示（观察者只读可见） */
   fastify.get(
     '/experiment/:experimentId',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireViewerOrStaff] },
     async (request, reply) => {
-      const { role } = request.user as { role?: string }
-      if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
-
       const { experimentId } = request.params as { experimentId: string }
       const experiment = await prisma.experiment.findUnique({
         where: { id: experimentId },
@@ -71,8 +70,7 @@ export const remarksRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   /** 新建 / 更新备注（助教 / 教师） */
-  fastify.put('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.put('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = saveSchema.safeParse(request.body)
     if (!parsed.success) {

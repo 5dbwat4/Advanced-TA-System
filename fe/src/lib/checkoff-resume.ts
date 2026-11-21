@@ -1,5 +1,6 @@
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import type { CheckoffExperiment, CheckoffQuestion, CheckoffStudent, Score } from '@/lib/api'
+import { warnStorageFailure } from '@/lib/storage-log'
 
 const RESUME_PREFIX = 'tasaas.checkoff.resume.v1'
 
@@ -59,7 +60,8 @@ export function loadCheckoffResume(key: string): CheckoffResumeSnapshot | null {
       activeStartedAt:
         typeof parsed.activeStartedAt === 'string' ? parsed.activeStartedAt : null,
     }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read checkoff resume snapshot', error)
     return null
   }
 }
@@ -67,15 +69,15 @@ export function loadCheckoffResume(key: string): CheckoffResumeSnapshot | null {
 export function saveCheckoffResume(key: string, snapshot: CheckoffResumeSnapshot): void {
   try {
     localStorage.setItem(key, JSON.stringify(snapshot))
-  } catch {
-    return
+  } catch (error) {
+    warnStorageFailure('save checkoff resume snapshot', error)
   }
 }
 
 export function clearCheckoffResume(key: string): void {
   try {
     localStorage.removeItem(key)
-  } catch {
-    return
+  } catch (error) {
+    warnStorageFailure('clear checkoff resume snapshot', error)
   }
 }

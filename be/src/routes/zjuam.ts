@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
+import { requireStaffRole } from '../lib/class-access.js'
 import { encryptSecret } from '../lib/crypto.js'
 import { signCourseBindToken } from '../lib/course-bind.js'
 import { prisma } from '../lib/prisma.js'
@@ -20,7 +21,7 @@ const listCoursesSchema = z.object({
 
 export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
   /** 保存 / 更新当前用户的统一身份认证凭据（密码加密存储） */
-  fastify.put('/credentials', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.put('/credentials', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const parsed = credentialSchema.safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -43,7 +44,7 @@ export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除当前用户的统一身份认证密码（保留账号） */
-  fastify.delete('/credentials', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.delete('/credentials', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const { sub } = request.user as { sub: string }
     const existing = await prisma.user.findUnique({ where: { id: sub } })
     if (!existing) {
@@ -60,7 +61,7 @@ export const zjuamRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 拉取当前用户（或指定凭据）在学在浙大的全部课程 */
-  fastify.post('/courses', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/courses', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const parsed = listCoursesSchema.safeParse(request.body ?? {})
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })

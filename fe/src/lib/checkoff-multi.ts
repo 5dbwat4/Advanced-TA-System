@@ -1,6 +1,7 @@
 import type { QuestionMark } from '@/components/checkoff/QuestionDrawer'
 import type { CheckoffExperiment, CheckoffQuestion, CheckoffStudent, Score } from '@/lib/api'
 import { clearCheckoffResume, multiCheckoffResumeKey } from '@/lib/checkoff-resume'
+import { warnStorageFailure } from '@/lib/storage-log'
 
 export const CHECKOFF_MULTI_TABS_KEY = 'tasaas.checkoffMulti.tabs.v1'
 export const CHECKOFF_MULTI_MAX_TABS = 8
@@ -68,8 +69,8 @@ export function loadMultiTabs(): MultiTabsState {
         }
       }
     }
-  } catch {
-    // 忽略损坏的存储
+  } catch (error) {
+    warnStorageFailure('load checkoff multi tabs', error)
   }
   const id = createTabId()
   return { tabs: [{ id }], activeId: id }
@@ -78,8 +79,8 @@ export function loadMultiTabs(): MultiTabsState {
 export function saveMultiTabs(state: MultiTabsState): void {
   try {
     sessionStorage.setItem(CHECKOFF_MULTI_TABS_KEY, JSON.stringify(state))
-  } catch {
-    // 忽略存储不可用
+  } catch (error) {
+    warnStorageFailure('save checkoff multi tabs', error)
   }
 }
 
@@ -105,7 +106,8 @@ export function loadInstanceSnapshot(id: string): CheckoffInstanceSnapshot | nul
       activeStartedAt:
         typeof parsed.activeStartedAt === 'string' ? parsed.activeStartedAt : null,
     }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read checkoff instance snapshot', error)
     return null
   }
 }
@@ -113,8 +115,8 @@ export function loadInstanceSnapshot(id: string): CheckoffInstanceSnapshot | nul
 export function saveInstanceSnapshot(id: string, snapshot: CheckoffInstanceSnapshot): void {
   try {
     sessionStorage.setItem(instanceStorageKey(id), JSON.stringify(snapshot))
-  } catch {
-    // 忽略存储不可用
+  } catch (error) {
+    warnStorageFailure('save checkoff instance snapshot', error)
   }
 }
 
@@ -124,7 +126,8 @@ export function pushMultiInstance(snapshot: CheckoffInstanceSnapshot): string | 
     if (sessionStorage.getItem(CHECKOFF_MULTI_TABS_KEY)) {
       tabs = loadMultiTabs().tabs
     }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read checkoff multi tab state', error)
     return null
   }
   if (tabs.length >= CHECKOFF_MULTI_MAX_TABS) return null
@@ -141,7 +144,7 @@ export function clearInstanceStorage(id: string, userId?: string, classId?: stri
   try {
     sessionStorage.removeItem(instanceStorageKey(id))
     sessionStorage.removeItem(sessionStorageKey(id))
-  } catch {
-    // 忽略存储不可用
+  } catch (error) {
+    warnStorageFailure('clear checkoff instance snapshot', error)
   }
 }

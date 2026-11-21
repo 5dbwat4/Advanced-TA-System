@@ -2,7 +2,7 @@ import type { User } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds } from '../lib/class-access.js'
+import { myClassIds, requireStaffRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 
 const studentsQuerySchema = z.object({
@@ -27,7 +27,7 @@ function toStudent(user: StudentRow) {
 
 export const rosterRoutes: FastifyPluginAsync = async (fastify) => {
   /** 班级列表 */
-  fastify.get('/classes', { onRequest: [fastify.authenticate] }, async () => {
+  fastify.get('/classes', { onRequest: [fastify.authenticate, requireStaffRole] }, async () => {
     const classes = await prisma.class.findMany({
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     })
@@ -35,7 +35,7 @@ export const rosterRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 学生列表（含所属班级，仅当前用户所属班级，可按 classId 过滤） */
-  fastify.get('/students', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/students', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
     const parsedQuery = studentsQuerySchema.safeParse(request.query)
     if (!parsedQuery.success) {
       return reply.code(400).send({ error: 'INVALID_QUERY', message: '查询参数不正确' })

@@ -1,6 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { ApiError, apiFetch, getToken, isClassSelection, isLoginSelection, selectZjuamClass, setToken, type LoginResult, type User, type UserPreferences } from '@/lib/api'
+import {
+  ApiError,
+  AUTH_UNAUTHORIZED_EVENT,
+  apiFetch,
+  getToken,
+  isClassSelection,
+  isLoginSelection,
+  selectZjuamClass,
+  setToken,
+  type LoginResult,
+  type User,
+  type UserPreferences,
+} from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
 import { queryClient } from '@/lib/query'
@@ -68,6 +80,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setToken(null)
+      setUser(null)
+      setBootstrapError(null)
+      queryClient.clear()
+    }
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
   }, [])
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole, requireViewerOrStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 
 const criterionCardSchema = z.object({
@@ -44,8 +44,7 @@ const KEY_PATTERN = /^[0-9a-f]{48}$/
 
 export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
   /** 列出当前用户创建的全部评分标准 */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const { sub } = request.user as { sub: string }
     const rows = await prisma.criteria.findMany({
@@ -83,8 +82,7 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 保存评分标准，返回 48 位 hex 分享码 */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = saveCriteriaSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -101,7 +99,7 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 按分享码读取评分标准 */
-  fastify.get('/:key', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/:key', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const key = (request.params as { key?: string }).key ?? ''
     if (!KEY_PATTERN.test(key)) {
       return reply.code(400).send({ error: 'INVALID_KEY', message: '分享码格式不正确' })
@@ -127,8 +125,7 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 更新评分标准内容（仅创建者）：原地覆盖同一分享码，引用该分享码的批阅自动沿用 */
-  fastify.put('/:key', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.put('/:key', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const key = (request.params as { key?: string }).key ?? ''
     if (!KEY_PATTERN.test(key)) {
@@ -164,8 +161,7 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
    * 影响预览（只读不落库）：返回旧 items 与所有引用该分享码的批阅，
    * 供前端比较「当前编辑内容」对已有批阅的影响。
    */
-  fastify.post('/:key/impact', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/:key/impact', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const key = (request.params as { key?: string }).key ?? ''
     if (!KEY_PATTERN.test(key)) {
@@ -217,8 +213,7 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除评分标准：仅创建者可删除，且当前无任何批阅引用时才允许 */
-  fastify.delete('/:key', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.delete('/:key', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const key = (request.params as { key?: string }).key ?? ''
     if (!KEY_PATTERN.test(key)) {

@@ -1,3 +1,5 @@
+import { warnStorageFailure } from '@/lib/storage-log'
+
 const STORAGE_KEY = 'tasaas.zjuam'
 
 export type ZjuamCredential = {
@@ -6,23 +8,32 @@ export type ZjuamCredential = {
 }
 
 export function getZjuamCredential(): ZjuamCredential | null {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return null
   try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<ZjuamCredential> | null
     if (!parsed || typeof parsed.account !== 'string' || typeof parsed.password !== 'string') {
       return null
     }
     return { account: parsed.account, password: parsed.password }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read ZJUAM credential', error)
     return null
   }
 }
 
 export function setZjuamCredential(cred: ZjuamCredential): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cred))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cred))
+  } catch (error) {
+    warnStorageFailure('save ZJUAM credential', error)
+  }
 }
 
 export function clearZjuamCredential(): void {
-  localStorage.removeItem(STORAGE_KEY)
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch (error) {
+    warnStorageFailure('clear ZJUAM credential', error)
+  }
 }

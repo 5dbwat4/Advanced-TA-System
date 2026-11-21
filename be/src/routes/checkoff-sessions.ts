@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { myClassIds, requireStaff } from '../lib/class-access.js'
+import { myClassIds, requireStaffRole, requireTARole } from '../lib/class-access.js'
 import {
   orderQueueEntries,
   parseSessionSettings,
@@ -60,6 +60,14 @@ const queueActionSchema = z.discriminatedUnion('action', [
     userId: z.string().trim().min(1),
     toIndex: z.number().int().min(0),
   }),
+  z.object({
+    action: z.literal('requeue'),
+    userId: z.string().trim().min(1),
+  }),
+  z.object({
+    action: z.literal('finish'),
+    userId: z.string().trim().min(1),
+  }),
 ])
 
 type SessionSettingsInput = z.infer<typeof sessionSettingsSchema>
@@ -75,11 +83,13 @@ function toSessionDto(row: {
   stats: string
   createdAt: Date
 }) {
+  const stats = parseSessionStats(row.stats)
   return {
     id: row.id,
     classId: row.classId,
     settings: parseSessionSettings(row.settings),
-    stats: parseSessionStats(row.stats),
+    stats,
+    closedAt: stats.closedAt,
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -212,65 +222,67 @@ function reorderEntries(
 }
 
 export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get(
+    '/',
+    { onRequest: [fastify.authenticate, requireStaffRole] },
+    async (request, reply) => {
+      const parsed = listSessionsQuerySchema.safeParse(request.query)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_QUERY', message: '课程参数无效' })
+      }
 
-    const parsed = listSessionsQuerySchema.safeParse(request.query)
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'INVALID_QUERY', message: '课程参数无效' })
-    }
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(parsed.data.classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+      }
 
-    const classIds = await myClassIds(request)
-    if (!classIds.includes(parsed.data.classId)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
-    }
+      const rows = await prisma.checkoffSession.findMany({
+        where: { classId: parsed.data.classId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      })
 
-    const rows = await prisma.checkoffSession.findMany({
-      where: { classId: parsed.data.classId },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    })
+      return reply.send({ sessions: rows.map(toSessionDto) })
+    },
+  )
 
-    return reply.send({ sessions: rows.map(toSessionDto) })
-  })
+  fastify.post(
+    '/',
+    { onRequest: [fastify.authenticate, requireStaffRole] },
+    async (request, reply) => {
+      const parsed = createSessionSchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
 
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(parsed.data.classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+      }
 
-    const parsed = createSessionSchema.safeParse(request.body)
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
-    }
+      const normalized = await normalizeSettings(parsed.data.classId, parsed.data.settings)
+      if (!normalized.ok) {
+        return reply.code(400).send({ error: 'INVALID_SETTINGS', message: normalized.message })
+      }
 
-    const classIds = await myClassIds(request)
-    if (!classIds.includes(parsed.data.classId)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
-    }
+      const session = await prisma.checkoffSession.create({
+        data: {
+          classId: parsed.data.classId,
+          settings: JSON.stringify(normalized.settings),
+          stats: JSON.stringify({ entries: [] }),
+        },
+      })
 
-    const normalized = await normalizeSettings(parsed.data.classId, parsed.data.settings)
-    if (!normalized.ok) {
-      return reply.code(400).send({ error: 'INVALID_SETTINGS', message: normalized.message })
-    }
+      emitCheckoffQueueUpdate(parsed.data.classId, session.id)
 
-    const session = await prisma.checkoffSession.create({
-      data: {
-        classId: parsed.data.classId,
-        settings: JSON.stringify(normalized.settings),
-        stats: JSON.stringify({ entries: [] }),
-      },
-    })
-
-    emitCheckoffQueueUpdate(parsed.data.classId, session.id)
-
-    return reply.code(201).send({ session: toSessionDto(session) })
-  })
+      return reply.code(201).send({ session: toSessionDto(session) })
+    },
+  )
 
   fastify.patch(
     '/:id/settings',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
-
       const params = z.object({ id: z.string().min(1) }).safeParse(request.params)
       if (!params.success) {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -289,6 +301,9 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
       const classIds = await myClassIds(request)
       if (!classIds.includes(session.classId)) {
         return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级' })
+      }
+      if (parseSessionStats(session.stats).closedAt) {
+        return reply.code(409).send({ error: 'SESSION_CLOSED', message: '排队已结束' })
       }
 
       const existingSettings = parseSessionSettings(session.settings)
@@ -314,102 +329,180 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
     },
   )
 
-  fastify.patch('/:id/queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
-
-    const params = z.object({ id: z.string().min(1) }).safeParse(request.params)
-    if (!params.success) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
-    }
-
-    const parsed = queueActionSchema.safeParse(request.body)
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
-    }
-
-    const session = await prisma.checkoffSession.findUnique({ where: { id: params.data.id } })
-    if (!session) {
-      return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '排队不存在' })
-    }
-
-    const classIds = await myClassIds(request)
-    if (!classIds.includes(session.classId)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级' })
-    }
-
-    const action = parsed.data
-    const stats = parseSessionStats(session.stats)
-    const selected = new Set(
-      action.action === 'reorder' ? [action.userId] : action.userIds,
-    )
-    const matched = stats.entries.filter((entry) => selected.has(entry.userId))
-    if (matched.length === 0) {
-      return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
-    }
-
-    let notifiedByName: string | null = null
-    if (action.action === 'precall' && action.called) {
-      const { sub } = request.user as { sub: string }
-      const me = await prisma.user.findUnique({ where: { id: sub }, select: { name: true } })
-      notifiedByName = me?.name ?? null
-    }
-
-    let entries = stats.entries
-    if (action.action === 'remove') {
-      entries = entries.filter((entry) => !selected.has(entry.userId))
-    } else if (action.action === 'precall') {
-      const notifiedAt = new Date().toISOString()
-      entries = entries.map((entry) => {
-        if (!selected.has(entry.userId) || entry.status === 'finished') return entry
-        if (action.called) {
-          if (entry.status === 'called' || entry.status === 'notified') return entry
-          return {
-            ...entry,
-            status: 'notified' as const,
-            notifiedAt,
-            notifiedBy: notifiedByName,
-            startedAt: null,
-            checkedBy: null,
-            finishedAt: null,
-          }
-        }
-        if (entry.status !== 'notified') return entry
-        return {
-          ...entry,
-          status: 'waiting' as const,
-          notifiedAt: null,
-          notifiedBy: null,
-        }
-      })
-    } else if (action.action === 'reorder') {
-      const target = entries.find((entry) => entry.userId === action.userId)
-      if (target?.status === 'finished') {
-        return reply.code(403).send({ error: 'FINISHED', message: '已完成验收，无法调整顺序' })
+  fastify.patch(
+    '/:id/queue',
+    { onRequest: [fastify.authenticate, requireStaffRole] },
+    async (request, reply) => {
+      const params = z.object({ id: z.string().min(1) }).safeParse(request.params)
+      if (!params.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
-      const reordered = reorderEntries(entries, action.userId, action.toIndex)
-      if (!reordered) {
+
+      const parsed = queueActionSchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const session = await prisma.checkoffSession.findUnique({ where: { id: params.data.id } })
+      if (!session) {
+        return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '排队不存在' })
+      }
+
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(session.classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级' })
+      }
+
+      const action = parsed.data
+      const stats = parseSessionStats(session.stats)
+      if (stats.closedAt) {
+        return reply.code(409).send({ error: 'SESSION_CLOSED', message: '排队已结束' })
+      }
+      const selected = new Set(
+        action.action === 'reorder' ||
+          action.action === 'requeue' ||
+          action.action === 'finish'
+          ? [action.userId]
+          : action.userIds,
+      )
+      const matched = stats.entries.filter((entry) => selected.has(entry.userId))
+      if (matched.length === 0) {
         return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
       }
-      entries = reordered
-    } else {
-      const movable = new Set(
-        [...selected].filter((userId) => {
-          const entry = entries.find((item) => item.userId === userId)
-          return entry !== undefined && entry.status !== 'finished'
-        }),
-      )
-      entries = movable.size > 0 ? moveEntries(entries, movable, action.direction) : entries
-    }
 
-    entries = orderQueueEntries(entries)
+      let notifiedByName: string | null = null
+      if (action.action === 'precall' && action.called) {
+        const { sub } = request.user as { sub: string }
+        const me = await prisma.user.findUnique({ where: { id: sub }, select: { name: true } })
+        notifiedByName = me?.name ?? null
+      }
 
-    const updated = await prisma.checkoffSession.update({
-      where: { id: session.id },
-      data: { stats: JSON.stringify({ ...stats, entries }) },
-    })
+      let entries = stats.entries
+      if (action.action === 'remove') {
+        entries = entries.filter((entry) => !selected.has(entry.userId))
+      } else if (action.action === 'precall') {
+        const notifiedAt = new Date().toISOString()
+        entries = entries.map((entry) => {
+          if (!selected.has(entry.userId) || entry.status === 'finished') return entry
+          if (action.called) {
+            if (entry.status === 'called' || entry.status === 'notified') return entry
+            return {
+              ...entry,
+              status: 'notified' as const,
+              notifiedAt,
+              notifiedBy: notifiedByName,
+              startedAt: null,
+              checkedBy: null,
+              finishedAt: null,
+            }
+          }
+          if (entry.status !== 'notified') return entry
+          return {
+            ...entry,
+            status: 'waiting' as const,
+            notifiedAt: null,
+            notifiedBy: null,
+          }
+        })
+      } else if (action.action === 'reorder') {
+        const target = entries.find((entry) => entry.userId === action.userId)
+        if (target?.status === 'finished') {
+          return reply.code(403).send({ error: 'FINISHED', message: '已完成验收，无法调整顺序' })
+        }
+        const reordered = reorderEntries(entries, action.userId, action.toIndex)
+        if (!reordered) {
+          return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
+        }
+        entries = reordered
+      } else if (action.action === 'requeue') {
+        const target = entries.find((entry) => entry.userId === action.userId)
+        if (!target) {
+          return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
+        }
+        if (target.status === 'finished') {
+          return reply.code(403).send({ error: 'FINISHED', message: '已完成验收，无法推回队列' })
+        }
+        entries = entries.map((entry) =>
+          entry.userId === action.userId
+            ? {
+                ...entry,
+                status: 'waiting' as const,
+                notifiedAt: null,
+                notifiedBy: null,
+                startedAt: null,
+                checkedBy: null,
+                finishedAt: null,
+              }
+            : entry,
+        )
+      } else if (action.action === 'finish') {
+        const target = entries.find((entry) => entry.userId === action.userId)
+        if (!target) {
+          return reply.code(400).send({ error: 'ENTRY_NOT_FOUND', message: '队列中没有指定学生' })
+        }
+        if (target.status !== 'finished') {
+          const finishedAt = new Date().toISOString()
+          entries = entries.map((entry) =>
+            entry.userId === action.userId
+              ? { ...entry, status: 'finished' as const, finishedAt }
+              : entry,
+          )
+        }
+      } else {
+        const movable = new Set(
+          [...selected].filter((userId) => {
+            const entry = entries.find((item) => item.userId === userId)
+            return entry !== undefined && entry.status !== 'finished'
+          }),
+        )
+        entries = movable.size > 0 ? moveEntries(entries, movable, action.direction) : entries
+      }
 
-    emitCheckoffQueueUpdate(session.classId, updated.id)
+      entries = orderQueueEntries(entries)
 
-    return reply.send({ session: toSessionDto(updated) })
-  })
+      const updated = await prisma.checkoffSession.update({
+        where: { id: session.id },
+        data: { stats: JSON.stringify({ ...stats, entries }) },
+      })
+
+      emitCheckoffQueueUpdate(session.classId, updated.id)
+
+      return reply.send({ session: toSessionDto(updated) })
+    },
+  )
+
+  fastify.post(
+    '/:id/close',
+    { onRequest: [fastify.authenticate, requireTARole] },
+    async (request, reply) => {
+      const params = z.object({ id: z.string().min(1) }).safeParse(request.params)
+      if (!params.success) {
+        return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
+      }
+
+      const session = await prisma.checkoffSession.findUnique({ where: { id: params.data.id } })
+      if (!session) {
+        return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '排队不存在' })
+      }
+
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(session.classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作该班级' })
+      }
+
+      const stats = parseSessionStats(session.stats)
+      if (stats.closedAt) {
+        return reply.send({ session: toSessionDto(session) })
+      }
+
+      const updated = await prisma.checkoffSession.update({
+        where: { id: session.id },
+        data: { stats: JSON.stringify({ ...stats, closedAt: new Date().toISOString() }) },
+      })
+
+      emitCheckoffQueueUpdate(session.classId, updated.id)
+
+      return reply.send({ session: toSessionDto(updated) })
+    },
+  )
 }

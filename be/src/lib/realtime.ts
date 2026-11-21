@@ -27,6 +27,11 @@ export type CheckoffStartedEvent = {
 }
 
 let io: Server | null = null
+let log: FastifyInstance['log'] | null = null
+
+function logQueueFailure(message: string, error: unknown, context: Record<string, unknown>) {
+  log?.warn({ err: error, ...context }, message)
+}
 
 /** 班级房间名 */
 export function roomName(classId: string): string {
@@ -107,6 +112,7 @@ async function markQueueActive(
   })
   if (!row) return { marked: false, previousStatus: 'waiting' }
   const stats = parseSessionStats(row.stats)
+  if (stats.closedAt) return { marked: false, previousStatus: 'waiting' }
   const target = stats.entries.find((entry) => entry.userId === studentId)
   if (!target) return { marked: false, previousStatus: 'waiting' }
   if (target.status === 'finished') {
@@ -154,6 +160,7 @@ async function unmarkQueueActive(
   })
   if (!row) return
   const stats = parseSessionStats(row.stats)
+  if (stats.closedAt) return
   const target = stats.entries.find((entry) => entry.userId === studentId)
   if (!target || target.status !== 'called') return
 
@@ -197,7 +204,12 @@ function removeCheckoffPresence(socket: Socket): void {
       entry.studentId,
       entry.restoreStatus ?? 'waiting',
       false,
-    ).catch(() => {})
+    ).catch((error) => {
+      logQueueFailure('failed to restore checkoff queue after presence left', error, {
+        classId,
+        studentId: entry.studentId,
+      })
+    })
   }
   broadcastCheckoffPresence(classId)
 }
@@ -445,6 +457,7 @@ function emitSlaveState(session: CheckoffSession): void {
 
 /** 创建并绑定 Socket.IO 实时服务（模块单例） */
 export function createRealtime(fastify: FastifyInstance): Server {
+  log = fastify.log
   const server = new Server(fastify.server, { cors: { origin: true } })
 
   /** 订阅某个班级的成绩广播（校验班级归属；切换时先退出其它班级房间） */
@@ -641,13 +654,21 @@ export function createRealtime(fastify: FastifyInstance): Server {
               entry.studentId,
               entry.restoreStatus ?? 'waiting',
               false,
-            ).catch(() => {})
+            ).catch((error) => {
+              logQueueFailure('failed to restore previous checkoff queue entry', error, {
+                classId,
+                studentId: entry.studentId,
+              })
+            })
           }
         }
-        const result = await markQueueActive(classId, studentId, ctx.name).catch(() => ({
-          marked: false,
-          previousStatus: 'waiting' as const,
-        }))
+        const result = await markQueueActive(classId, studentId, ctx.name).catch((error) => {
+          logQueueFailure('failed to mark checkoff queue active', error, { classId, studentId })
+          return {
+            marked: false,
+            previousStatus: 'waiting' as const,
+          }
+        })
         if (entry) {
           const sameStudent = entry.studentId === studentId
           const restoreStatus =
@@ -693,7 +714,12 @@ export function createRealtime(fastify: FastifyInstance): Server {
             studentId,
             restoreStatus,
             finished === true,
-          ).catch(() => {})
+          ).catch((error) => {
+            logQueueFailure('failed to clear checkoff queue entry', error, {
+              classId,
+              studentId,
+            })
+          })
         }
         broadcastCheckoffPresence(classId)
       },

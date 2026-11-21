@@ -86,7 +86,7 @@ function CardBody({
     .join(' · ')
   return (
     <>
-      <div className="truncate text-sm font-semibold">{entry.name}</div>
+      <div className="truncate text-sm font-semibold text-fg">{entry.name}</div>
       {experimentText ? (
         <div className="mt-0.5 truncate text-xs text-fg-muted">
           将验收 {experimentText}
@@ -94,7 +94,7 @@ function CardBody({
       ) : null}
       {current ? (
         <div className="mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300">
-          正在验收
+          {entry.checkedBy ? `正在由 ${entry.checkedBy} 验收` : '正在验收'}
           {entry.startedAt ? `，已经过 ${formatElapsed(entry.startedAt, now)}` : ''}
         </div>
       ) : entry.status === 'notified' ? (
@@ -104,18 +104,16 @@ function CardBody({
               ? `由 ${entry.notifiedBy} 预叫，请做好准备`
               : '已预叫，请做好准备'}
           </div>
-          {entry.notifiedAt && (
-            <div className="mt-1 text-[11px] text-fg-subtle">
-              已预叫 {formatElapsed(entry.notifiedAt, now)}
-            </div>
-          )}
+          <div className="mt-1 text-[11px] text-fg-subtle">
+            已等待 {formatElapsed(entry.joinedAt, now)}
+          </div>
         </>
       ) : entry.status === 'called' ? (
         <>
           <div className="mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300">
             {entry.checkedBy
-              ? `由 ${entry.checkedBy} 开始验收`
-              : '已开始验收'}
+              ? `正在由 ${entry.checkedBy} 验收`
+              : '正在验收'}
           </div>
           {entry.startedAt && (
             <div className="mt-1 text-[11px] text-fg-subtle">

@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react'
 
+import { warnStorageFailure } from '@/lib/storage-log'
+
 const STORAGE_KEY = 'tasaas.quickScores'
 
 /** 默认快捷分值 */
@@ -25,7 +27,8 @@ export function useQuickScores() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       return raw ? sanitize(JSON.parse(raw)) : [...DEFAULT_QUICK_SCORES]
-    } catch {
+    } catch (error) {
+      warnStorageFailure('read quick scores', error)
       return [...DEFAULT_QUICK_SCORES]
     }
   })
@@ -35,8 +38,8 @@ export function useQuickScores() {
     setValues(clean)
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(clean))
-    } catch {
-      // localStorage 不可用时仅保留内存态
+    } catch (error) {
+      warnStorageFailure('save quick scores', error)
     }
   }, [])
 

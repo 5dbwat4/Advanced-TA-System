@@ -13,6 +13,7 @@ import Square from '~icons/lucide/square'
 import ZoomIn from '~icons/lucide/zoom-in'
 import ZoomOut from '~icons/lucide/zoom-out'
 import { IconAction } from '@/components/ui/IconAction'
+import { warnStorageFailure } from '@/lib/storage-log'
 import { cn } from '@/lib/utils'
 
 const pdfWorkerBlobUrl = URL.createObjectURL(
@@ -455,7 +456,8 @@ function loadSavedPosition(key: string): SavedPosition | null {
     if (typeof offset !== 'number' || !Number.isFinite(offset)) return null
     if (mode !== 'scroll' && mode !== 'single') return null
     return { page: Math.floor(page), offset: clamp(offset, 0, 1), mode }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read PDF position', error)
     return null
   }
 }
@@ -463,7 +465,7 @@ function loadSavedPosition(key: string): SavedPosition | null {
 function writeSavedPosition(key: string, position: SavedPosition): void {
   try {
     window.localStorage.setItem(POSITION_STORAGE_PREFIX + key, JSON.stringify(position))
-  } catch {
-    // localStorage 不可用时静默忽略
+  } catch (error) {
+    warnStorageFailure('save PDF position', error)
   }
 }

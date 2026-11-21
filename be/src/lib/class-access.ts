@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import { prisma } from './prisma.js'
-import { isStaff, isStudent } from './roles.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -23,22 +22,21 @@ export async function myClassIds(request: FastifyRequest): Promise<string[]> {
   return loading
 }
 
-/** 要求 staff 角色，否则发送 403 并返回 false */
-export function requireStaff(request: FastifyRequest, reply: FastifyReply): boolean {
-  const { role } = request.user as { role?: string }
-  if (typeof role !== 'string' || !isStaff(role)) {
-    reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    return false
+const STAFF_ROLES = ['TA', 'TEACHER'] as const
+
+/** 生成角色校验中间件，校验失败时直接发送 403 */
+export function requireRoles(allowed: readonly string[], message = '无权操作') {
+  const allowedSet = new Set(allowed)
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const { role } = request.user as { role?: string }
+    if (typeof role !== 'string' || !allowedSet.has(role)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message })
+    }
   }
-  return true
 }
 
-/** 要求学生角色，否则发送 403 并返回 false */
-export function requireStudent(request: FastifyRequest, reply: FastifyReply): boolean {
-  const { role } = request.user as { role?: string }
-  if (typeof role !== 'string' || !isStudent(role)) {
-    reply.code(403).send({ error: 'FORBIDDEN', message: '仅学生可操作' })
-    return false
-  }
-  return true
-}
+export const requireStaffRole = requireRoles(STAFF_ROLES)
+export const requireStudentRole = requireRoles(['STUDENT'], '仅学生可操作')
+export const requireTARole = requireRoles(['TA'], '仅助教可操作')
+export const requireViewerRole = requireRoles(['VIEWER'], '仅观察者可操作')
+export const requireViewerOrStaff = requireRoles(['VIEWER', ...STAFF_ROLES])

@@ -2,8 +2,8 @@ import type { PersonalAccessToken } from '@prisma/client'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
+import { requireStaffRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
-import { isStaff } from '../lib/roles.js'
 import { generateToken, MCP_SCOPES, parseScopes } from '../lib/tokens.js'
 
 const createSchema = z.object({
@@ -32,12 +32,7 @@ function serializeToken(token: PersonalAccessToken) {
 
 export const tokensRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('onRequest', fastify.authenticate)
-  fastify.addHook('onRequest', async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (typeof role !== 'string' || !isStaff(role)) {
-      reply.code(403).send({ error: 'FORBIDDEN', message: '无权操作' })
-    }
-  })
+  fastify.addHook('onRequest', requireStaffRole)
 
   /** 当前用户的令牌列表 */
   fastify.get('/', async (request) => {

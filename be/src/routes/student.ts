@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStudent } from '../lib/class-access.js'
+import { requireStudentRole } from '../lib/class-access.js'
 import {
   isStudentInScope,
   orderQueueEntries,
@@ -35,8 +35,7 @@ const patchQueueSchema = z.discriminatedUnion('action', [
 
 /** 学生控制台：仅返回当前学生本人、当前班级的数据 */
 export const studentRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/overview', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.get('/overview', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
 
     const { sub } = request.user as { sub: string }
     const user = await prisma.user.findUnique({
@@ -114,10 +113,8 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get(
     '/experiments/:id',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStudentRole] },
     async (request, reply) => {
-      if (!requireStudent(request, reply)) return reply
-
       const { sub } = request.user as { sub: string }
       const { id } = request.params as { id: string }
       const report = await buildStudentReport(sub, id)
@@ -128,8 +125,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     },
   )
 
-  fastify.get('/checkoff-queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.get('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
 
     const { sub } = request.user as { sub: string }
     const user = await prisma.user.findUnique({
@@ -151,8 +147,11 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send({ session: null, eligible: false, reason: 'NO_SESSION' })
     }
 
-    const settings = parseSessionSettings(row.settings)
     const stats = parseSessionStats(row.stats)
+    if (stats.closedAt) {
+      return reply.send({ session: null, eligible: false, reason: 'NO_SESSION' })
+    }
+    const settings = parseSessionSettings(row.settings)
     const startTime = Date.parse(settings.startAt)
     const started = Number.isNaN(startTime) ? true : startTime <= Date.now()
     const inScope = isStudentInScope(settings, user.id)
@@ -183,9 +182,6 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       }))
 
     const entry = stats.entries.find((item) => item.userId === user.id) ?? null
-    const position = entry
-      ? stats.entries.findIndex((item) => item.userId === user.id) + 1
-      : null
 
     const queueUserIds = [...new Set(stats.entries.map((item) => item.userId))]
     const queueStudents =
@@ -229,7 +225,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
         jumpMode: settings.jumpMode,
         experiments: experimentList,
         tas: taList,
-        entry: entry ? { ...entry, position } : null,
+        entry,
         queue,
       },
       eligible: started && inScope,
@@ -237,8 +233,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     })
   })
 
-  fastify.post('/checkoff-queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.post('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
 
     const parsed = joinQueueSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -297,6 +292,14 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
       const stats = parseSessionStats(row.stats)
+      if (stats.closedAt) {
+        return {
+          ok: false as const,
+          status: 404,
+          error: 'SESSION_NOT_FOUND',
+          message: '当前没有进行中的排队',
+        }
+      }
       if (stats.entries.some((item) => item.userId === user.id)) {
         return {
           ok: false as const,
@@ -325,7 +328,6 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       return {
         ok: true as const,
         entry,
-        position: entries.findIndex((item) => item.userId === entry.userId) + 1,
       }
     })
 
@@ -335,11 +337,10 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
 
     emitCheckoffQueueUpdate(session.classId, session.id)
 
-    return reply.send({ ok: true, entry: result.entry, position: result.position })
+    return reply.send({ ok: true, entry: result.entry })
   })
 
-  fastify.patch('/checkoff-queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.patch('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
 
     const parsed = patchQueueSchema.safeParse(request.body)
     if (!parsed.success) {
@@ -369,6 +370,9 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
 
     const settings = parseSessionSettings(session.settings)
     const stats = parseSessionStats(session.stats)
+    if (stats.closedAt) {
+      return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '当前没有进行中的排队' })
+    }
 
     if (action.action === 'update') {
       if (!settings.acceptedExperimentIds.includes(action.experimentId)) {
@@ -455,8 +459,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true })
   })
 
-  fastify.delete('/checkoff-queue', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.delete('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
 
     const { sub } = request.user as { sub: string }
     const user = await prisma.user.findUnique({
@@ -479,6 +482,9 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const stats = parseSessionStats(session.stats)
+    if (stats.closedAt) {
+      return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '当前没有进行中的排队' })
+    }
     const removed = stats.entries.find((entry) => entry.userId === user.id)
     if (!removed) {
       return reply.code(404).send({ error: 'ENTRY_NOT_FOUND', message: '你不在队列中' })

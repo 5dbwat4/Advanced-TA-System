@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole } from '../lib/class-access.js'
 import { hashPassword } from '../lib/password.js'
 import { prisma } from '../lib/prisma.js'
 import { INVITABLE_ROLES } from '../lib/roles.js'
@@ -82,8 +82,7 @@ async function loadInviteContext(fastify: FastifyInstance, token: string) {
 
 export const inviteRoutes: FastifyPluginAsync = async (fastify) => {
   /** 生成邀请链接 JWT（仅 staff） */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createInviteSchema.safeParse(request.body)
     if (!parsed.success) {

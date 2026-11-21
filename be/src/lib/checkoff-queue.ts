@@ -13,6 +13,7 @@ export type CheckoffQueueEntry = {
 
 export type CheckoffSessionStats = {
   entries: CheckoffQueueEntry[]
+  closedAt: string | null
   [key: string]: unknown
 }
 
@@ -35,7 +36,8 @@ export function parseJsonObject(raw: string): Record<string, unknown> {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {}
-  } catch {
+  } catch (error) {
+    if (raw.trim()) console.warn('Failed to parse stored JSON:', error)
     return {}
   }
 }
@@ -152,7 +154,8 @@ export function parseSessionStats(raw: string): CheckoffSessionStats {
         .map(readQueueEntry)
         .filter((entry): entry is CheckoffQueueEntry => entry !== null)
     : []
-  return { ...data, entries: orderQueueEntries(entries) }
+  const closedAt = typeof data.closedAt === 'string' ? data.closedAt : null
+  return { ...data, entries: orderQueueEntries(entries), closedAt }
 }
 
 export function isStudentInScope(settings: CheckoffSessionSettings, userId: string): boolean {

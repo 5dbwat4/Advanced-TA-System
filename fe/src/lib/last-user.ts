@@ -1,4 +1,5 @@
 import type { User } from '@/lib/api'
+import { warnStorageFailure } from '@/lib/storage-log'
 
 const KEY = 'tasaas.lastUsers'
 const LEGACY_KEY = 'tasaas.lastUser'
@@ -73,7 +74,8 @@ export function getLastUsers(): LastUser[] {
     localStorage.setItem(KEY, JSON.stringify(users))
     localStorage.removeItem(LEGACY_KEY)
     return users
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read last users', error)
     return []
   }
 }
@@ -96,8 +98,8 @@ export function saveLastUser(
     const users = getLastUsers().filter((item) => item.id !== value.id)
     localStorage.setItem(KEY, JSON.stringify([value, ...users].slice(0, MAX_USERS)))
     localStorage.removeItem(LEGACY_KEY)
-  } catch {
-    // ignore
+  } catch (error) {
+    warnStorageFailure('save last user', error)
   }
 }
 

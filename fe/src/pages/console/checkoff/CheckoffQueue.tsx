@@ -1,4 +1,4 @@
-import { Button, Chip, Tooltip } from '@heroui/react'
+import { Button, Chip, Tooltip, useOverlayState } from '@heroui/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import ArrowDown from '~icons/lucide/arrow-down'
 import ArrowUp from '~icons/lucide/arrow-up'
 import ChevronsUp from '~icons/lucide/chevrons-up'
+import CircleStop from '~icons/lucide/circle-stop'
 import Megaphone from '~icons/lucide/megaphone'
 import Plus from '~icons/lucide/plus'
 import RefreshCw from '~icons/lucide/refresh-cw'
@@ -16,9 +17,11 @@ import Users from '~icons/lucide/users'
 import { QueueTimeline } from '@/components/checkoff/QueueTimeline'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { EmptyState } from '@/components/ui/Card'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
+  closeCheckoffSession,
   fetchCheckoff,
   fetchCheckoffSessions,
   listClassStaff,
@@ -28,6 +31,7 @@ import {
   type CheckoffStudent,
   type StaffMember,
 } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 import { useCheckoffQueueUpdates } from '@/lib/checkoff-socket'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
@@ -52,13 +56,16 @@ type QueueItem = {
 
 export default function CheckoffQueue() {
   const currentClass = useCurrentClass()
+  const { user } = useAuth()
   const classId = currentClass?.id ?? null
   const navigate = useNavigate()
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pending, setPending] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [reorderingId, setReorderingId] = useState<string | null>(null)
   const lastClickedIndex = useRef<number | null>(null)
+  const closeState = useOverlayState()
 
   const { data, loading, error } = useAsyncData(
     () => (classId ? fetchCheckoff({ classId }) : Promise.resolve(null)),
@@ -78,10 +85,10 @@ export default function CheckoffQueue() {
     [classId],
   )
 
-  const session = useMemo<CheckoffSession | null>(
-    () => sessionData?.sessions[0] ?? null,
-    [sessionData],
-  )
+  const session = useMemo<CheckoffSession | null>(() => {
+    const latest = sessionData?.sessions[0] ?? null
+    return latest && !latest.closedAt ? latest : null
+  }, [sessionData])
   const students = useMemo<CheckoffStudent[]>(() => data?.students ?? [], [data])
   const experiments = useMemo<CheckoffExperiment[]>(() => data?.experiments ?? [], [data])
   const studentById = useMemo(
@@ -303,6 +310,21 @@ export default function CheckoffQueue() {
     clearSelection()
   }
 
+  const closeQueue = async () => {
+    if (!session) return
+    setClosing(true)
+    try {
+      await closeCheckoffSession(session.id)
+      toast.success('验收排队已结束')
+      closeState.close()
+      reloadSessions()
+    } catch (err) {
+      toast.error(getErrorMessage(err, '结束排队失败'))
+    } finally {
+      setClosing(false)
+    }
+  }
+
   if (!classId) {
     return (
       <div className="mx-auto max-w-6xl">
@@ -318,23 +340,31 @@ export default function CheckoffQueue() {
         title="验收排队"
         subtitle={`${currentClass?.name ?? '当前课程'} · 点击学生卡片可选择，按住 Shift 可连续选择`}
         actions={
-          <Button
-            variant="primary"
-            onPress={() =>
-              navigate(
-                session
-                  ? `/console/checkoff-queue/edit?session=${encodeURIComponent(session.id)}`
-                  : '/console/checkoff-queue/new',
-              )
-            }
-          >
-            {session ? (
-              <Settings2 width={16} height={16} className="shrink-0" />
-            ) : (
-              <Plus width={16} height={16} className="shrink-0" />
-            )}
-            {session ? '编辑设置' : '创建新排队'}
-          </Button>
+          <>
+            {user?.role === 'TA' && session ? (
+              <Button variant="danger-soft" onPress={closeState.open}>
+                <CircleStop width={16} height={16} className="shrink-0" />
+                结束排队
+              </Button>
+            ) : null}
+            <Button
+              variant="primary"
+              onPress={() =>
+                navigate(
+                  session
+                    ? `/console/checkoff-queue/edit?session=${encodeURIComponent(session.id)}`
+                    : '/console/checkoff-queue/new',
+                )
+              }
+            >
+              {session ? (
+                <Settings2 width={16} height={16} className="shrink-0" />
+              ) : (
+                <Plus width={16} height={16} className="shrink-0" />
+              )}
+              {session ? '编辑设置' : '创建新排队'}
+            </Button>
+          </>
         }
       />
 
@@ -564,6 +594,17 @@ export default function CheckoffQueue() {
           </Button>
         </aside>
       </div>
+
+      <ConfirmDialog
+        state={closeState}
+        title="结束验收排队"
+        description="结束后学生将无法继续加入排队，当前队列也会从学生端移除。此操作不可撤销。"
+        confirmLabel="结束排队"
+        pendingLabel="结束中"
+        isPending={closing}
+        icon={CircleStop}
+        onConfirm={() => void closeQueue()}
+      />
     </div>
   )
 }

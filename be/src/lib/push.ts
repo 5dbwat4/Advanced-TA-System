@@ -57,7 +57,10 @@ export async function sendPushToUser(userId: string, payload: GradePushPayload):
       where: { userId },
       select: { id: true, endpoint: true, p256dh: true, auth: true },
     })
-    .catch(() => [])
+    .catch((error) => {
+      console.warn(`Failed to load push subscriptions for ${userId}:`, error)
+      return []
+    })
   if (subscriptions.length === 0) return
 
   const body = JSON.stringify({
@@ -81,7 +84,9 @@ export async function sendPushToUser(userId: string, payload: GradePushPayload):
         if (statusCode === 404 || statusCode === 410) {
           await prisma.pushSubscription
             .delete({ where: { id: subscription.id } })
-            .catch(() => undefined)
+            .catch((error) => {
+              console.warn(`Failed to delete stale push subscription ${subscription.id}:`, error)
+            })
           return
         }
         console.warn(`Web Push failed for subscription ${subscription.id}: ${statusCode ?? 'unknown'}`)

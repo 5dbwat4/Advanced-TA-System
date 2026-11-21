@@ -1254,6 +1254,7 @@ export default function Checkoff() {
       />
       <CheckoffResumeDialog
         state={resumeState}
+        classId={classId ?? null}
         snapshot={resume}
         onRestore={restoreResume}
         onDiscard={discardResume}

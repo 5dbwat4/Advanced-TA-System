@@ -72,7 +72,8 @@ export function CheckoffQueueDrawer({
     [directory],
   )
 
-  const session = sessionsData?.sessions[0] ?? null
+  const latestSession = sessionsData?.sessions[0] ?? null
+  const session = latestSession && !latestSession.closedAt ? latestSession : null
   const entries = useMemo(() => session?.stats.entries ?? [], [session])
   const timelineEntries = useMemo<QueueTimelineEntry[]>(() => {
     const items = entries.map((entry) => {

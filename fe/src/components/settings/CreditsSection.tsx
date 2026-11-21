@@ -12,6 +12,7 @@ import Star from '~icons/lucide/star'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { formatDateTime } from '@/lib/format'
+import { warnStorageFailure } from '@/lib/storage-log'
 
 const OWNER = '5dbwat4'
 const REPO = 'Advanced-TA-System'
@@ -35,7 +36,8 @@ function readCachedStats(): RepoStats | null {
       return null
     }
     return { stars: cached.stars, forks: cached.forks }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read credits cache', error)
     return null
   }
 }
@@ -55,8 +57,8 @@ export function CreditsSection({ index = 0 }: { index?: number }) {
         setStats(next)
         try {
           localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ at: Date.now(), ...next }))
-        } catch {
-          // storage unavailable — keep in-memory only
+        } catch (error) {
+          warnStorageFailure('save credits cache', error)
         }
       })
       .catch(() => undefined)

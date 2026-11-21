@@ -1,8 +1,13 @@
 import { Button, Modal, useOverlayState } from '@heroui/react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 import ClipboardCheck from '~icons/lucide/clipboard-check'
+import { fetchCheckoffSessions, updateCheckoffQueue } from '@/lib/api'
 import type { CheckoffResumeSnapshot } from '@/lib/checkoff-resume'
+import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
+import { useAsyncData } from '@/lib/request'
 
 const STEP_LABELS: Record<number, string> = {
   2: '展示 Demo',
@@ -18,18 +23,52 @@ function stepLabel(snapshot: CheckoffResumeSnapshot): string {
 
 export function CheckoffResumeDialog({
   state,
+  classId,
   snapshot,
   onRestore,
   onDiscard,
 }: {
   state: ReturnType<typeof useOverlayState>
+  classId: string | null
   snapshot: CheckoffResumeSnapshot | null
   onRestore: () => void
   onDiscard: () => void
 }) {
+  const [pendingAction, setPendingAction] = useState<'requeue' | 'finish' | null>(null)
+  const { data: sessionsData } = useAsyncData(
+    () => (classId && snapshot ? fetchCheckoffSessions(classId) : Promise.resolve(null)),
+    [classId, snapshot?.student.userId],
+  )
+  const session = sessionsData?.sessions[0] ?? null
+  const queueEntry =
+    session && !session.closedAt && snapshot
+      ? (session.stats.entries.find((entry) => entry.userId === snapshot.student.userId) ??
+        null)
+      : null
+  const canRequeue = Boolean(session && queueEntry && queueEntry.status !== 'finished')
   const experimentLabel = snapshot
     ? `${snapshot.experiment.mark} · ${snapshot.experiment.title}`
     : ''
+
+  const discardWithQueueAction = async (action: 'requeue' | 'finish') => {
+    if (!snapshot || !session) {
+      onDiscard()
+      return
+    }
+    setPendingAction(action)
+    try {
+      await updateCheckoffQueue(session.id, {
+        action,
+        userId: snapshot.student.userId,
+      })
+      toast.success(action === 'requeue' ? '已丢弃并推回队列' : '已丢弃并置为完成')
+      onDiscard()
+    } catch (error) {
+      toast.error(getErrorMessage(error, action === 'requeue' ? '推回队列失败' : '置为完成失败'))
+    } finally {
+      setPendingAction(null)
+    }
+  }
 
   return (
     <Modal state={state}>
@@ -59,11 +98,34 @@ export function CheckoffResumeDialog({
                 <p className="text-sm text-fg-muted">是否恢复？</p>
               )}
             </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onPress={onDiscard}>
-                丢弃
-              </Button>
-              <Button variant="primary" onPress={onRestore}>
+            <Modal.Footer className="flex-col items-stretch sm:flex-row sm:flex-wrap sm:justify-end">
+              {canRequeue ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    isDisabled={pendingAction !== null}
+                    onPress={() => void discardWithQueueAction('requeue')}
+                  >
+                    {pendingAction === 'requeue' ? '正在推回…' : '丢弃并将其推回队列'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    isDisabled={pendingAction !== null}
+                    onPress={() => void discardWithQueueAction('finish')}
+                  >
+                    {pendingAction === 'finish' ? '正在完成…' : '丢弃并将其置为完成'}
+                  </Button>
+                </>
+              ) : (
+                <Button variant="secondary" isDisabled={pendingAction !== null} onPress={onDiscard}>
+                  丢弃
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                isDisabled={pendingAction !== null}
+                onPress={onRestore}
+              >
                 恢复
               </Button>
             </Modal.Footer>

@@ -1,4 +1,5 @@
 import type { Role } from '@/lib/api'
+import { warnStorageFailure } from '@/lib/storage-log'
 
 export type OnboardingSource = 'invite' | 'zjuam' | 'login'
 
@@ -25,8 +26,8 @@ export type PendingInvite = {
 export function savePendingInvite(invite: PendingInvite): void {
   try {
     sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(invite))
-  } catch {
-    // ignore
+  } catch (error) {
+    warnStorageFailure('save pending invite', error)
   }
 }
 
@@ -43,7 +44,8 @@ export function readPendingInvite(): PendingInvite | null {
       role: value.role as Role,
       expiresAt: typeof value.expiresAt === 'string' ? value.expiresAt : '',
     }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read pending invite', error)
     return null
   }
 }
@@ -51,16 +53,16 @@ export function readPendingInvite(): PendingInvite | null {
 export function clearPendingInvite(): void {
   try {
     sessionStorage.removeItem(PENDING_INVITE_KEY)
-  } catch {
-    // ignore
+  } catch (error) {
+    warnStorageFailure('clear pending invite', error)
   }
 }
 
 export function saveOnboardingContext(userId: string, context: OnboardingContext): void {
   try {
     sessionStorage.setItem(`${KEY_PREFIX}${userId}`, JSON.stringify(context))
-  } catch {
-    // ignore
+  } catch (error) {
+    warnStorageFailure('save onboarding context', error)
   }
 }
 
@@ -80,7 +82,8 @@ export function readOnboardingContext(userId: string): OnboardingContext | null 
       className: typeof value.className === 'string' ? value.className : null,
       role: value.role as Role,
     }
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read onboarding context', error)
     return null
   }
 }
@@ -88,7 +91,7 @@ export function readOnboardingContext(userId: string): OnboardingContext | null 
 export function clearOnboardingContext(userId: string): void {
   try {
     sessionStorage.removeItem(`${KEY_PREFIX}${userId}`)
-  } catch {
-    // ignore
+  } catch (error) {
+    warnStorageFailure('clear onboarding context', error)
   }
 }

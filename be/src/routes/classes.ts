@@ -2,7 +2,10 @@ import { Prisma, type Class } from '@prisma/client'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access.js'
+import {
+  requireStaffRole,
+  requireViewerOrStaff,
+} from '../lib/class-access.js'
 import { checkpointRuleBit, checkpointRuleLabels } from '../lib/checkpoints.js'
 import { verifyCourseBindToken } from '../lib/course-bind.js'
 import { hashPassword } from '../lib/password.js'
@@ -128,7 +131,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
         : {}
-    } catch {
+    } catch (error) {
+      console.warn('Failed to parse class settings:', error)
       return {}
     }
   }
@@ -158,8 +162,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   }
 
   /** 录入新班级：仅持有该课程绑定授权的任课教师可创建 */
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = createClassSchema.safeParse(request.body ?? {})
     if (!parsed.success) {
@@ -224,8 +227,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 更新课程基本信息 */
-  fastify.patch('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsedParams = classParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -261,9 +263,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
    */
   fastify.post(
     '/new-account',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsed = newClassAccountSchema.safeParse(request.body ?? {})
       if (!parsed.success) {
@@ -375,9 +376,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 预览学在浙大学生名单同步差异（仅比对，不写库） */
   fastify.post(
     '/:id/roster/preview',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -443,9 +443,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 应用学在浙大学生名单同步：新增 / 更新 / 删除并记录同步时间 */
   fastify.post(
     '/:id/roster/apply',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -532,9 +531,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   /** 读取课程设置（观察者只读可见） */
-  fastify.get('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
+  fastify.get('/:id/settings', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
 
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
@@ -548,8 +545,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 更新课程设置（局部合并） */
-  fastify.patch('/:id/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.patch('/:id/settings', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsedParams = classParamsSchema.safeParse(request.params)
     if (!parsedParams.success) {
@@ -594,8 +590,7 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** Checkpoint 名单列表 */
-  fastify.get('/:id/checkpoints', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.get('/:id/checkpoints', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = classParamsSchema.safeParse(request.params)
     if (!parsed.success) {
@@ -622,9 +617,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 添加 Checkpoint 学生 */
   fastify.post(
     '/:id/checkpoints',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -675,9 +669,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 批量移除 Checkpoint 学生 */
   fastify.delete(
     '/:id/checkpoints',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -703,10 +696,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 重点关注学生名单（观察者只读可见） */
   fastify.get(
     '/:id/focus-students',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireViewerOrStaff] },
     async (request, reply) => {
-      const { role } = request.user as { role?: string }
-      if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
 
       const parsed = classParamsSchema.safeParse(request.params)
       if (!parsed.success) {
@@ -729,9 +720,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 新增重点关注学生 */
   fastify.post(
     '/:id/focus-students',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -778,9 +768,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 修改重点关注原因 */
   fastify.patch(
     '/:id/focus-students/:focusId',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = focusParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {
@@ -817,9 +806,8 @@ export const classesRoutes: FastifyPluginAsync = async (fastify) => {
   /** 批量移除重点关注学生 */
   fastify.delete(
     '/:id/focus-students',
-    { onRequest: [fastify.authenticate] },
+    { onRequest: [fastify.authenticate, requireStaffRole] },
     async (request, reply) => {
-      if (!requireStaff(request, reply)) return reply
 
       const parsedParams = classParamsSchema.safeParse(request.params)
       if (!parsedParams.success) {

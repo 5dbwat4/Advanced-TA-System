@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 import { env } from '../env.js'
-import { requireStudent } from '../lib/class-access.js'
+import { requireStudentRole } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 import { pushConfigured } from '../lib/push.js'
 
@@ -28,8 +28,7 @@ export const pushRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 保存/更新当前学生的浏览器推送订阅 */
-  fastify.post('/subscribe', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.post('/subscribe', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
     if (!pushConfigured) {
       return reply.code(503).send({ error: 'PUSH_DISABLED', message: '后台推送未配置' })
     }
@@ -64,8 +63,7 @@ export const pushRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 删除当前学生的某个浏览器推送订阅 */
-  fastify.post('/unsubscribe', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStudent(request, reply)) return reply
+  fastify.post('/unsubscribe', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
 
     const parsed = unsubscribeSchema.safeParse(request.body)
     if (!parsed.success) {

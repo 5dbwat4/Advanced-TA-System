@@ -1,4 +1,5 @@
 import { fetchBankQuestions, type CheckoffQuestion } from './api'
+import { warnStorageFailure } from './storage-log'
 
 export const SPECIAL_DRAW_STORAGE_KEY = 'tasaas.checkoff.specialDraw.v2'
 export const SPECIAL_DRAW_LIBRARY_STORAGE_KEY = 'tasaas.checkoff.specialDraw.library.v1'
@@ -426,18 +427,23 @@ export function loadSpecialDrawMachine(): SpecialDrawMachine | null {
   try {
     const raw = localStorage.getItem(SPECIAL_DRAW_STORAGE_KEY)
     return raw ? parseSpecialDrawPayload(raw) : null
-  } catch {
+  } catch (error) {
+    warnStorageFailure('load special draw machine', error)
     return null
   }
 }
 
 export function saveSpecialDrawMachine(machine: SpecialDrawMachine): void {
   const payload = createSpecialDrawPayload(machine)
-  localStorage.setItem(SPECIAL_DRAW_STORAGE_KEY, payload)
+  try {
+    localStorage.setItem(SPECIAL_DRAW_STORAGE_KEY, payload)
+  } catch (error) {
+    warnStorageFailure('save special draw machine', error)
+  }
   try {
     saveSpecialDrawMachineToLibrary(machine)
-  } catch {
-    // 本地历史保存失败时，不影响当前状态机保存
+  } catch (error) {
+    warnStorageFailure('save special draw machine history', error)
   }
 }
 
@@ -490,8 +496,8 @@ export function removeSavedSpecialDrawMachine(id: string): void {
     if (active && active === createSpecialDrawPayload(target.machine)) {
       localStorage.removeItem(SPECIAL_DRAW_STORAGE_KEY)
     }
-  } catch {
-    // localStorage 不可用时忽略
+  } catch (error) {
+    warnStorageFailure('remove active special draw machine', error)
   }
 }
 
@@ -514,15 +520,16 @@ export function listSavedSpecialDrawMachines(): SavedSpecialDrawMachine[] {
                 machine: parseSpecialDrawPayload(record.payload),
               },
             ]
-          } catch {
+          } catch (error) {
+            warnStorageFailure('parse saved special draw machine', error)
             return []
           }
         })
         if (saved.length > 0) return saved.sort((a, b) => b.savedAt - a.savedAt)
       }
     }
-  } catch {
-    // 本地历史损坏时退回当前状态机
+  } catch (error) {
+    warnStorageFailure('list saved special draw machines', error)
   }
 
   const current = loadSpecialDrawMachine()
@@ -539,8 +546,8 @@ function createSavedMachineId(): string {
 export function clearSpecialDrawMachine(): void {
   try {
     localStorage.removeItem(SPECIAL_DRAW_STORAGE_KEY)
-  } catch {
-    // localStorage 不可用时忽略
+  } catch (error) {
+    warnStorageFailure('clear special draw machine', error)
   }
 }
 

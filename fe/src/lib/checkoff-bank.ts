@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react'
 
+import { warnStorageFailure } from '@/lib/storage-log'
+
 const STORAGE_KEY = 'tasaas.checkoff.bankId'
 
 /**
@@ -11,7 +13,8 @@ export function useCheckoffBankOverride() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       return raw && raw.length > 0 ? raw : null
-    } catch {
+    } catch (error) {
+      warnStorageFailure('read checkoff bank override', error)
       return null
     }
   })
@@ -21,8 +24,8 @@ export function useCheckoffBankOverride() {
     try {
       if (next) localStorage.setItem(STORAGE_KEY, next)
       else localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      // localStorage 不可用时仅保留内存态
+    } catch (error) {
+      warnStorageFailure('save checkoff bank override', error)
     }
   }, [])
 

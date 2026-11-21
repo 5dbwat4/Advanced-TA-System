@@ -8,7 +8,7 @@ import {
   useOverlayState,
   type Key,
 } from '@heroui/react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import AlertTriangle from '~icons/lucide/alert-triangle'
@@ -65,6 +65,16 @@ export default function StudentQueue() {
   const leaveState = useOverlayState()
 
   const session = data?.session ?? null
+  const position = useMemo(() => {
+    const entry = session?.entry
+    if (!entry || entry.status === 'finished') return null
+    if (entry.status === 'called') return 1
+    const waiting = session.queue.filter(
+      (item) => item.status !== 'finished' && item.status !== 'called',
+    )
+    const index = waiting.findIndex((item) => item.userId === entry.userId)
+    return index >= 0 ? index + 1 : null
+  }, [session])
   const selectedExperiment =
     session?.experiments.find((experiment) => experiment.id === String(experimentId)) ?? null
 
@@ -197,12 +207,14 @@ export default function StudentQueue() {
               </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-              <Info label="当前位次" value={`第 ${session.entry.position} 位`} />
+              <Info label="当前位次" value={position ? `第 ${position} 位` : '—'} />
               <Info
                 label="状态"
                 value={
                   session.entry.status === 'called'
-                    ? '正在验收'
+                    ? session.entry.checkedBy
+                      ? `正在由 ${session.entry.checkedBy} 验收`
+                      : '正在验收'
                     : session.entry.status === 'notified'
                       ? '已预叫'
                       : session.entry.status === 'finished'

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaff } from '../lib/class-access.js'
+import { requireStaffRole, requireViewerOrStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
 
 const listQuerySchema = z.object({
@@ -18,9 +18,7 @@ const saveSchema = z.object({
 
 export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
   /** 读取某学生某实验的报告批阅记录（观察者只读可见） */
-  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { role } = request.user as { role?: string }
-    if (role !== 'VIEWER' && !requireStaff(request, reply)) return reply
+  fastify.get('/', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
 
     const parsed = listQuerySchema.safeParse(request.query)
     if (!parsed.success) {
@@ -50,8 +48,7 @@ export const reportReviewsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   /** 新建 / 更新报告批阅记录（助教 / 教师） */
-  fastify.put('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    if (!requireStaff(request, reply)) return reply
+  fastify.put('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const parsed = saveSchema.safeParse(request.body)
     if (!parsed.success) {

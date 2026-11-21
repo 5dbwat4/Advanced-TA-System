@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { apiFetch, type StudentOverview, type StudentOverviewExperiment } from '@/lib/api'
+import { warnStorageFailure } from '@/lib/storage-log'
 
 /** 浏览器通知轮询间隔：成绩变化最多延迟一分钟被发现 */
 export const GRADE_NOTIFICATIONS_POLL_MS = 60_000
@@ -66,7 +67,8 @@ function enabled(userId: string | null | undefined): boolean {
   if (!userId || !supported() || Notification.permission !== 'granted') return false
   try {
     return localStorage.getItem(enabledKey(userId)) === '1'
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read grade notification setting', error)
     return false
   }
 }
@@ -75,7 +77,8 @@ function backgroundEnabled(userId: string | null | undefined): boolean {
   if (!userId || !supported() || Notification.permission !== 'granted') return false
   try {
     return localStorage.getItem(backgroundKey(userId)) === '1'
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read background notification setting', error)
     return false
   }
 }
@@ -95,7 +98,8 @@ export function getBackgroundNotificationOwner(): string | null {
   try {
     const value = localStorage.getItem(BACKGROUND_OWNER_KEY)
     return value && value.length > 0 ? value : null
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read background notification owner', error)
     return null
   }
 }
@@ -109,8 +113,8 @@ export function setGradeNotifyEnabled(userId: string, next: boolean): void {
       localStorage.removeItem(enabledKey(userId))
       localStorage.removeItem(snapshotKey(userId))
     }
-  } catch {
-    // localStorage 不可用时只在内存中生效
+  } catch (error) {
+    warnStorageFailure('write grade notification setting', error)
   }
   emitChange()
 }
@@ -186,7 +190,8 @@ export function readGradeSnapshot(userId: string): Snapshot | null {
       }
     }
     return snapshot
-  } catch {
+  } catch (error) {
+    warnStorageFailure('read grade snapshot', error)
     return null
   }
 }
@@ -195,8 +200,8 @@ export function readGradeSnapshot(userId: string): Snapshot | null {
 export function writeGradeSnapshot(userId: string, overview: StudentOverview): void {
   try {
     localStorage.setItem(snapshotKey(userId), JSON.stringify(toSnapshot(overview)))
-  } catch {
-    // localStorage 不可用时跳过持久化
+  } catch (error) {
+    warnStorageFailure('write grade snapshot', error)
   }
 }
 
@@ -337,8 +342,8 @@ export async function syncBackgroundGradeNotifications(userId: string): Promise<
     const subscription = await ensurePushSubscription(registration, applicationServerKey)
     await savePushSubscription(subscription)
     localStorage.setItem(BACKGROUND_OWNER_KEY, userId)
-  } catch {
-    // 后台推送不可用时静默处理，不影响前台提醒
+  } catch (error) {
+    console.warn('[notifications] failed to register background notifications', error)
   }
 }
 
@@ -356,7 +361,8 @@ export async function enableBackgroundGradeNotifications(
   let registration: ServiceWorkerRegistration | null
   try {
     registration = await getPushRegistration()
-  } catch {
+  } catch (error) {
+    console.warn('[notifications] failed to get push registration', error)
     registration = null
   }
   if (!registration) {
@@ -384,8 +390,8 @@ export async function disableBackgroundGradeNotifications(userId: string): Promi
   try {
     localStorage.removeItem(backgroundKey(userId))
     localStorage.removeItem(BACKGROUND_OWNER_KEY)
-  } catch {
-    // localStorage 不可用时忽略
+  } catch (error) {
+    warnStorageFailure('clear background notification setting', error)
   }
   emitChange()
 
@@ -399,8 +405,8 @@ export async function disableBackgroundGradeNotifications(userId: string): Promi
       body: JSON.stringify({ endpoint: subscription.endpoint }),
     }).catch(() => undefined)
     await subscription.unsubscribe().catch(() => undefined)
-  } catch {
-    // 清理失败不影响本地开关关闭
+  } catch (error) {
+    console.warn('[notifications] failed to unsubscribe push subscription', error)
   }
 }
 
@@ -430,7 +436,8 @@ export async function showGradeNotification(title: string, body: string): Promis
       notification.close()
     }
     return true
-  } catch {
+  } catch (error) {
+    console.warn('[notifications] failed to show notification', error)
     return false
   }
 }
