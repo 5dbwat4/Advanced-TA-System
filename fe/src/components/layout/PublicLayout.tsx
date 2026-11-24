@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
+import { RouteBoundary } from '@/components/ui/RouteBoundary'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 /** 无需登录的独立页 layout：居中容器 + 返回 + 主题切换 */
@@ -33,7 +34,9 @@ export function PublicLayout() {
       </div>
 
       <div className="mt-8">
-        <Outlet />
+        <RouteBoundary>
+          <Outlet />
+        </RouteBoundary>
       </div>
     </div>
   )

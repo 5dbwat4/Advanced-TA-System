@@ -1,6 +1,6 @@
 import { Button, Drawer, Modal, useOverlayState } from '@heroui/react'
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -17,7 +17,6 @@ import { useQuestionBasket, type BasketQuestion } from '@/lib/question-basket'
 import { fetchQuestionsByIds, invalidateQuestions } from '@/lib/query'
 
 export function QuestionBasket() {
-  const { pathname } = useLocation()
   const navigate = useNavigate()
   const items = useQuestionBasket((state) => state.items)
   const remove = useQuestionBasket((state) => state.remove)
@@ -32,10 +31,6 @@ export function QuestionBasket() {
   const [editQuestion, setEditQuestion] = useState('')
   const [editAnswer, setEditAnswer] = useState('')
   const [saving, setSaving] = useState(false)
-
-  const visible =
-    pathname.startsWith('/console/questions') || pathname.startsWith('/console/tag')
-  if (!visible) return null
 
   const detail = detailId ? (items.find((item) => item.id === detailId) ?? null) : null
   const allSelected = items.length > 0 && selectedIds.length === items.length

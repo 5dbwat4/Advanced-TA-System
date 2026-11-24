@@ -12,6 +12,7 @@ import { ClassAccountMenu } from '@/components/layout/ClassAccountMenu'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
+import { RouteBoundary } from '@/components/ui/RouteBoundary'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
 import type { IconComponent } from '@/lib/icon'
@@ -134,7 +135,9 @@ export function ViewerShell() {
         </header>
 
         <main className="flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">
-          <Outlet />
+          <RouteBoundary>
+            <Outlet />
+          </RouteBoundary>
         </main>
       </div>
 

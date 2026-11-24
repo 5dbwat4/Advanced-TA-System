@@ -278,7 +278,9 @@
 
         function probeStatus(url, callback) {
           if (!window.fetch) return
-          fetch(url, { cache: 'no-store' })
+          var controller = new AbortController()
+          var timer = window.setTimeout(function () { controller.abort() }, 5000)
+          fetch(url, { cache: 'no-store', signal: controller.signal })
             .then(function (response) {
               if (response.body && response.body.cancel) {
                 response.body.cancel().catch(function () {})
@@ -288,54 +290,15 @@
             .catch(function (error) {
               callback(describeError(error))
             })
+            .finally(function () { window.clearTimeout(timer) })
         }
 
         function retry() {
-          var tasks = []
-          try {
-            if (navigator.serviceWorker) {
-              tasks.push(
-                navigator.serviceWorker
-                  .getRegistrations()
-                  .then(function (registrations) {
-                    return Promise.all(
-                      registrations.map(function (registration) {
-                        return registration.unregister()
-                      }),
-                    )
-                  })
-                  .catch(function () {}),
-              )
-            }
-          } catch (error) {}
-          try {
-            if (window.caches) {
-              tasks.push(
-                caches
-                  .keys()
-                  .then(function (keys) {
-                    return Promise.all(
-                      keys
-                        .filter(function (key) {
-                          return key.indexOf('tasaas-') === 0
-                        })
-                        .map(function (key) {
-                          return caches.delete(key)
-                        }),
-                    )
-                  })
-                  .catch(function () {}),
-              )
-            }
-          } catch (error) {}
-          Promise.all(tasks).then(
-            function () {
-              window.location.reload()
-            },
-            function () {
-              window.location.reload()
-            },
-          )
+          if (window.__TA_RECOVER__) {
+            window.__TA_RECOVER__().catch(function () { window.location.reload() })
+            return
+          }
+          window.location.reload()
         }
 
         function bindRetry() {
@@ -468,7 +431,12 @@
             fail('资源加载失败', true, describeError(payload))
             return
           }
-          fail('资源加载失败', true, describeError(payload), true)
+          if (window.__TA_REPORT__) {
+            window.__TA_REPORT__('chunk_load_error', {
+              message: describeError(payload),
+              url: location.href,
+            })
+          }
         })
         window.addEventListener('pb:app-ready', function () {
           if (failed && !window.__BOOT_FAILED__) {

@@ -1,15 +1,13 @@
 import type { Plugin } from 'vite'
 
+import type { AssetRouting } from './asset-routing.ts'
+
 type BundleEntry = {
   type?: string
   code?: string
   source?: string | Uint8Array
   imports?: string[]
   viteMetadata?: { importedCss?: Set<string> }
-}
-
-function isRemote(url: string): boolean {
-  return /^https?:\/\//i.test(url)
 }
 
 function parseAttrs(text: string): Record<string, string> {
@@ -22,11 +20,6 @@ function parseAttrs(text: string): Record<string, string> {
   return attrs
 }
 
-function joinUrl(base: string, key: string): string {
-  const prefix = base.endsWith('/') ? base : `${base}/`
-  return prefix + key.replace(/^\.?\//, '')
-}
-
 function cleanHref(href: string): string {
   return href.split(/[?#]/)[0]
 }
@@ -37,11 +30,13 @@ function bundleSize(entry: BundleEntry): number {
   return Buffer.byteLength(typeof source === 'string' ? source : Buffer.from(source))
 }
 
-function localHrefs(html: string): {
+function criticalHrefs(html: string, cdnAssetPrefix: string): {
   entry: string | null
   styles: string[]
   preloads: string[]
 } {
+  const managed = (url: string) =>
+    !/^https?:\/\//i.test(url) || Boolean(cdnAssetPrefix && url.startsWith(cdnAssetPrefix))
   let entry: string | null = null
   const styles: string[] = []
   const preloads: string[] = []
@@ -49,14 +44,14 @@ function localHrefs(html: string): {
   for (const match of html.matchAll(/<script\b([^>]*)><\/script>/gi)) {
     const attrs = parseAttrs(match[1])
     const src = attrs.src
-    if (!src || isRemote(src)) continue
+    if (!src || !managed(src)) continue
     if ((attrs.type || '').toLowerCase() === 'module' && !entry) entry = src
   }
 
   for (const match of html.matchAll(/<link\b([^>]*?)\/?>/gi)) {
     const attrs = parseAttrs(match[1])
     const href = attrs.href
-    if (!href || isRemote(href)) continue
+    if (!href || !managed(href)) continue
     const rel = (attrs.rel || '').toLowerCase()
     if (rel === 'stylesheet') styles.push(href)
     else if (rel === 'modulepreload') preloads.push(href)
@@ -65,13 +60,7 @@ function localHrefs(html: string): {
   return { entry, styles, preloads }
 }
 
-/**
- * 把首屏关键资源的 URL 与构建后大小内联进 HTML，供运行时计算真实加载进度。
- *
- * 只注入元数据，不删除/延迟任何 script、stylesheet 或 modulepreload；
- * 首屏仍由浏览器按标准 HTML 关键路径加载。
- */
-export function bootProgress(): Plugin {
+export function bootProgress(routing: AssetRouting): Plugin {
   let base = '/'
 
   return {
@@ -86,11 +75,11 @@ export function bootProgress(): Plugin {
       order: 'post',
       handler(html, ctx) {
         const bundle = (ctx.bundle || {}) as Record<string, BundleEntry>
-        const { entry, styles, preloads } = localHrefs(html)
+        const { entry, styles, preloads } = criticalHrefs(html, routing.cdnAssetPrefix)
 
         const keyByUrl = new Map<string, string>()
         for (const key of Object.keys(bundle)) {
-          keyByUrl.set(joinUrl(base, key), key)
+          keyByUrl.set(routing.urlForFile(base, key, bundleSize(bundle[key])), key)
         }
 
         const assets: Array<{ u: string; s: number }> = []
@@ -101,7 +90,8 @@ export function bootProgress(): Plugin {
           const output = bundle[key]
           if (!output) return
           seen.add(key)
-          assets.push({ u: joinUrl(base, key), s: bundleSize(output) })
+          const size = bundleSize(output)
+          assets.push({ u: routing.urlForFile(base, key, size), s: size })
           if (output.type === 'chunk') {
             for (const imported of output.imports ?? []) addKey(imported)
             for (const css of output.viteMetadata?.importedCss ?? []) addKey(css)
@@ -120,7 +110,7 @@ export function bootProgress(): Plugin {
 
         if (assets.length === 0) return html
 
-        const entryUrl = entryKey ? joinUrl(base, entryKey) : ''
+        const entryUrl = entryKey ? routing.urlForFile(base, entryKey, bundleSize(bundle[entryKey])) : ''
         const data = JSON.stringify(assets).replace(/</g, '\\u003c')
         const entryData = JSON.stringify(entryUrl).replace(/</g, '\\u003c')
         const script = `<script>window.__BOOT_ASSETS__=${data};window.__BOOT_ENTRY__=${entryData}</script>`

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 
 import type { MarkdownEditorProps } from './MarkdownEditor'
 
+import '@uiw/react-md-editor/markdown-editor.css'
+
 export function MarkdownEditorImpl({ value, onChange, height = 240 }: MarkdownEditorProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)

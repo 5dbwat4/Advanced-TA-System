@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import Icons from 'unplugin-icons/vite'
 import { defineConfig, loadEnv } from 'vite'
 
+import { createAssetRouting } from './plugins/asset-routing.ts'
 import { buildInfo } from './plugins/build-info.ts'
 import { bootProgress } from './plugins/boot-progress.ts'
 import { htmlMinify } from './plugins/html-minify.ts'
@@ -21,7 +22,7 @@ function packageChunkName(moduleId: string): string | null {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '')
-  const assetsCdn = env.ASSETS_CDN?.replace(/\/+$/, '')
+  const routing = createAssetRouting(env.ASSETS_CDN, env.ASSETS_ORIGIN_MAX_BYTES)
 
   return {
     plugins: [
@@ -29,16 +30,11 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false }),
       buildInfo(),
-      bootProgress(),
-      serviceWorker(),
+      routing.plugin(),
+      bootProgress(routing),
+      serviceWorker(routing),
       htmlMinify(),
     ],
-    experimental: {
-      renderBuiltUrl(filename, { type }) {
-        if (!assetsCdn || type !== 'asset' || !filename.startsWith('assets/')) return
-        return `${assetsCdn}/${filename}`
-      },
-    },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -50,11 +46,11 @@ export default defineConfig(({ mode }) => {
       exclude: ['minecraft-404-page', 'isbinaryfile-browser', 'avatars'],
     },
     build: {
+      chunkImportMap: true,
       rolldownOptions: {
         output: {
-          // 产物命名统一为 `name.[hash].js` / `name.[hash].css`（用点分隔 hash）。
-          chunkFileNames: 'assets/[name].[hash].js',
-          assetFileNames: 'assets/[name].[hash][extname]',
+          chunkFileNames: routing.chunkFileNames,
+          assetFileNames: routing.assetFileNames,
           // 按 `node_modules/<package>/` 分包：每个依赖各自成 chunk，hash 稳定，
           // 配合 Service Worker 缓存即可增量更新（只重新下载变化的包）。
           codeSplitting: {

@@ -1,6 +1,6 @@
 import { Tooltip } from '@heroui/react'
 import { motion } from 'motion/react'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -11,16 +11,20 @@ import PanelLeftClose from '~icons/lucide/panel-left-close'
 import PanelLeftOpen from '~icons/lucide/panel-left-open'
 import School from '~icons/lucide/school'
 import { ClassAccountMenu } from '@/components/layout/ClassAccountMenu'
-import { QuestionBasket } from '@/components/questions/QuestionBasket'
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
+import { RouteBoundary } from '@/components/ui/RouteBoundary'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
 import { MOBILE_NAV_ITEMS, MORE_PATH, NAV_ITEMS, isMoreSection } from '@/lib/nav'
 import { useAppStore, useCurrentClass, useHasXzzdPermission } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { getZjuamCredential } from '@/lib/zjuam'
+
+const QuestionBasket = lazy(() =>
+  import('@/components/questions/QuestionBasket').then((module) => ({ default: module.QuestionBasket })),
+)
 
 export function AppShell() {
   const { user, logout } = useAuth()
@@ -276,11 +280,17 @@ export function AppShell() {
         </nav>
 
         <main className="flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">
-          <Outlet />
+          <RouteBoundary>
+            <Outlet />
+          </RouteBoundary>
         </main>
       </div>
 
-      <QuestionBasket />
+      {(pathname.startsWith('/console/questions') || pathname.startsWith('/console/tag')) && (
+        <Suspense fallback={null}>
+          <QuestionBasket />
+        </Suspense>
+      )}
     </div>
   )
 }

@@ -7,39 +7,15 @@ import { Toast } from '@heroui/react'
 import { ThemeProvider } from 'next-themes'
 
 import App from '@/App'
+import { RoutePrefetch } from '@/components/ui/RoutePrefetch'
 import { ServiceWorkerUpdate } from '@/components/ui/ServiceWorkerUpdate'
 import { Toaster } from '@/components/ui/Toaster'
 import { AuthProvider } from '@/lib/auth'
 import { queryClient } from '@/lib/query'
 import { initSentry } from '@/lib/sentry'
 import '@/index.css'
-import '@uiw/react-md-editor/markdown-editor.css'
 
 initSentry()
-
-async function hardRefresh(): Promise<void> {
-  try {
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(registrations.map((registration) => registration.unregister()))
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    if ('caches' in window) {
-      const keys = await caches.keys()
-      await Promise.all(
-        keys
-          .filter((key) => key.startsWith('tasaas-'))
-          .map((key) => caches.delete(key)),
-      )
-    }
-  } catch {
-    /* ignore */
-  }
-  window.location.reload()
-}
 
 function AppCrash({ eventId, resetError }: { eventId: string; resetError: () => void }) {
   return (
@@ -52,7 +28,9 @@ function AppCrash({ eventId, resetError }: { eventId: string; resetError: () => 
           type="button"
           onClick={() => {
             resetError()
-            void hardRefresh()
+            void Sentry.flush(1500)
+              .catch(() => false)
+              .finally(() => window.location.reload())
           }}
           className="mt-6 rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700"
         >
@@ -76,6 +54,7 @@ createRoot(document.getElementById('root')!).render(
               <div className="grid-overlay" aria-hidden />
               <App />
               <Toaster />
+              <RoutePrefetch />
               <ServiceWorkerUpdate />
               <Toast.Provider placement="top" />
             </AuthProvider>

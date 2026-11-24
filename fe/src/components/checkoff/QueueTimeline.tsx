@@ -403,9 +403,10 @@ export function QueueTimeline({
   const finished = entries
     .filter((entry) => entry.status === 'finished')
     .sort((a, b) => finishedTime(a) - finishedTime(b))
-  const current = entries.find((entry) => entry.status === 'called') ?? null
+  const currentEntries = entries.filter((entry) => entry.status === 'called')
+  const current = currentEntries[0] ?? null
   const baseWaiting = entries.filter(
-    (entry) => entry.status !== 'finished' && entry !== current,
+    (entry) => entry.status !== 'finished' && entry.status !== 'called',
   )
   let waiting = baseWaiting
   if (optimisticWaiting) {
@@ -434,8 +435,6 @@ export function QueueTimeline({
   }
   const displayIndexById = new Map(previewOrder.map((id, index) => [id, index] as const))
   const interactive = Boolean(onToggle)
-  const currentIndex = current ? entries.indexOf(current) : -1
-  const currentSelected = current ? selectedIds?.has(current.userId) ?? false : false
 
   const handleDragStart = (event: DragStartEvent) => {
     setDragActiveId(String(event.active.id))
@@ -508,41 +507,46 @@ export function QueueTimeline({
             <div ref={boundaryRef} aria-hidden className="-mt-3 h-0" />
           ) : null}
 
-          {current && (
-            <div
-              role={interactive ? 'button' : undefined}
-              tabIndex={interactive ? 0 : undefined}
-              aria-pressed={interactive ? currentSelected : undefined}
-              onClick={
-                interactive
-                  ? (event: MouseEvent<HTMLDivElement>) =>
-                      onToggle?.(current.userId, currentIndex, event.shiftKey)
-                  : undefined
-              }
-              onDoubleClick={
-                onDoubleClick ? () => onDoubleClick(current.userId) : undefined
-              }
-              onKeyDown={
-                interactive
-                  ? (event: KeyboardEvent<HTMLDivElement>) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onToggle?.(current.userId, currentIndex, event.shiftKey)
+          {currentEntries.map((currentEntry) => {
+            const currentIndex = entries.indexOf(currentEntry)
+            const currentSelected = selectedIds?.has(currentEntry.userId) ?? false
+            return (
+              <div
+                key={currentEntry.userId}
+                role={interactive ? 'button' : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                aria-pressed={interactive ? currentSelected : undefined}
+                onClick={
+                  interactive
+                    ? (event: MouseEvent<HTMLDivElement>) =>
+                        onToggle?.(currentEntry.userId, currentIndex, event.shiftKey)
+                    : undefined
+                }
+                onDoubleClick={
+                  onDoubleClick ? () => onDoubleClick(currentEntry.userId) : undefined
+                }
+                onKeyDown={
+                  interactive
+                    ? (event: KeyboardEvent<HTMLDivElement>) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onToggle?.(currentEntry.userId, currentIndex, event.shiftKey)
+                        }
                       }
-                    }
-                  : undefined
-              }
-              className={cn(
-                'relative rounded-2xl border border-brand-500/40 bg-brand-500/10 px-3.5 py-3 transition-colors outline-none',
-                currentSelected && 'ring-2 ring-brand-500/30',
-                onDoubleClick && 'cursor-pointer',
-                interactive &&
-                  'cursor-pointer hover:bg-brand-500/15 focus-visible:ring-2 focus-visible:ring-brand-500/40',
-              )}
-            >
-              <CardBody entry={current} now={now} current />
-            </div>
-          )}
+                    : undefined
+                }
+                className={cn(
+                  'relative rounded-2xl border border-brand-500/40 bg-brand-500/10 px-3.5 py-3 transition-colors outline-none',
+                  currentSelected && 'ring-2 ring-brand-500/30',
+                  onDoubleClick && 'cursor-pointer',
+                  interactive &&
+                    'cursor-pointer hover:bg-brand-500/15 focus-visible:ring-2 focus-visible:ring-brand-500/40',
+                )}
+              >
+                <CardBody entry={currentEntry} now={now} current />
+              </div>
+            )
+          })}
 
           <SortableContext
             items={waiting.map((entry) => entry.userId)}

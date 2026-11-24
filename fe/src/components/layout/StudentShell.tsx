@@ -13,6 +13,7 @@ import { GradeNotificationWatcher } from '@/components/student/GradeNotification
 import { AvatarImage } from '@/components/ui/AvatarImage'
 import { IconAction } from '@/components/ui/IconAction'
 import { Logo } from '@/components/ui/Logo'
+import { RouteBoundary } from '@/components/ui/RouteBoundary'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuth } from '@/lib/auth'
 import { disableBackgroundGradeNotifications } from '@/lib/grade-notifications'
@@ -128,7 +129,9 @@ export function StudentShell() {
         </header>
 
         <main className="flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-10">
-          <Outlet />
+          <RouteBoundary>
+            <Outlet />
+          </RouteBoundary>
         </main>
       </div>
 

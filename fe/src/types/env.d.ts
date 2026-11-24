@@ -14,3 +14,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+interface Window {
+  __TA_EARLY_ERRORS__?: Array<{ kind: string; message: string; url: string }>
+  __TA_REPORT__?: (kind: string, details: Record<string, unknown>) => void
+  __TA_FLUSH__?: () => Promise<boolean>
+  __TA_SW_REGISTRATION__?: Promise<ServiceWorkerRegistration | null>
+  __TA_RECOVER__?: () => Promise<void>
+}

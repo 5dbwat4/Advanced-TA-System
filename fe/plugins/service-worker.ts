@@ -6,14 +6,12 @@ import { fileURLToPath } from 'node:url'
 import { minifySync } from 'vite'
 import type { Plugin } from 'vite'
 
+import { joinUrl, type AssetRouting } from './asset-routing.ts'
+
 const swDir = fileURLToPath(new URL('./service-worker', import.meta.url))
 const SW_FILE = 'sw.js'
 const MANIFEST_FILE = 'manifest.json'
-
-function joinUrl(base: string, key: string): string {
-  const prefix = base.endsWith('/') ? base : `${base}/`
-  return prefix + key.replace(/^\.?\//, '')
-}
+const IMPORT_MAP_FILE = 'importmap.json'
 
 function hash(text: string, length: number): string {
   return createHash('sha256').update(text).digest('hex').slice(0, length)
@@ -52,19 +50,10 @@ function listPublicFiles(dir: string): Array<{ rel: string; size: number }> {
   return files
 }
 
-/**
- * 生成 sw.js 与 manifest.json。
- *
- * 只负责构建产物，不参与首屏加载：入口由 HTML 正常加载，Service Worker
- * 在页面挂载后由 ServiceWorkerUpdate 注册，作为缓存/离线/推送增强。
- */
-export function serviceWorker(): Plugin {
+export function serviceWorker(routing: AssetRouting): Plugin {
   let base = '/'
   let publicDir = ''
   let emitted = false
-  let emitAsset:
-    | ((asset: { type: 'asset'; fileName: string; source: string | Uint8Array }) => string)
-    | null = null
 
   return {
     name: 'ta-service-worker',
@@ -76,7 +65,7 @@ export function serviceWorker(): Plugin {
     },
 
     buildStart() {
-      emitAsset = (asset) => this.emitFile(asset)
+      emitted = false
     },
 
     transformIndexHtml: {
@@ -86,36 +75,53 @@ export function serviceWorker(): Plugin {
         emitted = true
 
         const bundle = (ctx.bundle || {}) as Record<string, unknown>
-
         const seen = new Set<string>()
-        const assets: Array<{ u: string; s: number | null }> = []
-        const addAsset = (url: string, size: number | null) => {
+        const assets: Array<{ u: string; s: number | null; r: 'cdn' | 'origin' }> = []
+        const addAsset = (filename: string, size: number | null, route?: 'cdn' | 'origin') => {
+          const resolvedRoute = route ?? routing.routeForSize(size)
+          const url = resolvedRoute === 'cdn'
+            ? joinUrl(routing.assetsCdn, filename)
+            : joinUrl(base, filename)
           if (seen.has(url)) return
           seen.add(url)
-          assets.push({ u: url, s: size })
+          assets.push({ u: url, s: size, r: resolvedRoute })
         }
 
         for (const key of Object.keys(bundle)) {
-          if (/\.html?$/i.test(key) || key === SW_FILE || key === MANIFEST_FILE) continue
-          addAsset(joinUrl(base, key), bundleSize(bundle, key))
+          if (
+            /\.html?$/i.test(key) ||
+            key === SW_FILE ||
+            key === MANIFEST_FILE ||
+            key === IMPORT_MAP_FILE
+          ) continue
+          addAsset(key, bundleSize(bundle, key))
         }
-        for (const file of listPublicFiles(publicDir)) {
-          addAsset(joinUrl(base, file.rel), file.size)
-        }
+        for (const file of listPublicFiles(publicDir)) addAsset(file.rel, file.size, 'origin')
 
-        const version = hash(JSON.stringify({ assets, html }), 16)
+        const runtimeSource = fs.readFileSync(path.join(swDir, 'runtime-bootstrap.js'), 'utf8')
+        const version = hash(JSON.stringify({ assets, html, runtimeSource }), 16)
         const swSource = fs
           .readFileSync(path.join(swDir, SW_FILE), 'utf8')
-          .replace(/__BUILD_VERSION__/g, version)
+          .replace(/__BUILD_VERSION__/g, () => version)
+          .replace(/__CDN_ASSET_PREFIX__/g, () => routing.cdnAssetPrefix)
 
-        emitAsset?.({ type: 'asset', fileName: SW_FILE, source: minify(SW_FILE, swSource) })
-        emitAsset?.({
+        this.emitFile({ type: 'asset', fileName: SW_FILE, source: minify(SW_FILE, swSource) })
+        this.emitFile({
           type: 'asset',
           fileName: MANIFEST_FILE,
-          source: JSON.stringify({ v: version, base, assets }),
+          source: JSON.stringify({
+            v: version,
+            base,
+            cdnAssetPrefix: routing.cdnAssetPrefix || null,
+            originMaxBytes: routing.originMaxBytes,
+            assets,
+          }),
         })
 
-        return html
+        const runtimeScript = `<script>${minify('runtime-bootstrap.js', runtimeSource)}</script>`
+        const charset = /<meta\s+charset=["'][^"']*["']\s*\/?>/i
+        if (charset.test(html)) return html.replace(charset, (meta) => `${meta}${runtimeScript}`)
+        return html.replace(/<head(\s[^>]*)?>/i, (head) => `${head}${runtimeScript}`)
       },
     },
   }
