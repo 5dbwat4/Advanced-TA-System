@@ -60,6 +60,11 @@ export default defineConfig(({ mode }) => {
           codeSplitting: {
             groups: [
               {
+                debugName: 'icons',
+                test: /virtual:icons[\\/]/,
+                name: 'icons',
+              },
+              {
                 debugName: 'node-modules',
                 test: /node_modules/,
                 name: (moduleId) => packageChunkName(moduleId),
