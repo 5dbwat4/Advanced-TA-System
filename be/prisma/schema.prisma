@@ -65,6 +65,8 @@ model User {
   updatedRemarks    Remark[]              @relation("RemarkUpdatedBy")
   checkpointClaims  CheckpointClaimed[]
   focusStudents     FocusStudent[]
+  queueEntries      CheckoffQueueEntry[] @relation("CheckoffQueueStudent")
+  queueTaEntries    CheckoffQueueEntry[] @relation("CheckoffQueueTa")
 
   @@unique([studentId, classId])
   @@unique([username, classId])
@@ -112,6 +114,7 @@ model Experiment {
   scores        Score[]
   reportReviews ReportReview[]
   remarks       Remark[]
+  queueEntries  CheckoffQueueEntry[]
 
   /// 学在浙大作业缓存（一对一）
   xzzdHomework XzzdHomework?
@@ -281,7 +284,7 @@ model FocusStudent {
   @@index([userId])
 }
 
-/// 验收排队会话（每次排队一条记录，保存设置与统计）
+/// 验收排队会话（每次排队一条记录；同一课程同时只允许一场未关闭）
 model CheckoffSession {
   id String @id @default(uuid(4))
 
@@ -291,13 +294,50 @@ model CheckoffSession {
 
   /// 会话设置（JSON 字符串）
   settings String @default("{}")
-  /// 会话统计（JSON 字符串）
+  /// 旧版队列快照；仅用于首次访问时迁移到 CheckoffQueueEntry
   stats    String @default("{}")
+  closedAt DateTime?
+  /// 队列读写乐观锁；所有写操作必须递增
+  revision Int @default(0)
+  /// 旧版 JSON 队列完成关系化迁移的时间
+  queueMigratedAt DateTime?
+
+  entries CheckoffQueueEntry[]
 
   createdAt DateTime @default(now())
 
   @@map("CheckoffSessions")
   @@index([classId])
+}
+
+/// 验收队列项；每名学生每场排队一条，position 只负责展示顺序
+model CheckoffQueueEntry {
+  id         String          @id @default(uuid(4))
+  sessionId  String
+  session    CheckoffSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId     String
+  student    User            @relation("CheckoffQueueStudent", fields: [userId], references: [id], onDelete: Cascade)
+  experimentId String
+  experiment Experiment      @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  taId       String?
+  ta         User?           @relation("CheckoffQueueTa", fields: [taId], references: [id], onDelete: SetNull)
+
+  position Int
+  status   String            @default("waiting") // waiting | notified | called | finished
+  joinedAt DateTime          @default(now())
+  notifiedAt DateTime?
+  notifiedBy String?
+  startedAt  DateTime?
+  checkedBy  String?
+  finishedAt DateTime?
+  /// 过号后重新入队的时间；非空时才允许按 jumpMode 向前插队
+  missedAt DateTime?
+
+  @@unique([sessionId, userId])
+  @@index([sessionId, position])
+  @@index([userId])
+  @@index([experimentId])
+  @@index([taId])
 }
 
 /// 开发板（一块板一条记录；多人合用时 userIds 存 JSON 数组）

@@ -1,6 +1,7 @@
 import { deserializeItems, serializeItems } from '@/components/criteria/serialize'
 import type { CriterionItem } from '@/components/criteria/types'
 import { apiFetch } from '@/lib/api/client'
+import type { Score } from './types'
 
 export type CriteriaPayloadInput = { version: 1; items: CriterionItem[] }
 
@@ -111,8 +112,9 @@ export function saveReportReview(body: {
   experimentId: string
   ruleId: string
   ruleContent: unknown
-}): Promise<{ review: ReportReview }> {
-  return apiFetch<{ review: ReportReview }>('/api/report-reviews', {
+  score?: number
+}): Promise<{ review: ReportReview; score?: Score }> {
+  return apiFetch<{ review: ReportReview; score?: Score }>('/api/report-reviews', {
     method: 'PUT',
     body: JSON.stringify(body),
   })

@@ -1,5 +1,5 @@
 import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import ArrowLeft from '~icons/lucide/arrow-left'
@@ -24,9 +24,11 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const previewRequest = useRef(0)
   const previewState = useOverlayState({
     onOpenChange: (open) => {
       if (!open) {
+        previewRequest.current += 1
         setPreviewExperimentId(null)
         setPreviewData(null)
         setPreviewError(null)
@@ -61,6 +63,7 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
 
   const openPreview = async (experimentId: string) => {
     if (!userId) return
+    const request = ++previewRequest.current
     setPreviewExperimentId(experimentId)
     setPreviewData(null)
     setPreviewError(null)
@@ -68,11 +71,13 @@ export default function StudentReport({ readonly = false }: { readonly?: boolean
     previewState.open()
     try {
       const result = await fetchStudentExperimentReport(userId, experimentId)
-      setPreviewData(result)
+      if (request === previewRequest.current) setPreviewData(result)
     } catch (err) {
-      setPreviewError(getErrorMessage(err, '加载实验详情失败'))
+      if (request === previewRequest.current) {
+        setPreviewError(getErrorMessage(err, '加载实验详情失败'))
+      }
     } finally {
-      setPreviewLoading(false)
+      if (request === previewRequest.current) setPreviewLoading(false)
     }
   }
 

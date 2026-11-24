@@ -35,7 +35,6 @@ import {
   fetchReportReview,
   REMARK_TYPE_REPORT,
   saveReportReview,
-  saveScore,
   type Score,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
@@ -74,6 +73,8 @@ export function GradePanel({
   const [dirty, setDirty] = useState(false)
   const [savedOverride, setSavedOverride] = useState<{ userId: string; score: Score } | null>(null)
   const [savingReport, setSavingReport] = useState(false)
+  const savingReportRef = useRef(false)
+  const [criteriaError, setCriteriaError] = useState<string | null>(null)
 
   const [addTarget, setAddTarget] = useState('root')
   const [newMode, setNewMode] = useState<CriterionMode>('subtract')
@@ -131,7 +132,14 @@ export function GradePanel({
     if (!userId) return
     let cancelled = false
     setDirty(false)
-    // 未批改（无分数）的报告：优先套用本地默认评分标准
+    setCriteriaError(null)
+    setItems(null)
+    itemsRef.current = null
+    setRuleKey(null)
+    ruleKeyRef.current = null
+    setStates({})
+    setExtras({})
+
     const fallback = !gradedRef.current ? localDefault : null
     if (fallback) {
       setItems(fallback.items)
@@ -139,37 +147,27 @@ export function GradePanel({
       setRuleKey(fallback.key)
       ruleKeyRef.current = fallback.key
       setStates(defaultStates(fallback.items))
-      setExtras({})
       return
     }
+
     fetchReportReview(userId, experimentId)
       .then(async (review) => {
-        if (cancelled) return
-        if (!review) {
-          // 无批阅记录：清空当前评分标准，避免「已批改」页面的标准外溢到其它学生
-          setItems(null)
-          itemsRef.current = null
-          setRuleKey(null)
-          ruleKeyRef.current = null
-          setStates({})
-          setExtras({})
-          return
-        }
+        if (cancelled || !review) return
         const content = decodeReviewContent(review.ruleContent)
-        setRuleKey(review.ruleId)
-        setStates(content.cards)
-        setExtras(content.extras)
-        if (review.ruleId === ruleKeyRef.current) return
         const res = await fetchCriteria(review.ruleId)
         if (cancelled) return
         const payload = res.payload as { items?: CriterionItem[] } | null
-        if (payload?.items) {
-          setItems(payload.items)
-          itemsRef.current = payload.items
-          ruleKeyRef.current = review.ruleId
-        }
+        if (!payload?.items) throw new Error('评分标准内容无效')
+        setItems(payload.items)
+        itemsRef.current = payload.items
+        setRuleKey(review.ruleId)
+        ruleKeyRef.current = review.ruleId
+        setStates(content.cards)
+        setExtras(content.extras)
       })
-      .catch(() => {})
+      .catch((error: unknown) => {
+        if (!cancelled) setCriteriaError(getErrorMessage(error, '评分标准加载失败'))
+      })
     return () => {
       cancelled = true
     }
@@ -294,19 +292,27 @@ export function GradePanel({
   }
 
   const saveReportScore = async () => {
-    if (!userId || !ruleKey || !items) return
+    if (!userId || !ruleKey || !items || savingReportRef.current) return
+    savingReportRef.current = true
     setSavingReport(true)
     try {
       const content = encodeReviewContent(states, extras, items)
-      await saveReportReview({ userId, experimentId, ruleId: ruleKey, ruleContent: content })
+      const res = await saveReportReview({
+        userId,
+        experimentId,
+        ruleId: ruleKey,
+        ruleContent: content,
+        score: total,
+      })
+      if (!res.score) throw new Error('服务器未返回已保存的报告分')
       setDirty(false)
-      const res = await saveScore({ userId, type: 2, indId: experimentId, score: total })
       setSavedOverride({ userId, score: res.score })
       onScoreSaved?.(res.score)
       toast.success('已保存报告分')
     } catch (err) {
       toast.error(getErrorMessage(err, '保存失败'))
     } finally {
+      savingReportRef.current = false
       setSavingReport(false)
     }
   }
@@ -435,6 +441,15 @@ export function GradePanel({
             </Dropdown.Popover>
           </Dropdown>
         </div>
+
+        {criteriaError && (
+          <Alert status="warning">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Description>{criteriaError}，请重试或重新选择评分标准。</Alert.Description>
+            </Alert.Content>
+          </Alert>
+        )}
 
         {student.userId == null ? (
           <Alert status="warning">

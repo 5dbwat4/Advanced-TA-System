@@ -145,7 +145,12 @@ export default function StudentQueue() {
     toIndex: number,
   ) => {
     if (!session?.entry || activeId !== session.entry.userId) return false
-    if (toIndex <= fromIndex || reorderingId) return false
+    if (toIndex === fromIndex || reorderingId) return false
+    if (toIndex > fromIndex && !session.allowSelfMoveDown) return false
+    if (toIndex < fromIndex) {
+      if (!session.entry.missedAt || session.jumpMode === 'none') return false
+      if (session.jumpMode === 'after3' && toIndex < 2) return false
+    }
     setReorderingId(activeId)
     try {
       await reorderStudentCheckoffQueue(toIndex)
@@ -238,7 +243,7 @@ export default function StudentQueue() {
                 muted={!session.tas.some((ta) => ta.id === session.entry?.taId)}
               />
             </div>
-            {session.entry.status !== 'finished' ? (
+            {session.entry.status !== 'finished' && session.entry.status !== 'called' ? (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
@@ -267,6 +272,15 @@ export default function StudentQueue() {
                 <span>
                   {`${session.entry.notifiedBy ? `助教${session.entry.notifiedBy}` : '助教'}向你发出了「预叫号」。请做好验收准备，设计上在 3~5 分钟内将轮到你验收。如果你不方便参与验收，可以直接取消排队，或者将位次后挪。一旦你进行此操作，预叫号状态将结束。`}
                 </span>
+              </div>
+            ) : null}
+            {session.entry.missedAt && session.entry.status !== 'called' ? (
+              <div className="mt-3 rounded-xl border border-line bg-sunken/40 px-3 py-2.5 text-xs text-fg-muted">
+                {session.jumpMode === 'anywhere'
+                  ? '你已过号并重新入队，可以向前拖动选择新的位次。'
+                  : session.jumpMode === 'after3'
+                    ? '你已过号并重新入队，可以向前拖动到第 3 位及以后。'
+                    : '你已过号并重新排到队尾。'}
               </div>
             ) : null}
           </div>
@@ -321,16 +335,17 @@ export default function StudentQueue() {
           <QueueTimeline
             entries={session.queue}
             canDrag={(entry) =>
-              session?.allowSelfMoveDown === true &&
               session?.entry?.userId === entry.userId &&
-              entry.status !== 'finished'
+              entry.status !== 'finished' &&
+              (session.allowSelfMoveDown ||
+                (Boolean(entry.missedAt) && session.jumpMode !== 'none'))
             }
-            canReorder={(_activeId, overId, fromIndex, toIndex) =>
-              toIndex > fromIndex &&
-              !reorderingId &&
-              session?.queue.find((entry) => entry.userId === overId)?.status !==
-                'finished'
-            }
+            canReorder={(_activeId, _overId, fromIndex, toIndex) => {
+              if (reorderingId || toIndex === fromIndex) return false
+              if (toIndex > fromIndex) return session.allowSelfMoveDown
+              if (!session.entry?.missedAt || session.jumpMode === 'none') return false
+              return session.jumpMode === 'anywhere' || toIndex >= 2
+            }}
             onReorder={reorderSelf}
           />
         </section>

@@ -86,7 +86,9 @@ export function CheckoffInstance({
 }: CheckoffInstanceProps) {
   const resumeKey = multiCheckoffResumeKey(id, userId, classId)
   const [initialResume] = useState(() => loadCheckoffResume(resumeKey))
-  const [initial] = useState(() => (initialResume ? null : loadInstanceSnapshot(id)))
+  const [initial] = useState(() =>
+    initialResume ? null : loadInstanceSnapshot(id, userId, classId),
+  )
   const [resume, setResume] = useState<CheckoffResumeSnapshot | null>(initialResume)
   const resumeState = useOverlayState()
   const [experiment, setExperiment] = useState<CheckoffExperiment | null>(
@@ -113,7 +115,7 @@ export function CheckoffInstance({
   const { session, pushState, switchQuestion } = useCheckoffMaster(true, userId, {
     sessionKey: id,
     dedicated: true,
-    storageKey: sessionStorageKey(id),
+    storageKey: sessionStorageKey(id, userId, classId),
   })
 
   const checkoffMeta = useMemo<CheckoffMeta>(
@@ -142,10 +144,12 @@ export function CheckoffInstance({
       existingScores,
       questionIndex,
       activeStartedAt,
-    })
+    }, userId, classId)
   }, [
     activeStartedAt,
     id,
+    userId,
+    classId,
     experiment,
     student,
     step,
@@ -536,6 +540,7 @@ export function CheckoffInstance({
                 experimentId={experiment.id}
                 student={student}
                 marks={marks}
+                drawnQuestionIds={drawn.map((question) => question.id)}
                 existingScores={existingScores}
                 ratio={scoreRatio}
                 onSaved={handleSaved}

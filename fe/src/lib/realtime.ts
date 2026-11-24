@@ -21,10 +21,13 @@ export type ScoreChangeEvent =
   | { action: 'delete'; classId: string; userId: string; type: number; indId: string }
 
 let socket: Socket | null = null
+let socketToken: string | null = null
 
 export function connectScoreSocket(): Socket {
-  if (socket) return socket
   const token = getToken()
+  if (socket && socketToken !== token) disconnectScoreSocket()
+  if (socket) return socket
+  socketToken = token
   socket = io({
     auth: token ? { token } : {},
     transports: ['websocket', 'polling'],
@@ -36,6 +39,7 @@ export function disconnectScoreSocket(): void {
   if (!socket) return
   socket.disconnect()
   socket = null
+  socketToken = null
 }
 
 /** 订阅当前选中班级的成绩广播（不再默认按用户所有班级进房） */

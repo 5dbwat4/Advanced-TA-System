@@ -35,14 +35,23 @@ export type CheckoffMeta = {
 }
 
 let socket: Socket | null = null
+let socketToken: string | null = null
 
 /** 共享的验收 Socket.IO 连接（master 已登录时携带 JWT；slave 无需登录） */
 export function getCheckoffSocket(): Socket {
+  const token = getToken()
+  if (socket && socketToken !== token) resetCheckoffSocket()
   if (!socket) {
-    const token = getToken()
+    socketToken = token
     socket = io({ auth: token ? { token } : {}, transports: ['websocket', 'polling'] })
   }
   return socket
+}
+
+export function resetCheckoffSocket(): void {
+  socket?.disconnect()
+  socket = null
+  socketToken = null
 }
 
 /** 为「群面」单独创建一条连接：一个 tab 一个会话，互不干扰 */

@@ -52,6 +52,7 @@ export type QueueTimelineEntry = {
   startedAt: string | null
   checkedBy: string | null
   finishedAt: string | null
+  missedAt?: string | null
 }
 
 function formatElapsed(from: string | null | undefined, now: number): string {

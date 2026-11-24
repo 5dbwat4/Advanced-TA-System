@@ -1,4 +1,4 @@
-import { Button, Input, Modal, Spinner, useOverlayState } from '@heroui/react'
+import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
 import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,15 +9,7 @@ import Settings2 from '~icons/lucide/settings-2'
 import UserPlus from '~icons/lucide/user-plus'
 import { Card } from '@/components/ui/Card'
 import { PendingButton } from '@/components/ui/PendingButton'
-import {
-  addTa,
-  apiFetch,
-  listClasses,
-  listTas,
-  type ClassInfo,
-  type Course,
-  type Ta,
-} from '@/lib/api'
+import { apiFetch, listClasses, type ClassInfo, type Course } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/error'
 import { cn } from '@/lib/utils'
@@ -27,11 +19,6 @@ export function SystemSection({ index = 0 }: { index?: number }) {
   const [courses, setCourses] = useState<Course[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [tas, setTas] = useState<Ta[] | null>(null)
-  const [taLoading, setTaLoading] = useState(false)
-  const [taError, setTaError] = useState<string | null>(null)
-  const [taStudentId, setTaStudentId] = useState('')
-  const [taAdding, setTaAdding] = useState(false)
   const [classes, setClasses] = useState<ClassInfo[]>([])
   const [bindTokens, setBindTokens] = useState<Record<string, string>>({})
   const { user } = useAuth()
@@ -58,20 +45,6 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       toast.error(message)
     } finally {
       setLoading(false)
-    }
-  }, [])
-
-  const fetchTas = useCallback(async () => {
-    setTaLoading(true)
-    setTaError(null)
-    try {
-      setTas(await listTas())
-    } catch (error) {
-      const message = getErrorMessage(error, '获取助教失败')
-      setTaError(message)
-      toast.error(message)
-    } finally {
-      setTaLoading(false)
     }
   }, [])
 
@@ -106,29 +79,6 @@ export function SystemSection({ index = 0 }: { index?: number }) {
       if (open) void fetchClasses()
     },
   })
-
-  const taState = useOverlayState({
-    onOpenChange: (open) => {
-      if (open) void fetchTas()
-    },
-  })
-
-  const submitTa = async () => {
-    if (taAdding) return
-    const studentId = taStudentId.trim()
-    if (!studentId) return
-    setTaAdding(true)
-    try {
-      await addTa(studentId)
-      toast.success('已添加新助教')
-      setTaStudentId('')
-      await fetchTas()
-    } catch (error) {
-      toast.error(getErrorMessage(error, '添加失败'))
-    } finally {
-      setTaAdding(false)
-    }
-  }
 
   return (
     <Card index={index} className="flex flex-col gap-4 border-danger/50">
@@ -299,110 +249,6 @@ export function SystemSection({ index = 0 }: { index?: number }) {
         <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
       </button>
 
-      <Modal state={taState}>
-        <Modal.Trigger className="flex w-full items-center gap-3 rounded-xl border border-line bg-sunken px-4 py-3 text-left transition-colors hover:border-danger/40">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-danger/10 text-danger">
-                  <UserPlus width={18} height={18} className="shrink-0" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">添加新助教</div>
-            <div className="truncate text-xs text-fg-subtle">
-              输入助教学号，将其加入系统；新助教需等待首次登录后解封
-            </div>
-          </div>
-          <ChevronRight width={18} height={18} className="shrink-0 text-fg-subtle" />
-        </Modal.Trigger>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Icon className="bg-danger/10 text-danger">
-            <UserPlus width={18} height={18} className="shrink-0" />
-                </Modal.Icon>
-                <Modal.Heading>添加新助教</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="flex flex-col gap-4">
-                <p className="text-xs text-fg-subtle">
-                  输入助教的学号将其加入系统，新助教需等待首次登录后解封。
-                </p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    fullWidth
-                    type="text"
-                    value={taStudentId}
-                    onChange={(e) => setTaStudentId(e.target.value)}
-                    placeholder="请输入学号"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    aria-label="助教学号"
-                  />
-                  <PendingButton
-                    isDisabled={taStudentId.trim().length === 0}
-                    isPending={taAdding}
-                    onPress={() => void submitTa()}
-                  >
-                    添加
-                  </PendingButton>
-                </div>
-                {taError ? (
-                  <div className="rounded-xl border border-dashed border-danger/40 py-8 text-center text-xs text-danger">
-                    {taError}
-                  </div>
-                ) : taLoading ? (
-                  <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line py-8 text-center">
-                    <Spinner color="current" size="sm" />
-                    <div className="text-xs text-fg-subtle">正在加载助教列表…</div>
-                  </div>
-                ) : tas === null || tas.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-line py-8 text-center text-xs text-fg-subtle">
-                    暂无助教
-                  </div>
-                ) : (
-                  <div className="flex max-h-80 flex-col gap-2 overflow-auto">
-                    {tas.map((ta) => (
-                      <div
-                        key={ta.id}
-                        className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2.5"
-                      >
-                        <div className="min-w-0 flex-1">
-                          {ta.activated && (
-                            <div className="truncate text-sm font-semibold">{ta.name}</div>
-                          )}
-                          <div className="tabular truncate text-xs text-fg-subtle">
-                            {ta.studentId}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 flex-col items-end gap-1">
-                          <span
-                            className={
-                              ta.activated
-                                ? 'rounded-lg bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-300'
-                                : 'rounded-lg bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-300'
-                            }
-                          >
-                            {ta.activated ? '已激活' : '未解封'}
-                          </span>
-                          <span className="max-w-32 truncate text-[11px] text-fg-subtle">
-                            {ta.classes.length
-                              ? ta.classes.map((c) => c.name).join('、')
-                              : '未绑定'}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">
-                  关闭
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
     </Card>
   )
 }

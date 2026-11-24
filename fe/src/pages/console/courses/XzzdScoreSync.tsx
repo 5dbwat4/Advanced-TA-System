@@ -1,5 +1,5 @@
 import { Alert, useOverlayState } from '@heroui/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import ArrowLeft from '~icons/lucide/arrow-left'
@@ -58,6 +58,8 @@ export default function XzzdScoreSync() {
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState<XzzdSyncApplyResult | null>(null)
   const overwriteState = useOverlayState()
+  const previewRequest = useRef(0)
+  const applyRequest = useRef(0)
 
   const experiments = useMemo(
     () => (tableData?.experiments ?? []).filter((item) => item.classId === classId),
@@ -152,6 +154,10 @@ export default function XzzdScoreSync() {
   }, [experimentId, homeworksNonce])
 
   useEffect(() => {
+    previewRequest.current += 1
+    applyRequest.current += 1
+    setPreviewing(false)
+    setApplying(false)
     setPreview(null)
     setResult(null)
   }, [
@@ -164,12 +170,20 @@ export default function XzzdScoreSync() {
     mappingDraft.targetMax,
   ])
 
+  useEffect(() => {
+    return () => {
+      previewRequest.current += 1
+      applyRequest.current += 1
+    }
+  }, [])
+
   const loadPreview = async (keepResult = false) => {
     if (!experimentId || !activityId) return
     if (parsedMapping.error) {
       toast.error(parsedMapping.error)
       return
     }
+    const request = ++previewRequest.current
     setPreviewing(true)
     if (!keepResult) setResult(null)
     try {
@@ -179,12 +193,14 @@ export default function XzzdScoreSync() {
         scoreType,
         parsedMapping.mapping,
       )
-      setPreview(data)
+      if (request === previewRequest.current) setPreview(data)
     } catch (error) {
-      toast.error(getErrorMessage(error, '获取同步预览失败'))
-      setPreview(null)
+      if (request === previewRequest.current) {
+        toast.error(getErrorMessage(error, '获取同步预览失败'))
+        setPreview(null)
+      }
     } finally {
-      setPreviewing(false)
+      if (request === previewRequest.current) setPreviewing(false)
     }
   }
 
@@ -194,6 +210,7 @@ export default function XzzdScoreSync() {
       toast.error(parsedMapping.error)
       return
     }
+    const request = ++applyRequest.current
     setApplying(true)
     try {
       const data = await applyXzzdSync(experimentId, {
@@ -202,14 +219,17 @@ export default function XzzdScoreSync() {
         mode,
         mapping: parsedMapping.mapping,
       })
+      if (request !== applyRequest.current) return
       setResult(data)
       toast.success(`已同步 ${data.create + data.update} 条成绩`)
       void loadPreview(true)
     } catch (error) {
-      toast.error(getErrorMessage(error, '同步失败'))
+      if (request === applyRequest.current) toast.error(getErrorMessage(error, '同步失败'))
     } finally {
-      setApplying(false)
-      overwriteState.close()
+      if (request === applyRequest.current) {
+        setApplying(false)
+        overwriteState.close()
+      }
     }
   }
 
@@ -251,6 +271,7 @@ export default function XzzdScoreSync() {
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
+          <fieldset disabled={applying} className="contents">
           <SyncTargetCard
             experiments={experiments}
             experimentId={experimentId}
@@ -289,6 +310,7 @@ export default function XzzdScoreSync() {
             onModeChange={setMode}
             onApply={startApply}
           />
+          </fieldset>
         </div>
       )}
 

@@ -44,7 +44,7 @@ export const scoresRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const scores = await prisma.score.findMany({
-        where: { student: { classId } },
+        where: { student: { classId, role: 'STUDENT', status: 'ACTIVE' } },
         orderBy: [{ userId: 'asc' }, { type: 'asc' }, { indId: 'asc' }],
         include: { grader: { select: { id: true, name: true } } },
       })

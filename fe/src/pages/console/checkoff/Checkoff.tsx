@@ -547,7 +547,7 @@ export default function Checkoff() {
         existingScores,
         questionIndex,
         activeStartedAt,
-      })
+      }, user?.id, classId)
       if (!id) {
         toast.error(`群面最多同时开启 ${CHECKOFF_MULTI_MAX_TABS} 个验收 tab`)
         return
@@ -1000,6 +1000,7 @@ export default function Checkoff() {
                 experimentId={experiment.id}
                 student={student}
                 marks={marks}
+                drawnQuestionIds={drawn.map((question) => question.id)}
                 existingScores={existingScores}
                 ratio={scoreRatio}
                 onSaved={handleSaved}

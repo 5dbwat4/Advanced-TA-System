@@ -36,10 +36,16 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers)
+type ApiRequestInit = RequestInit & {
+  /** 公开 token 接口的 401 描述链接本身，不代表当前登录已失效 */
+  ignoreUnauthorizedEvent?: boolean
+}
+
+export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+  const { ignoreUnauthorizedEvent = false, ...requestInit } = init
+  const headers = new Headers(requestInit.headers)
   const token = getToken()
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (requestInit.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const controller = new AbortController()
@@ -49,23 +55,23 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     controller.abort()
   }, API_TIMEOUT_MS)
   const onAbort = () => controller.abort()
-  if (init.signal) {
-    if (init.signal.aborted) controller.abort()
-    else init.signal.addEventListener('abort', onAbort, { once: true })
+  if (requestInit.signal) {
+    if (requestInit.signal.aborted) controller.abort()
+    else requestInit.signal.addEventListener('abort', onAbort, { once: true })
   }
 
   let res: Response | null = null
   let text = ''
   try {
-    res = await fetch(path, { ...init, headers, signal: controller.signal })
+    res = await fetch(path, { ...requestInit, headers, signal: controller.signal })
     text = await res.text()
   } catch {
     if (timedOut) throw new ApiError(0, 'REQUEST_TIMEOUT', '请求超时，请稍后重试')
-    if (init.signal?.aborted) throw new ApiError(0, 'REQUEST_ABORTED', '请求已取消')
+    if (requestInit.signal?.aborted) throw new ApiError(0, 'REQUEST_ABORTED', '请求已取消')
     throw new ApiError(0, 'NETWORK_ERROR', '网络错误，请检查连接后重试')
   } finally {
     clearTimeout(timer)
-    init.signal?.removeEventListener('abort', onAbort)
+    requestInit.signal?.removeEventListener('abort', onAbort)
   }
 
   if (!res) throw new ApiError(0, 'NETWORK_ERROR', '网络错误，请检查连接后重试')
@@ -92,7 +98,13 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         : parseFailed
           ? '请求失败，且响应不是有效的 JSON'
           : '请求失败，请稍后重试'
-    if (res.status === 401 && token && !isPublicAuthPath(path) && typeof window !== 'undefined') {
+    if (
+      res.status === 401 &&
+      token &&
+      !ignoreUnauthorizedEvent &&
+      !isPublicAuthPath(path) &&
+      typeof window !== 'undefined'
+    ) {
       window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
     }
     throw new ApiError(res.status, code, message)

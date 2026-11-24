@@ -3,7 +3,10 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 
-import { orderQueueEntries, parseSessionStats } from './checkoff-queue.js'
+import {
+  saveQueueOrder,
+  withLatestQueueMutation,
+} from './checkoff-queue.js'
 import { prisma } from './prisma.js'
 import { isStaff } from './roles.js'
 import type { ScoreDto } from './score.js'
@@ -106,45 +109,40 @@ async function markQueueActive(
   marked: boolean
   previousStatus: 'waiting' | 'notified' | 'called' | 'finished'
 }> {
-  const row = await prisma.checkoffSession.findFirst({
-    where: { classId },
-    orderBy: { createdAt: 'desc' },
-  })
-  if (!row) return { marked: false, previousStatus: 'waiting' }
-  const stats = parseSessionStats(row.stats)
-  if (stats.closedAt) return { marked: false, previousStatus: 'waiting' }
-  const target = stats.entries.find((entry) => entry.userId === studentId)
-  if (!target) return { marked: false, previousStatus: 'waiting' }
-  if (target.status === 'finished') {
-    return { marked: false, previousStatus: 'finished' }
-  }
+  const { value, session } = await withLatestQueueMutation(classId, async ({ tx, session, entries }) => {
+    if (session.closedAt) return { changed: false, result: { marked: false, previousStatus: 'waiting' as const } }
+    const target = entries.find((entry) => entry.userId === studentId)
+    if (!target) return { changed: false, result: { marked: false, previousStatus: 'waiting' as const } }
+    if (target.status === 'finished') {
+      return { changed: false, result: { marked: false, previousStatus: 'finished' as const } }
+    }
 
-  const previousStatus = target.status
-  const wasCalled = previousStatus === 'called'
-  const now = new Date().toISOString()
-  const startedAt = wasCalled ? (target.startedAt ?? now) : now
-  const checkedBy = wasCalled ? (target.checkedBy ?? callerName) : callerName
-  const finishedAt = wasCalled ? target.finishedAt : null
-  const changed =
-    target.status !== 'called' ||
-    target.startedAt !== startedAt ||
-    target.checkedBy !== checkedBy ||
-    target.finishedAt !== finishedAt
-  if (changed) {
-    const entries = orderQueueEntries(
-      stats.entries.map((entry) =>
-        entry.userId === studentId
-          ? { ...entry, status: 'called' as const, startedAt, checkedBy, finishedAt }
-          : entry,
-      ),
-    )
-    await prisma.checkoffSession.update({
-      where: { id: row.id },
-      data: { stats: JSON.stringify({ ...stats, entries }) },
-    })
-    emitCheckoffQueueUpdate(classId, row.id)
-  }
-  return { marked: !wasCalled, previousStatus }
+    const previousStatus = target.status
+    const wasCalled = previousStatus === 'called'
+    const now = new Date().toISOString()
+    const startedAt = wasCalled ? (target.startedAt ?? now) : now
+    const checkedBy = wasCalled ? (target.checkedBy ?? callerName) : callerName
+    const finishedAt = wasCalled ? target.finishedAt : null
+    const changed =
+      target.status !== 'called' ||
+      target.startedAt !== startedAt ||
+      target.checkedBy !== checkedBy ||
+      target.finishedAt !== finishedAt ||
+      target.missedAt !== null
+    if (changed) {
+      await saveQueueOrder(
+        tx,
+        entries.map((entry) =>
+          entry.userId === studentId
+            ? { ...entry, status: 'called' as const, startedAt, checkedBy, finishedAt, missedAt: null }
+            : entry,
+        ),
+      )
+    }
+    return { changed, result: { marked: !wasCalled, previousStatus } }
+  })
+  if (value.changed) emitCheckoffQueueUpdate(classId, session.id)
+  return value.result
 }
 
 /** 本次开始自动标记的「正在验收」结束后恢复原状态 */
@@ -154,34 +152,29 @@ async function unmarkQueueActive(
   restoreStatus: 'waiting' | 'notified',
   finished: boolean,
 ): Promise<void> {
-  const row = await prisma.checkoffSession.findFirst({
-    where: { classId },
-    orderBy: { createdAt: 'desc' },
-  })
-  if (!row) return
-  const stats = parseSessionStats(row.stats)
-  if (stats.closedAt) return
-  const target = stats.entries.find((entry) => entry.userId === studentId)
-  if (!target || target.status !== 'called') return
-
-  const status = finished ? ('waiting' as const) : restoreStatus
-  const entries = orderQueueEntries(
-    stats.entries.map((entry) =>
-      entry.userId === studentId
-        ? {
-            ...entry,
-            status,
-            startedAt: finished ? entry.startedAt : null,
-            checkedBy: finished ? entry.checkedBy : null,
-          }
-        : entry,
-    ),
+  const { value: changed, session } = await withLatestQueueMutation(
+    classId,
+    async ({ tx, session, entries }) => {
+      if (session.closedAt) return false
+      const target = entries.find((entry) => entry.userId === studentId)
+      if (!target || target.status !== 'called') return false
+      await saveQueueOrder(
+        tx,
+        entries.map((entry) =>
+          entry.userId === studentId
+            ? {
+                ...entry,
+                status: finished ? ('waiting' as const) : restoreStatus,
+                startedAt: finished ? entry.startedAt : null,
+                checkedBy: finished ? entry.checkedBy : null,
+              }
+            : entry,
+        ),
+      )
+      return true
+    },
   )
-  await prisma.checkoffSession.update({
-    where: { id: row.id },
-    data: { stats: JSON.stringify({ ...stats, entries }) },
-  })
-  emitCheckoffQueueUpdate(classId, row.id)
+  if (changed) emitCheckoffQueueUpdate(classId, session.id)
 }
 
 /** socket 离开验收房间：移除在场并广播（幂等） */
@@ -243,9 +236,9 @@ function extractToken(socket: Socket): string | null {
 async function loadClassIds(userId: string): Promise<string[]> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: { classId: true },
+    select: { classId: true, status: true },
   })
-  return me?.classId ? [me.classId] : []
+  return me?.status === 'ACTIVE' && me.classId ? [me.classId] : []
 }
 
 /** 读取验收广播所需的用户信息（姓名 / 角色 / 头像 / 所属班级） */
@@ -254,9 +247,9 @@ async function loadBroadcastContext(
 ): Promise<{ name: string; role: string; avatar: number | null; classIds: string[] } | null> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, role: true, avatar: true, classId: true },
+    select: { name: true, role: true, avatar: true, classId: true, status: true },
   })
-  if (!me) return null
+  if (!me || me.status !== 'ACTIVE') return null
   return { name: me.name, role: me.role, avatar: me.avatar, classIds: me.classId ? [me.classId] : [] }
 }
 
@@ -589,11 +582,17 @@ export function createRealtime(fastify: FastifyInstance): Server {
         if (!user?.sub || typeof classId !== 'string') return
         const ctx = await loadBroadcastContext(user.sub)
         if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
+        const previousClassId = socket.data.checkoffWatchClassId as string | undefined
+        if (previousClassId && previousClassId !== classId) {
+          await socket.leave(watchRoom(previousClassId))
+          removeCheckoffPresence(socket)
+        }
         await socket.join(watchRoom(classId))
         socket.data.checkoffWatchClassId = classId
         const room = checkoffPresences.get(classId) ?? new Map<string, CheckoffPeer>()
         checkoffPresences.set(classId, room)
-        room.set(socket.id, {
+        const previous = room.get(socket.id)
+        room.set(socket.id, previous ?? {
           userId: user.sub,
           name: ctx.name,
           avatar: ctx.avatar,
@@ -609,14 +608,9 @@ export function createRealtime(fastify: FastifyInstance): Server {
     )
 
     socket.on('checkoff:unwatch', ({ classId } = {} as { classId?: string }) => {
-      if (typeof classId !== 'string') return
+      if (typeof classId !== 'string' || socket.data.checkoffWatchClassId !== classId) return
       void socket.leave(watchRoom(classId))
-      const room = checkoffPresences.get(classId)
-      if (room?.delete(socket.id)) {
-        if (room.size === 0) checkoffPresences.delete(classId)
-        broadcastCheckoffPresence(classId)
-      }
-      if (socket.data.checkoffWatchClassId === classId) socket.data.checkoffWatchClassId = undefined
+      removeCheckoffPresence(socket)
     })
 
     socket.on(
@@ -731,6 +725,8 @@ export function createRealtime(fastify: FastifyInstance): Server {
       async (payload: { key?: unknown } | undefined, ack?: (res: unknown) => void) => {
         const user = socket.data.user as { sub?: string } | undefined
         if (!user?.sub) return ack?.({ error: 'UNAUTHORIZED' })
+        const ctx = await loadBroadcastContext(user.sub)
+        if (!ctx || !isStaff(ctx.role)) return ack?.({ error: 'FORBIDDEN' })
         const requestedKey = payload?.key
         const slot =
           typeof requestedKey === 'string' &&
@@ -782,6 +778,8 @@ export function createRealtime(fastify: FastifyInstance): Server {
         const session = typeof token === 'string' ? checkoffSessions.get(token) : undefined
         if (!user?.sub || !session || session.masterUserId !== user.sub)
           return ack?.({ error: 'FORBIDDEN' })
+        const ctx = await loadBroadcastContext(user.sub)
+        if (!ctx || !isStaff(ctx.role)) return ack?.({ error: 'FORBIDDEN' })
         session.masters.add(socket.id)
         session.updatedAt = Date.now()
         socket.data.role = 'master'

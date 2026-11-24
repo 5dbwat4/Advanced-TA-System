@@ -34,17 +34,27 @@ export function createTabId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-export function instanceStorageKey(id: string): string {
-  return `${INSTANCE_PREFIX}${id}`
+function scopedKey(base: string, userId: string, classId: string): string {
+  return `${base}.${userId}.${classId}`
 }
 
-export function sessionStorageKey(id: string): string {
-  return `${SESSION_PREFIX}${id}`
+export function instanceStorageKey(id: string, userId: string, classId: string): string {
+  return scopedKey(`${INSTANCE_PREFIX}${id}`, userId, classId)
 }
 
-export function loadMultiTabs(): MultiTabsState {
+export function sessionStorageKey(id: string, userId: string, classId: string): string {
+  return scopedKey(`${SESSION_PREFIX}${id}`, userId, classId)
+}
+
+function freshTabs(): MultiTabsState {
+  const id = createTabId()
+  return { tabs: [{ id }], activeId: id }
+}
+
+export function loadMultiTabs(userId?: string, classId?: string): MultiTabsState {
+  if (!userId || !classId) return freshTabs()
   try {
-    const raw = sessionStorage.getItem(CHECKOFF_MULTI_TABS_KEY)
+    const raw = sessionStorage.getItem(scopedKey(CHECKOFF_MULTI_TABS_KEY, userId, classId))
     if (raw) {
       const parsed = JSON.parse(raw) as { tabs?: unknown; activeId?: unknown }
       if (Array.isArray(parsed.tabs)) {
@@ -72,21 +82,28 @@ export function loadMultiTabs(): MultiTabsState {
   } catch (error) {
     warnStorageFailure('load checkoff multi tabs', error)
   }
-  const id = createTabId()
-  return { tabs: [{ id }], activeId: id }
+  return freshTabs()
 }
 
-export function saveMultiTabs(state: MultiTabsState): void {
+export function saveMultiTabs(state: MultiTabsState, userId?: string, classId?: string): void {
+  if (!userId || !classId) return
   try {
-    sessionStorage.setItem(CHECKOFF_MULTI_TABS_KEY, JSON.stringify(state))
+    sessionStorage.setItem(
+      scopedKey(CHECKOFF_MULTI_TABS_KEY, userId, classId),
+      JSON.stringify(state),
+    )
   } catch (error) {
     warnStorageFailure('save checkoff multi tabs', error)
   }
 }
 
-export function loadInstanceSnapshot(id: string): CheckoffInstanceSnapshot | null {
+export function loadInstanceSnapshot(
+  id: string,
+  userId: string,
+  classId: string,
+): CheckoffInstanceSnapshot | null {
   try {
-    const raw = sessionStorage.getItem(instanceStorageKey(id))
+    const raw = sessionStorage.getItem(instanceStorageKey(id, userId, classId))
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<CheckoffInstanceSnapshot>
     const rawStep = typeof parsed.step === 'number' ? Math.round(parsed.step) : 0
@@ -112,19 +129,29 @@ export function loadInstanceSnapshot(id: string): CheckoffInstanceSnapshot | nul
   }
 }
 
-export function saveInstanceSnapshot(id: string, snapshot: CheckoffInstanceSnapshot): void {
+export function saveInstanceSnapshot(
+  id: string,
+  snapshot: CheckoffInstanceSnapshot,
+  userId: string,
+  classId: string,
+): void {
   try {
-    sessionStorage.setItem(instanceStorageKey(id), JSON.stringify(snapshot))
+    sessionStorage.setItem(instanceStorageKey(id, userId, classId), JSON.stringify(snapshot))
   } catch (error) {
     warnStorageFailure('save checkoff instance snapshot', error)
   }
 }
 
-export function pushMultiInstance(snapshot: CheckoffInstanceSnapshot): string | null {
+export function pushMultiInstance(
+  snapshot: CheckoffInstanceSnapshot,
+  userId?: string,
+  classId?: string,
+): string | null {
+  if (!userId || !classId) return null
   let tabs: MultiTab[] = []
   try {
-    if (sessionStorage.getItem(CHECKOFF_MULTI_TABS_KEY)) {
-      tabs = loadMultiTabs().tabs
+    if (sessionStorage.getItem(scopedKey(CHECKOFF_MULTI_TABS_KEY, userId, classId))) {
+      tabs = loadMultiTabs(userId, classId).tabs
     }
   } catch (error) {
     warnStorageFailure('read checkoff multi tab state', error)
@@ -132,19 +159,19 @@ export function pushMultiInstance(snapshot: CheckoffInstanceSnapshot): string | 
   }
   if (tabs.length >= CHECKOFF_MULTI_MAX_TABS) return null
   const id = createTabId()
-  saveInstanceSnapshot(id, snapshot)
-  saveMultiTabs({ tabs: [...tabs, { id }], activeId: id })
+  saveInstanceSnapshot(id, snapshot, userId, classId)
+  saveMultiTabs({ tabs: [...tabs, { id }], activeId: id }, userId, classId)
   return id
 }
 
 export function clearInstanceStorage(id: string, userId?: string, classId?: string): void {
   if (userId && classId) {
     clearCheckoffResume(multiCheckoffResumeKey(id, userId, classId))
-  }
-  try {
-    sessionStorage.removeItem(instanceStorageKey(id))
-    sessionStorage.removeItem(sessionStorageKey(id))
-  } catch (error) {
-    warnStorageFailure('clear checkoff instance snapshot', error)
+    try {
+      sessionStorage.removeItem(instanceStorageKey(id, userId, classId))
+      sessionStorage.removeItem(sessionStorageKey(id, userId, classId))
+    } catch (error) {
+      warnStorageFailure('clear checkoff instance snapshot', error)
+    }
   }
 }

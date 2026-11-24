@@ -30,6 +30,7 @@ export type CheckoffQueueEntry = {
   startedAt: string | null
   checkedBy: string | null
   finishedAt: string | null
+  missedAt: string | null
 }
 
 export type CheckoffSessionStats = {
@@ -63,6 +64,7 @@ export type StudentCheckoffQueueTimelineEntry = {
   startedAt: string | null
   checkedBy: string | null
   finishedAt: string | null
+  missedAt: string | null
   joinedAt: string
 }
 

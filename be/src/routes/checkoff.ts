@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { compareExperimentMark, parseBankQuestions } from '../lib/banks.js'
 import { myClassIds, requireStaffRole } from '../lib/class-access.js'
-import { orderQueueEntries, parseSessionStats } from '../lib/checkoff-queue.js'
+import { CheckoffQueueError, saveQueueOrder, withLatestQueueMutation } from '../lib/checkoff-queue.js'
 import { prisma } from '../lib/prisma.js'
 import { describeScoreChange, sendPushToUser } from '../lib/push.js'
 import { emitCheckoffQueueUpdate, emitScoreChange, type ScoreChangeEvent } from '../lib/realtime.js'
@@ -25,7 +25,6 @@ const submitSchema = z.object({
 export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
   /** 验收面板数据（实验 / 学生 / 已有分数，可内嵌指定实验的题目） */
   fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
-
     const query = request.query as { classId?: unknown; experimentId?: unknown; includeQuestions?: unknown }
     const classId = typeof query.classId === 'string' ? query.classId : ''
     const experimentId =
@@ -51,7 +50,6 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       }))
       .sort((a, b) => compareExperimentMark(a.mark, b.mark))
 
-    // 班级人数不多，一次返回完整名单供前端本地检索（含拼音）
     const studentRows = await prisma.user.findMany({
       where: { classId, role: 'STUDENT', status: 'ACTIVE' },
       orderBy: { studentId: 'asc' },
@@ -122,7 +120,6 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 实验题目列表（含答案） */
   fastify.get('/questions', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
-
     const query = request.query as { experimentId?: unknown }
     const experimentId = typeof query.experimentId === 'string' ? query.experimentId : ''
 
@@ -136,7 +133,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
     const classIds = await myClassIds(request)
     if (!classIds.includes(experiment.classId)) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级的实验' })
     }
 
     const bank = experiment.questionBankId
@@ -171,7 +168,6 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
   /** 最近验收提交的成绩（本班，按更新时间倒序，最多 10 条） */
   fastify.get('/records', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
-
     const query = request.query as { classId?: unknown }
     const classId = typeof query.classId === 'string' ? query.classId : ''
 
@@ -224,7 +220,6 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { experimentId, userId, scores } = parsed.data
-
     const student = await prisma.user.findFirst({
       where: { id: userId, role: 'STUDENT', status: 'ACTIVE' },
     })
@@ -247,7 +242,6 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const events: ScoreChangeEvent[] = []
-
     const previousScores = await prisma.score.findMany({
       where: {
         userId,
@@ -289,9 +283,7 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    for (const event of events) {
-      emitScoreChange(student.classId, event)
-    }
+    for (const event of events) emitScoreChange(student.classId, event)
 
     const messages: string[] = []
     for (const item of scores) {
@@ -330,28 +322,31 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    const queueSession = await prisma.checkoffSession.findFirst({
-      where: { classId },
-      orderBy: { createdAt: 'desc' },
-    })
-    if (queueSession) {
-      const stats = parseSessionStats(queueSession.stats)
-      if (!stats.closedAt && stats.entries.some((entry) => entry.userId === userId)) {
+    let finishedSessionId: string | null = null
+    try {
+      const { value: updated, session } = await withLatestQueueMutation(classId, async ({ tx, session, entries }) => {
+        if (session.closedAt || !entries.some((entry) => entry.userId === userId)) return false
         const finishedAt = new Date().toISOString()
-        const entries = orderQueueEntries(
-          stats.entries.map((entry) =>
+        await saveQueueOrder(
+          tx,
+          entries.map((entry) =>
             entry.userId === userId
-              ? { ...entry, status: 'finished' as const, finishedAt }
+              ? { ...entry, status: 'finished' as const, finishedAt, missedAt: null }
               : entry,
           ),
         )
-        await prisma.checkoffSession.update({
-          where: { id: queueSession.id },
-          data: { stats: JSON.stringify({ ...stats, entries }) },
-        })
-        emitCheckoffQueueUpdate(classId, queueSession.id)
+        return true
+      })
+      if (updated) finishedSessionId = session.id
+    } catch (error) {
+      if (
+        !(error instanceof CheckoffQueueError) ||
+        !['SESSION_NOT_FOUND', 'SESSION_CLOSED', 'QUEUE_CONFLICT'].includes(error.code)
+      ) {
+        throw error
       }
     }
+    if (finishedSessionId) emitCheckoffQueueUpdate(classId, finishedSessionId)
 
     return reply.send({ ok: true })
   })

@@ -83,6 +83,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   /** 新建题库（所有人 = staff 均可） */
   fastify.post('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
+    const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }
@@ -138,6 +139,7 @@ export const banksRoutes: FastifyPluginAsync = async (fastify) => {
   /** 复制题库（任意 staff，新 owner = 当前用户） */
   fastify.post('/:id/duplicate', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
+    const { sub } = request.user as { sub?: string }
     if (!sub) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })
     }

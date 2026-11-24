@@ -183,8 +183,10 @@ export function registerQuestionTools(server: McpServer, principal: McpPrincipal
         if (existing.provider !== principal.userId) {
           throw new Error('仅出题人可删除，可先复制一份再修改')
         }
-        await prisma.question.delete({ where: { id: args.id } })
-        await removeQuestionsFromBanks([args.id])
+        await prisma.$transaction(async (tx) => {
+          await tx.question.delete({ where: { id: args.id } })
+          await removeQuestionsFromBanks([args.id], tx)
+        })
         return jsonResult({ ok: true })
       }),
   )

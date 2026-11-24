@@ -78,18 +78,6 @@ function toTa(user: TaWithClass) {
 }
 
 export const staffRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 助教列表 */
-  fastify.get('/tas', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
-
-    const tas = await prisma.user.findMany({
-      where: { role: 'TA' },
-      include: { klass: true },
-      orderBy: { createdAt: 'asc' },
-    })
-
-    return { tas: tas.map(toTa) }
-  })
-
   /** 当前课程的 Staff 名单（教师 / 助教 / 观察者） */
   fastify.get('/members', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const parsed = listMembersQuerySchema.safeParse(request.query)
@@ -123,35 +111,6 @@ export const staffRoutes: FastifyPluginAsync = async (fastify) => {
     )
 
     return { members: members.map(toStaffMember) }
-  })
-
-  /**
-   * 添加助教（仅预置学号，账号处于未解封状态）。
-   * TODO: 单班模型下应按班级预置（`{ studentId, classId }`）或取消该接口，
-   * 目前保留既有行为，按全局学号去重。
-   */
-  fastify.post('/tas', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
-
-    const parsed = createTaSchema.safeParse(request.body)
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'INVALID_BODY', message: '请输入有效的学号' })
-    }
-
-    const { studentId } = parsed.data
-
-    const existing = await prisma.user.findFirst({
-      where: { studentId, role: 'TA' },
-      select: { id: true },
-    })
-    if (existing) {
-      return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '该学号已存在于系统中' })
-    }
-
-    const user = await prisma.user.create({
-      data: { studentId, name: studentId, role: 'TA' },
-    })
-
-    return reply.code(201).send({ ta: toTa({ ...user, klass: null }) })
   })
 
   /**

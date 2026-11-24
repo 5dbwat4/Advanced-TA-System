@@ -36,6 +36,7 @@ export type StudentPreviewData = {
 export function fetchStudentPreview(token: string): Promise<StudentPreviewData> {
   return apiFetch<StudentPreviewData>(
     `/api/student-preview/view?token=${encodeURIComponent(token)}`,
+    { ignoreUnauthorizedEvent: true },
   )
 }
 

@@ -133,9 +133,9 @@ export function CheckoffQueueDrawer({
     _toIndex: number,
   ) => {
     if (!session || reorderingId) return false
-    const waiting = actualCurrentId
-      ? entries.filter((entry) => entry.userId !== actualCurrentId)
-      : entries
+    const waiting = entries.filter(
+      (entry) => entry.status !== 'finished' && entry.status !== 'called',
+    )
     const target = waiting.findIndex((entry) => entry.userId === overId)
     if (target < 0) return false
     setReorderingId(activeId)

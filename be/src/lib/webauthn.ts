@@ -39,7 +39,7 @@ export async function findUserByCredentialId(
   credentialId: string,
 ): Promise<{ user: User & { klass: Class | null }; credential: StoredCredential } | null> {
   const users = await prisma.user.findMany({
-    where: { webauthn: { not: null } },
+    where: { webauthn: { not: null }, status: 'ACTIVE' },
     include: { klass: true },
   })
   for (const user of users) {

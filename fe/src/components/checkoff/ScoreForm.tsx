@@ -1,5 +1,5 @@
 import { Input, Slider } from '@heroui/react'
-import { useCallback, useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { toast } from 'sonner'
 
 import Check from '~icons/lucide/check'
@@ -97,6 +97,7 @@ export function ScoreForm({
   experimentId,
   student,
   marks,
+  drawnQuestionIds,
   existingScores,
   ratio,
   onSaved,
@@ -106,6 +107,7 @@ export function ScoreForm({
   experimentId: string
   student: CheckoffStudent
   marks: Record<string, QuestionMark | undefined>
+  drawnQuestionIds: string[]
   existingScores: Score[]
   ratio: number[]
   onSaved: () => void
@@ -116,6 +118,7 @@ export function ScoreForm({
 }) {
   const [values, setValues] = useState<Record<number, number>>({ 0: DEFAULT_SCORE, 1: DEFAULT_SCORE })
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     const next: Record<number, number> = { 0: DEFAULT_SCORE, 1: DEFAULT_SCORE }
@@ -131,8 +134,9 @@ export function ScoreForm({
   const weights = rawWeights[0] <= 0 && rawWeights[1] <= 0 ? [1, 1] : rawWeights
   const total = weightedTotal([values[0], values[1]], weights) ?? 0
 
-  const correctCount = Object.values(marks).filter((mark) => mark === 'correct').length
-  const partialCount = Object.values(marks).filter((mark) => mark === 'partial').length
+  const currentMarks = drawnQuestionIds.map((id) => marks[id])
+  const correctCount = currentMarks.filter((mark) => mark === 'correct').length
+  const partialCount = currentMarks.filter((mark) => mark === 'partial').length
   const tallyLabel =
     correctCount + partialCount > 0 ? `参考：${correctCount} 对 · ${partialCount} 半对` : null
 
@@ -141,6 +145,8 @@ export function ScoreForm({
   }
 
   const save = useCallback(async () => {
+    if (savingRef.current) return
+    savingRef.current = true
     const scores = SCORED_TYPES.map((type) => ({ type: type.value, score: values[type.value] }))
     setSaving(true)
     try {
@@ -150,6 +156,7 @@ export function ScoreForm({
     } catch (error) {
       toast.error(getErrorMessage(error, '保存失败'))
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }, [values, experimentId, student, onSaved])

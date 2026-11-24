@@ -13,9 +13,11 @@ import {
   type User,
   type UserPreferences,
 } from '@/lib/api'
+import { resetCheckoffSocket } from '@/lib/checkoff-socket'
 import { getErrorMessage } from '@/lib/error'
 import { saveLastUser } from '@/lib/last-user'
 import { queryClient } from '@/lib/query'
+import { disconnectScoreSocket } from '@/lib/realtime'
 import { setSentryUser } from '@/lib/sentry'
 
 type AuthContextValue = {
@@ -52,6 +54,12 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function resetSessionScopedState(): void {
+  queryClient.clear()
+  disconnectScoreSocket()
+  resetCheckoffSocket()
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(() => Boolean(getToken()))
@@ -68,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((error: unknown) => {
         if (cancelled) return
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          resetSessionScopedState()
           setToken(null)
           setUser(null)
         } else {
@@ -87,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null)
       setUser(null)
       setBootstrapError(null)
-      queryClient.clear()
+      resetSessionScopedState()
     }
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
@@ -118,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(body),
         })
         if (isLoginSelection(res) || isClassSelection(res)) return res
+        resetSessionScopedState()
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)
@@ -129,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: 'POST',
           body: JSON.stringify({ selectionToken, userId }),
         })
+        resetSessionScopedState()
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)
@@ -137,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       selectClass: async (selectionToken, optionKey, type) => {
         const res = await selectZjuamClass(selectionToken, optionKey, type)
+        resetSessionScopedState()
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)
@@ -148,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: 'POST',
           body: JSON.stringify({ token }),
         })
+        resetSessionScopedState()
         setToken(res.token)
         setUser(res.user)
         setBootstrapError(null)
@@ -155,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return res.user
       },
       adoptSession: (session) => {
+        resetSessionScopedState()
         setToken(session.token)
         setUser(session.user)
         setBootstrapError(null)
@@ -193,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         void apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
-        queryClient.clear()
+        resetSessionScopedState()
         setToken(null)
         setUser(null)
       },

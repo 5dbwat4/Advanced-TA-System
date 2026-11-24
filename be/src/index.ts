@@ -8,8 +8,10 @@ import Fastify from 'fastify'
 import { ZodError } from 'zod'
 
 import { env } from './env.js'
+import { CheckoffQueueError } from './lib/checkoff-queue.js'
 import { createRealtime } from './lib/realtime.js'
 import { loginRateLimit } from './lib/rate-limit.js'
+import { prisma } from './lib/prisma.js'
 import { authRoutes } from './routes/auth.js'
 import { banksRoutes } from './routes/banks.js'
 import { checkoffRoutes } from './routes/checkoff.js'
@@ -44,6 +46,9 @@ await fastify.register(cors, { origin: true })
 await fastify.register(jwt, { secret: env.jwtSecret })
 
 fastify.setErrorHandler((error: unknown, request, reply) => {
+  if (error instanceof CheckoffQueueError) {
+    return reply.code(error.statusCode).send({ error: error.code, message: error.message })
+  }
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     return reply.code(409).send({ error: 'ALREADY_EXISTS', message: '记录已存在，请刷新后重试' })
   }
@@ -70,6 +75,16 @@ fastify.decorate('authenticate', async (request, reply) => {
     const payload = await request.jwtVerify<{ sub?: string; role?: string; purpose?: string }>()
     if (!payload.sub || !payload.role || payload.purpose) {
       throw new Error('invalid access token')
+    }
+    const current = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { role: true, status: true },
+    })
+    if (!current || current.role !== payload.role) {
+      return reply.code(401).send({ error: 'UNAUTHORIZED', message: '登录状态已失效，请重新登录' })
+    }
+    if (current.status !== 'ACTIVE') {
+      return reply.code(403).send({ error: 'ACCOUNT_DISABLED', message: '该账号已被移出名单' })
     }
   } catch {
     return reply.code(401).send({ error: 'UNAUTHORIZED', message: '未登录或登录已过期' })

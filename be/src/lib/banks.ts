@@ -69,23 +69,24 @@ export async function filterExistingQuestionIds(ids: string[]): Promise<string[]
   return ids.filter((id) => existing.has(id))
 }
 
-/** 从所有题库中移除指定题目 id（删除题目后清理 JSON 悬挂引用） */
-export async function removeQuestionsFromBanks(questionIds: string[]): Promise<void> {
+/** 从所有题库中移除指定题目 id（调用方负责提供外层事务） */
+export async function removeQuestionsFromBanks(
+  questionIds: string[],
+  db: typeof prisma | Prisma.TransactionClient = prisma,
+): Promise<void> {
   if (questionIds.length === 0) return
   const remove = new Set(questionIds)
 
-  const banks = await prisma.questionBank.findMany({ select: { id: true, questions: true } })
+  const banks = await db.questionBank.findMany({ select: { id: true, questions: true } })
   const updates = banks
     .map((bank) => ({ bank, ids: parseBankQuestions(bank.questions) }))
     .filter(({ ids }) => ids.some((id) => remove.has(id)))
     .map(({ bank, ids }) =>
-      prisma.questionBank.update({
+      db.questionBank.update({
         where: { id: bank.id },
         data: { questions: JSON.stringify(ids.filter((id) => !remove.has(id))) },
       }),
     )
 
-  if (updates.length > 0) {
-    await prisma.$transaction(updates)
-  }
+  await Promise.all(updates)
 }

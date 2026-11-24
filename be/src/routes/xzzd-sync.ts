@@ -262,11 +262,21 @@ export const xzzdSyncRoutes: FastifyPluginAsync = async (fastify) => {
           return [{ userId: row.userId, score: row.upstreamScore }]
         })
 
-        if (writes.length === 0) {
-          return reply.send({ ...summary, lastSyncAt: null })
-        }
-
         const syncedAt = new Date()
+        if (writes.length === 0) {
+          await prisma.$transaction([
+            prisma.xzzdHomework.upsert({
+              where: { id: context.experiment.id },
+              create: { id: context.experiment.id, lastXzzdDownSyncAt: syncedAt },
+              update: { lastXzzdDownSyncAt: syncedAt },
+            }),
+            prisma.experiment.update({
+              where: { id: context.experiment.id },
+              data: { lastXzzdDownSyncAt: syncedAt },
+            }),
+          ])
+          return reply.send({ ...summary, lastSyncAt: syncedAt.toISOString() })
+        }
         const saved = await prisma.$transaction(async (tx) => {
           const result = []
           for (const item of writes) {
@@ -300,6 +310,10 @@ export const xzzdSyncRoutes: FastifyPluginAsync = async (fastify) => {
             where: { id: context.experiment.id },
             create: { id: context.experiment.id, lastXzzdDownSyncAt: syncedAt },
             update: { lastXzzdDownSyncAt: syncedAt },
+          })
+          await tx.experiment.update({
+            where: { id: context.experiment.id },
+            data: { lastXzzdDownSyncAt: syncedAt },
           })
 
           return result

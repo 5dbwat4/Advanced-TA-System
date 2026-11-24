@@ -10,7 +10,7 @@ import {
 } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -63,8 +63,11 @@ export default function CheckoffMulti() {
   const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [ratioError, setRatioError] = useState(false)
-  const [tabsState, setTabsState] = useState<MultiTabsState>(loadMultiTabs)
+  const [tabsState, setTabsState] = useState<MultiTabsState>(() =>
+    loadMultiTabs(user?.id, classId),
+  )
   const [meta, setMeta] = useState<Record<string, CheckoffTabMeta>>({})
+  const skipTabsSave = useRef(false)
 
   const handleCheckoffStarted = useCallback((event: CheckoffStartedEvent) => {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
@@ -72,8 +75,18 @@ export default function CheckoffMulti() {
   useCheckoffWatch(classId, handleCheckoffStarted)
 
   useEffect(() => {
-    saveMultiTabs(tabsState)
-  }, [tabsState])
+    skipTabsSave.current = true
+    setTabsState(loadMultiTabs(user?.id, classId))
+    setMeta({})
+  }, [user?.id, classId])
+
+  useEffect(() => {
+    if (skipTabsSave.current) {
+      skipTabsSave.current = false
+      return
+    }
+    saveMultiTabs(tabsState, user?.id, classId)
+  }, [tabsState, user?.id, classId])
 
   useEffect(() => {
     if (!classId) return
@@ -344,7 +357,7 @@ export default function CheckoffMulti() {
       <div>
         {tabsState.tabs.map((tab) => (
           <CheckoffInstance
-            key={tab.id}
+            key={`${user.id}:${currentClass.id}:${tab.id}`}
             id={tab.id}
             classId={currentClass.id}
             userId={user.id}

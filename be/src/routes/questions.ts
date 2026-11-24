@@ -192,8 +192,10 @@ export const questionsRoutes: FastifyPluginAsync = async (fastify) => {
         .send({ error: 'FORBIDDEN', message: '仅出题人可删除，可先复制一份再修改' })
     }
 
-    await prisma.question.delete({ where: { id } })
-    await removeQuestionsFromBanks([id])
+    await prisma.$transaction(async (tx) => {
+      await tx.question.delete({ where: { id } })
+      await removeQuestionsFromBanks([id], tx)
+    })
 
     return reply.send({ ok: true })
   })
