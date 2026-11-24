@@ -208,6 +208,7 @@ model Class {
   focusStudents    FocusStudent[]
   devBoards        DevBoard[]
   checkoffSessions CheckoffSession[]
+  criteria         Criteria[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -462,12 +463,20 @@ model Criteria {
   key       String   @id
   /// 评分标准内容（JSON 字符串）
   payload   String
+  /// 展示名称
+  name      String   @default("未命名评分标准")
+  /// 所属课程；仅历史数据无法回填时为空
+  classId   String?
+  klass     Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  /// private：仅课程 staff 可列出；public：所有登录用户可列出
+  visibility String  @default("private")
   creatorId String
   creator   User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([creatorId])
+  @@index([classId, visibility])
 }
 
 /// MCP 工具调用审计日志

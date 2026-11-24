@@ -8,6 +8,7 @@ import Construction from '~icons/lucide/construction'
 import FileText from '~icons/lucide/file-text'
 import RefreshCw from '~icons/lucide/refresh-cw'
 import School from '~icons/lucide/school'
+import { CriteriaSection } from '@/components/criteria/CriteriaSection'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -257,7 +258,14 @@ export default function Reports() {
             </div>
           </Card>
 
-          <Card index={1}>
+          <CriteriaSection
+            index={1}
+            createHref={
+              selectedId ? `/console/reports/${selectedId}/criteria/new` : '/console/criteria/new'
+            }
+          />
+
+          <Card index={2}>
             <div className="flex flex-wrap items-center gap-2">
               <FileText
                 width={16}

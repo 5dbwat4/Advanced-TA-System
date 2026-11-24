@@ -1,4 +1,4 @@
-import { Modal, useOverlayState } from '@heroui/react'
+import { Button, Modal, useOverlayState } from '@heroui/react'
 import copyToClipboard from 'copy-to-clipboard'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -19,12 +19,15 @@ import { SkeletonList } from '@/components/ui/SkeletonList'
 import { deleteCriteria, fetchCriteria, fetchCriteriaList, type CriteriaSummary } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatDateTime } from '@/lib/format'
+import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 export default function CriteriaManage() {
   const previewState = useOverlayState()
   const confirmState = useOverlayState()
   const navigate = useNavigate()
+  const currentClass = useCurrentClass()
+  const classId = currentClass?.id ?? null
   const [list, setList] = useState<CriteriaSummary[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [preview, setPreview] = useState<CriterionItem[]>([])
@@ -33,6 +36,7 @@ export default function CriteriaManage() {
 
   useEffect(() => {
     let cancelled = false
+    setList(null)
     setLoading(true)
     fetchCriteriaList()
       .then((res) => {
@@ -50,7 +54,7 @@ export default function CriteriaManage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [classId])
 
   const copy = async (key: string) => {
     if (await copyToClipboard(key)) toast.success('分享码已复制')
@@ -86,15 +90,19 @@ export default function CriteriaManage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="评分标准管理" />
+      <PageHeader
+        title="评分标准管理"
+        subtitle="public 对所有登录用户可见；private 仅所属课程 staff 可见"
+        actions={<Button onPress={() => navigate('/console/criteria/new')}>新建评分标准</Button>}
+      />
 
       {loading ? (
         <SkeletonList rows={3} className="h-20 rounded-2xl" />
       ) : !list || list.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="还没有创建评分标准"
-          hint="在报告批改页保存评分标准后，会出现在这里"
+          title="暂无可见的评分标准"
+          hint="点击右上角新建，或在报告批改页保存评分标准"
         />
       ) : (
         <div className="flex flex-col gap-3">
@@ -102,9 +110,28 @@ export default function CriteriaManage() {
             const inUse = item.usageCount > 0
             return (
               <Card key={item.key} index={index}>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="tabular truncate text-xs text-fg-muted">{item.key}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold">{item.name}</span>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                          item.visibility === 'public'
+                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
+                            : 'bg-sunken text-fg-muted',
+                        )}
+                      >
+                        {item.visibility}
+                      </span>
+                      {item.canManage && (
+                        <span className="text-[10px] font-medium text-fg-subtle">我创建的</span>
+                      )}
+                    </div>
+                    <div className="mt-1 break-all text-xs text-fg-muted">
+                      {item.className ?? '未关联课程'} · {item.classId ?? '历史记录'}
+                    </div>
+                    <div className="tabular mt-1 break-all text-[11px] text-fg-subtle">{item.key}</div>
                     <div className="mt-1 text-[11px] text-fg-subtle">
                       更新于 {formatDateTime(item.updatedAt)} · {item.cardCount} 张卡片 ·{' '}
                       <span className={cn(inUse && 'text-amber-600 dark:text-amber-400')}>
@@ -113,13 +140,15 @@ export default function CriteriaManage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <IconAction
-                      label="编辑"
-                      variant="secondary"
-                      onPress={() => navigate(`/console/criteria/${item.key}/edit`)}
-                    >
-                      <Pencil width={15} height={15} className="shrink-0" />
-                    </IconAction>
+                    {item.canManage && (
+                      <IconAction
+                        label="编辑"
+                        variant="secondary"
+                        onPress={() => navigate(`/console/criteria/${item.key}/edit`)}
+                      >
+                        <Pencil width={15} height={15} className="shrink-0" />
+                      </IconAction>
+                    )}
                     <IconAction
                       label="预览"
                       variant="secondary"
@@ -134,18 +163,20 @@ export default function CriteriaManage() {
                     >
                       <Copy width={15} height={15} className="shrink-0" />
                     </IconAction>
-                    <IconAction
-                      label="删除"
-                      variant="secondary"
-                      isDisabled={inUse}
-                      tooltip={inUse ? '正被批阅使用，无法删除' : '删除'}
-                      onPress={() => {
-                        setDeleteTarget(item)
-                        confirmState.open()
-                      }}
-                    >
-                      <Trash2 width={15} height={15} className="shrink-0" />
-                    </IconAction>
+                    {item.canManage && (
+                      <IconAction
+                        label="删除"
+                        variant="secondary"
+                        isDisabled={inUse}
+                        tooltip={inUse ? '正被批阅使用，无法删除' : '删除'}
+                        onPress={() => {
+                          setDeleteTarget(item)
+                          confirmState.open()
+                        }}
+                      >
+                        <Trash2 width={15} height={15} className="shrink-0" />
+                      </IconAction>
+                    )}
                   </div>
                 </div>
               </Card>

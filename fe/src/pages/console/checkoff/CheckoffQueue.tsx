@@ -178,21 +178,17 @@ export default function CheckoffQueue() {
 
   useCheckoffQueueUpdates(classId, () => reloadSessions())
 
-  const currentUserId = useMemo(
-    () => queue.find((item) => item.status === 'called')?.userId ?? null,
-    [queue],
-  )
   const selectedCount = selected.size
   const hasSelection = selectedCount > 0
   const selectedHasFinished = queue.some(
     (item) => selected.has(item.userId) && item.status === 'finished',
   )
+  const selectedHasCurrent = queue.some(
+    (item) => selected.has(item.userId) && item.status === 'called',
+  )
   const operationDisabled = !hasSelection || pending || !session
-  const sortingDisabled =
-    operationDisabled ||
-    selectedHasFinished ||
-    (currentUserId !== null && selected.has(currentUserId))
-  const precallDisabled = operationDisabled || selectedHasFinished
+  const sortingDisabled = operationDisabled || selectedHasFinished || selectedHasCurrent
+  const precallDisabled = operationDisabled || selectedHasFinished || selectedHasCurrent
 
   const toggleItem = useCallback(
     (userId: string, index: number, shiftKey: boolean) => {

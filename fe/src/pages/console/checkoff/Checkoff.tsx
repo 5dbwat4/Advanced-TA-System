@@ -58,6 +58,7 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useCheckoffBankOverride } from '@/lib/checkoff-bank'
+import { useCheckoffQueueSession } from '@/lib/checkoff-queue'
 import {
   clearCheckoffPresence,
   notifyCheckoffStarted,
@@ -144,6 +145,11 @@ export default function Checkoff() {
   const { bankId: bankOverrideId, save: saveBankOverride } = useCheckoffBankOverride()
   const resumeKey =
     user?.id && classId ? singleCheckoffResumeKey(user.id, classId) : null
+  const {
+    session: queueSession,
+    enabled: queueEnabled,
+    reload: reloadQueueSession,
+  } = useCheckoffQueueSession(classId)
 
   const isMulti = user?.preferences?.device === 'multi'
   const master = useCheckoffMaster(isMulti, user?.id)
@@ -1047,15 +1053,19 @@ export default function Checkoff() {
         onEdit={openSpecialDrawEditor}
         onApplied={applySpecialDrawMachine}
       />
-      <CheckoffQueueDrawer
-        classId={currentClass.id}
-        activeStudentId={student?.userId ?? null}
-        activeStartedAt={activeStartedAt}
-        onStart={startQueueStudent}
-      />
+      {queueEnabled && queueSession && (
+        <CheckoffQueueDrawer
+          classId={currentClass.id}
+          session={queueSession}
+          onSessionChange={reloadQueueSession}
+          activeStudentId={student?.userId ?? null}
+          activeStartedAt={activeStartedAt}
+          onStart={startQueueStudent}
+        />
+      )}
       <CheckoffResumeDialog
         state={resumeState}
-        classId={classId ?? null}
+        session={queueSession}
         snapshot={resume}
         onRestore={restoreResume}
         onDiscard={discardResume}

@@ -148,6 +148,7 @@ export default function App() {
             <Route path="/console/checkoff-multi" element={<CheckoffMulti />} />
             <Route path="/console/checkoff/special" element={<SpecialDrawEditor />} />
             <Route path="/console/reports/:id/criteria/new" element={<ReportCriteria />} />
+            <Route path="/console/criteria/new" element={<ReportCriteria />} />
             <Route path="/console/criteria/:key/edit" element={<ReportCriteria />} />
             <Route path="/console/courses/new-account" element={<NewClassAccount />} />
             <Route path="/console" element={<AppShell />}>

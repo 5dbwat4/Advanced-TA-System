@@ -49,34 +49,40 @@ export function CheckoffPresenceModal({
                     暂无其他人在验收页
                   </p>
                 ) : (
-                  peers.map((peer) => (
-                    <div
-                      key={peer.userId}
-                      className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
-                    >
-                      <AvatarImage
-                        id={peer.avatar}
-                        size={32}
-                        fallback={peer.name.slice(0, 1)}
-                      />
-                      <div className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
-                        {peer.name}
-                        {peer.userId === currentUserId && (
-                          <span className="ml-1 text-xs font-normal text-fg-subtle">（我）</span>
-                        )}
-                      </div>
-                      <span
-                        className={cn(
-                          'shrink-0 text-xs',
-                          peer.studentName
-                            ? 'font-medium text-brand-600 dark:text-brand-300'
-                            : 'text-fg-subtle',
-                        )}
+                  peers.map((peer) => {
+                    const studentNames =
+                      peer.students?.map((student) => student.studentName) ??
+                      (peer.studentName ? [peer.studentName] : [])
+                    const active = studentNames.length > 0
+                    return (
+                      <div
+                        key={peer.userId}
+                        className="flex items-start gap-3 rounded-xl border border-line bg-sunken px-3 py-2"
                       >
-                        {peer.studentName ? `正在验收 ${peer.studentName}` : '空闲'}
-                      </span>
-                    </div>
-                  ))
+                        <AvatarImage
+                          id={peer.avatar}
+                          size={32}
+                          fallback={peer.name.slice(0, 1)}
+                        />
+                        <div className="min-w-0 flex-1 truncate pt-1.5 text-sm font-semibold text-fg">
+                          {peer.name}
+                          {peer.userId === currentUserId && (
+                            <span className="ml-1 text-xs font-normal text-fg-subtle">（我）</span>
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            'max-w-[60%] pt-1.5 text-right text-xs leading-5',
+                            active
+                              ? 'font-medium text-brand-600 dark:text-brand-300'
+                              : 'text-fg-subtle',
+                          )}
+                        >
+                          {active ? `正在验收 ${studentNames.join('、')}` : '空闲'}
+                        </span>
+                      </div>
+                    )
+                  })
                 )}
               </section>
 

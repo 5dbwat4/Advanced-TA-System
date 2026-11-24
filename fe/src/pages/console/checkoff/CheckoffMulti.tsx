@@ -20,19 +20,24 @@ import MoreHorizontal from '~icons/lucide/more-horizontal'
 import Plus from '~icons/lucide/plus'
 import School from '~icons/lucide/school'
 import Settings2 from '~icons/lucide/settings-2'
+import Users from '~icons/lucide/users'
 import X from '~icons/lucide/x'
 import { CheckoffLayout } from '@/components/checkoff/CheckoffLayout'
+import { CheckoffPresenceModal } from '@/components/checkoff/CheckoffPresenceModal'
 import { PreferenceOnboarding } from '@/components/checkoff/PreferenceOnboarding'
 import { EmptyState } from '@/components/ui/Card'
 import { IconAction } from '@/components/ui/IconAction'
 import {
   fetchCheckoff,
+  fetchCheckoffRecords,
   fetchClassSettings,
   type CheckoffExperiment,
+  type CheckoffRecord,
   type ClassSettings,
   type UserPreferences,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useCheckoffQueueSession } from '@/lib/checkoff-queue'
 import {
   destroyCheckoffSession,
   useCheckoffWatch,
@@ -58,21 +63,36 @@ export default function CheckoffMulti() {
   const { resolvedTheme } = useTheme()
   const navigate = useNavigate()
   const prefsState = useOverlayState()
+  const presenceState = useOverlayState()
 
   const [experiments, setExperiments] = useState<CheckoffExperiment[]>([])
   const [classSettings, setClassSettings] = useState<ClassSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [ratioError, setRatioError] = useState(false)
+  const [records, setRecords] = useState<CheckoffRecord[]>([])
+  const [recordsLoading, setRecordsLoading] = useState(false)
   const [tabsState, setTabsState] = useState<MultiTabsState>(() =>
     loadMultiTabs(user?.id, classId),
   )
   const [meta, setMeta] = useState<Record<string, CheckoffTabMeta>>({})
   const skipTabsSave = useRef(false)
+  const { session: queueSession, reload: reloadQueueSession } =
+    useCheckoffQueueSession(classId)
 
   const handleCheckoffStarted = useCallback((event: CheckoffStartedEvent) => {
     herouiToast(`${event.userName}正在验收${event.studentName}。`, { timeout: 10000 })
   }, [])
-  useCheckoffWatch(classId, handleCheckoffStarted)
+  const peers = useCheckoffWatch(classId, handleCheckoffStarted)
+
+  const openPresence = useCallback(() => {
+    presenceState.open()
+    if (!classId) return
+    setRecordsLoading(true)
+    fetchCheckoffRecords(classId)
+      .then((res) => setRecords(res.records))
+      .catch((error) => toast.error(getErrorMessage(error, '加载记录失败')))
+      .finally(() => setRecordsLoading(false))
+  }, [classId, presenceState])
 
   useEffect(() => {
     skipTabsSave.current = true
@@ -254,12 +274,17 @@ export default function CheckoffMulti() {
             >
               <MoreHorizontal width={16} height={16} className="shrink-0" />
             </Dropdown.Trigger>
-            <Dropdown.Popover className="min-w-[180px]">
+            <Dropdown.Popover className="min-w-[220px]">
               <Dropdown.Menu
                 onAction={(key) => {
-                  if (key === 'checkoff') navigate('/console/checkoff')
+                  if (key === 'presence') openPresence()
+                  else if (key === 'checkoff') navigate('/console/checkoff')
                 }}
               >
+                <Dropdown.Item id="presence" textValue="现在谁正在验收">
+                  <Users width={15} height={15} className="shrink-0 text-fg-muted" />
+                  <Label>现在谁正在验收</Label>
+                </Dropdown.Item>
                 <Dropdown.Item id="checkoff" textValue="返回验收">
                   <ClipboardCheck width={15} height={15} className="shrink-0 text-fg-muted" />
                   <Label>返回验收</Label>
@@ -369,12 +394,21 @@ export default function CheckoffMulti() {
             markdownStyle={markdownStyle}
             theme={theme}
             active={tabsState.activeId === tab.id}
+            queueSession={queueSession}
+            onQueueSessionChange={reloadQueueSession}
             onMetaChange={handleMetaChange}
             onSaved={handleSaved}
           />
         ))}
       </div>
 
+      <CheckoffPresenceModal
+        state={presenceState}
+        peers={peers}
+        records={records}
+        recordsLoading={recordsLoading}
+        currentUserId={user.id}
+      />
       <Modal state={prefsState}>
         <Modal.Backdrop>
           <Modal.Container>

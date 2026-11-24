@@ -433,9 +433,9 @@ export function GradePanel({
                   <Copy width={15} height={15} className="shrink-0 text-fg-muted" />
                   <Label>复制当前评分标准分享码</Label>
                 </Dropdown.Item>
-                <Dropdown.Item id="manage-criteria" textValue="我创建的评分标准">
+                <Dropdown.Item id="manage-criteria" textValue="评分标准管理">
                   <ClipboardList width={15} height={15} className="shrink-0 text-fg-muted" />
-                  <Label>我创建的评分标准</Label>
+                  <Label>评分标准管理</Label>
                 </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown.Popover>

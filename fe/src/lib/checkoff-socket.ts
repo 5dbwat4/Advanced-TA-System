@@ -277,8 +277,10 @@ export type CheckoffPeer = {
   userId: string
   name: string
   avatar: number | null
-  /** 当前正在验收的学生姓名；null 表示空闲 */
+  /** 旧版服务端只返回一个学生，新版通过 students 返回全部群面 tab（可选以兼容旧服务端） */
   studentName: string | null
+  studentId?: string | null
+  students?: { studentId: string; studentName: string }[]
   at: number
 }
 
@@ -390,6 +392,7 @@ export function notifyCheckoffStarted(payload: {
   classId: string
   studentId: string
   studentName: string
+  presenceId?: string
 }): void {
   getCheckoffSocket().emit('checkoff:notify', payload)
 }
@@ -397,11 +400,12 @@ export function notifyCheckoffStarted(payload: {
 /** 通知当前班级的验收房间：本助教不再验收（保存成绩 / 返回上一步后清空在场） */
 export function clearCheckoffPresence(
   classId: string,
-  options?: { finished?: boolean },
+  options?: { finished?: boolean; presenceId?: string },
 ): void {
   getCheckoffSocket().emit('checkoff:clear', {
     classId,
     finished: options?.finished === true,
+    presenceId: options?.presenceId,
   })
 }
 

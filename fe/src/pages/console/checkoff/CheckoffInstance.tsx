@@ -16,6 +16,7 @@ import {
   fetchCheckoff,
   type CheckoffExperiment,
   type CheckoffQuestion,
+  type CheckoffSession,
   type CheckoffStudent,
   type ClassSettings,
   type MarkdownStyleId,
@@ -65,6 +66,8 @@ export type CheckoffInstanceProps = {
   markdownStyle: MarkdownStyleId
   theme: 'light' | 'dark'
   active: boolean
+  queueSession: CheckoffSession | null
+  onQueueSessionChange: () => void
   onMetaChange: (id: string, meta: CheckoffTabMeta) => void
   onSaved: (id: string) => void
 }
@@ -81,6 +84,8 @@ export function CheckoffInstance({
   markdownStyle,
   theme,
   active,
+  queueSession,
+  onQueueSessionChange,
   onMetaChange,
   onSaved,
 }: CheckoffInstanceProps) {
@@ -216,17 +221,25 @@ export function CheckoffInstance({
     }
   }, [classId, experiment, step, questionsLoaded, finderReloadKey])
 
-  // 仅当前激活的 tab 更新「正在验收」状态，避免多个 tab 互相覆盖
+  const checkingIn = step >= 2 && !resume
+  const presenceStudentId = student?.userId ?? null
+  const presenceStudentName = student?.name ?? null
   useEffect(() => {
-    if (!active) return
-    if (student) {
+    if (checkingIn && presenceStudentId && presenceStudentName) {
       notifyCheckoffStarted({
         classId,
-        studentId: student.userId,
-        studentName: student.name,
+        studentId: presenceStudentId,
+        studentName: presenceStudentName,
+        presenceId: id,
       })
-    } else clearCheckoffPresence(classId)
-  }, [active, classId, student])
+    } else {
+      clearCheckoffPresence(classId, { presenceId: id })
+    }
+  }, [checkingIn, classId, id, presenceStudentId, presenceStudentName])
+
+  useEffect(() => {
+    return () => clearCheckoffPresence(classId, { presenceId: id })
+  }, [classId, id])
 
   useEffect(() => {
     onMetaChange(id, {
@@ -369,7 +382,7 @@ export function CheckoffInstance({
 
   const handleSaved = useCallback(() => {
     setActiveStartedAt(null)
-    clearCheckoffPresence(classId, { finished: true })
+    clearCheckoffPresence(classId, { finished: true, presenceId: id })
     onSaved(id)
   }, [classId, id, onSaved])
 
@@ -552,9 +565,11 @@ export function CheckoffInstance({
         </AnimatePresence>
       </div>
 
-      {active && (
+      {active && queueSession && (
         <CheckoffQueueDrawer
           classId={classId}
+          session={queueSession}
+          onSessionChange={onQueueSessionChange}
           activeStudentId={student?.userId ?? null}
           activeStartedAt={activeStartedAt}
           onStart={startQueueStudent}
@@ -562,7 +577,7 @@ export function CheckoffInstance({
       )}
       <CheckoffResumeDialog
         state={resumeState}
-        classId={classId}
+        session={queueSession}
         snapshot={resume}
         onRestore={restoreResume}
         onDiscard={discardResume}

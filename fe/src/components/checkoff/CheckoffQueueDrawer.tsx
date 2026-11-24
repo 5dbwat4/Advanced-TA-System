@@ -8,24 +8,26 @@ import {
   QueueTimeline,
   type QueueTimelineEntry,
 } from '@/components/checkoff/QueueTimeline'
-import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   fetchCheckoff,
-  fetchCheckoffSessions,
   updateCheckoffQueue,
+  type CheckoffSession,
   type CheckoffStudent,
 } from '@/lib/api'
-import { useCheckoffQueueUpdates } from '@/lib/checkoff-socket'
 import { getErrorMessage } from '@/lib/error'
 import { useAsyncData } from '@/lib/request'
 
 export function CheckoffQueueDrawer({
   classId,
+  session,
+  onSessionChange,
   activeStudentId,
   activeStartedAt,
   onStart,
 }: {
   classId: string
+  session: CheckoffSession
+  onSessionChange: () => void
   activeStudentId?: string | null
   activeStartedAt?: string | null
   onStart?: (student: CheckoffStudent, experimentId: string) => void
@@ -35,24 +37,9 @@ export function CheckoffQueueDrawer({
   const [reorderingId, setReorderingId] = useState<string | null>(null)
   const [precallingId, setPrecallingId] = useState<string | null>(null)
 
-  const {
-    data: sessionsData,
-    loading,
-    error,
-    reload,
-  } = useAsyncData(
-    () => (classId ? fetchCheckoffSessions(classId) : Promise.resolve(null)),
-    [classId],
-  )
   const { data: directory } = useAsyncData(
     () => (classId ? fetchCheckoff({ classId }) : Promise.resolve(null)),
     [classId],
-  )
-
-  useCheckoffQueueUpdates(
-    classId,
-    () => reload(),
-    (event) => toast.info(`${event.name}位序发生变动，预叫号被停止`),
   )
 
   const studentById = useMemo(
@@ -72,9 +59,7 @@ export function CheckoffQueueDrawer({
     [directory],
   )
 
-  const latestSession = sessionsData?.sessions[0] ?? null
-  const session = latestSession && !latestSession.closedAt ? latestSession : null
-  const entries = useMemo(() => session?.stats.entries ?? [], [session])
+  const entries = useMemo(() => session.stats.entries, [session])
   const timelineEntries = useMemo<QueueTimelineEntry[]>(() => {
     const items = entries.map((entry) => {
       const student = studentById.get(entry.userId)
@@ -123,16 +108,13 @@ export function CheckoffQueueDrawer({
     onStart(student, entry.experimentId)
   }
 
-  const actualCurrentId =
-    entries.find((entry) => entry.status === 'called')?.userId ?? null
-
   const reorderQueue = async (
     activeId: string,
     overId: string,
     _fromIndex: number,
     _toIndex: number,
   ) => {
-    if (!session || reorderingId) return false
+    if (reorderingId) return false
     const waiting = entries.filter(
       (entry) => entry.status !== 'finished' && entry.status !== 'called',
     )
@@ -145,7 +127,7 @@ export function CheckoffQueueDrawer({
         userId: activeId,
         toIndex: target,
       })
-      reload()
+      onSessionChange()
       return true
     } catch (err) {
       toast.error(getErrorMessage(err, '调整顺序失败'))
@@ -156,7 +138,7 @@ export function CheckoffQueueDrawer({
   }
 
   const precall = async (userId: string) => {
-    if (!session || precallingId) return
+    if (precallingId) return
     setPrecallingId(userId)
     try {
       await updateCheckoffQueue(session.id, {
@@ -165,7 +147,7 @@ export function CheckoffQueueDrawer({
         called: true,
       })
       toast.success('已预叫')
-      reload()
+      onSessionChange()
     } catch (err) {
       toast.error(getErrorMessage(err, '预叫失败'))
     } finally {
@@ -209,16 +191,7 @@ export function CheckoffQueueDrawer({
             </Drawer.Header>
 
             <Drawer.Body className="flex flex-1 flex-col gap-4 overflow-y-auto">
-              {loading && !sessionsData ? (
-                <SkeletonList rows={5} className="h-16 rounded-2xl" />
-              ) : error ? (
-                <p className="py-16 text-center text-sm text-danger">{error}</p>
-              ) : !session ? (
-                <div className="py-16 text-center">
-                  <p className="text-sm font-semibold">尚未创建排队</p>
-                  <p className="mt-1 text-xs text-fg-subtle">创建后学生即可加入本场验收队列</p>
-                </div>
-              ) : entries.length === 0 ? (
+              {entries.length === 0 ? (
                 <div className="py-16 text-center">
                   <p className="text-sm font-semibold">队列为空</p>
                   <p className="mt-1 text-xs text-fg-subtle">学生加入后会显示在这里</p>
@@ -227,14 +200,9 @@ export function CheckoffQueueDrawer({
                 <QueueTimeline
                   entries={timelineEntries}
                   className="max-h-none overflow-x-hidden"
-                  canDrag={(entry) =>
-                    !reorderingId &&
-                    entry.userId !== actualCurrentId &&
-                    entry.status !== 'finished'
-                  }
+                  canDrag={(entry) => !reorderingId && entry.status !== 'finished'}
                   canReorder={(activeId, overId) =>
                     !reorderingId &&
-                    overId !== actualCurrentId &&
                     entries.find((entry) => entry.userId === activeId)?.status !==
                       'finished' &&
                     entries.find((entry) => entry.userId === overId)?.status !==
@@ -251,13 +219,12 @@ export function CheckoffQueueDrawer({
               <Button
                 variant="secondary"
                 className="w-full"
-                isDisabled={loading && !sessionsData}
                 onPress={() => {
                   state.close()
-                  navigate(session ? '/console/checkoff-queue' : '/console/checkoff-queue/new')
+                  navigate('/console/checkoff-queue')
                 }}
               >
-                {session ? '打开排队管理' : '创建排队'}
+                打开排队管理
               </Button>
             </Drawer.Footer>
           </Drawer.Dialog>

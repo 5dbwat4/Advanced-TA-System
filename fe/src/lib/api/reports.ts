@@ -4,26 +4,57 @@ import { apiFetch } from '@/lib/api/client'
 import type { Score } from './types'
 
 export type CriteriaPayloadInput = { version: 1; items: CriterionItem[] }
+export type CriteriaVisibility = 'private' | 'public'
+export type CriteriaMetadataInput = {
+  name: string
+  classId: string
+  visibility: CriteriaVisibility
+}
+
+function serializeCriteria(payload: CriteriaPayloadInput, metadata: CriteriaMetadataInput) {
+  return {
+    ...metadata,
+    payload: { version: 1, items: serializeItems(payload.items) },
+  }
+}
 
 export function saveCriteria(
   payload: CriteriaPayloadInput,
+  metadata: CriteriaMetadataInput,
 ): Promise<{ key: string; createdAt: string }> {
   return apiFetch<{ key: string; createdAt: string }>('/api/criteria', {
     method: 'POST',
-    body: JSON.stringify({ payload: { version: 1, items: serializeItems(payload.items) } }),
+    body: JSON.stringify(serializeCriteria(payload, metadata)),
   })
 }
 
 export async function fetchCriteria(key: string): Promise<{
+  name: string
+  classId: string | null
+  className: string | null
+  visibility: CriteriaVisibility
+  canManage: boolean
   payload: { items: CriterionItem[] } | null
   createdAt: string
   usageCount: number
 }> {
-  const res = await apiFetch<{ payload: unknown; createdAt: string; usageCount: number }>(
-    `/api/criteria/${key}`,
-  )
+  const res = await apiFetch<{
+    name: string
+    classId: string | null
+    className: string | null
+    visibility: CriteriaVisibility
+    canManage: boolean
+    payload: unknown
+    createdAt: string
+    usageCount: number
+  }>(`/api/criteria/${key}`)
   const raw = res.payload as { items?: unknown } | null
   return {
+    name: res.name,
+    classId: res.classId,
+    className: res.className,
+    visibility: res.visibility,
+    canManage: res.canManage,
     payload: raw ? { items: deserializeItems(raw.items) } : null,
     createdAt: res.createdAt,
     usageCount: res.usageCount,
@@ -32,6 +63,11 @@ export async function fetchCriteria(key: string): Promise<{
 
 export type CriteriaSummary = {
   key: string
+  name: string
+  classId: string | null
+  className: string | null
+  visibility: CriteriaVisibility
+  canManage: boolean
   createdAt: string
   updatedAt: string
   cardCount: number
@@ -39,7 +75,7 @@ export type CriteriaSummary = {
   usageCount: number
 }
 
-/** 当前用户创建的全部评分标准 */
+/** 所有 public 标准，以及当前课程 staff 可见的 private 标准 */
 export function fetchCriteriaList(): Promise<{ criteria: CriteriaSummary[] }> {
   return apiFetch<{ criteria: CriteriaSummary[] }>('/api/criteria')
 }
@@ -48,10 +84,11 @@ export function fetchCriteriaList(): Promise<{ criteria: CriteriaSummary[] }> {
 export function updateCriteria(
   key: string,
   payload: CriteriaPayloadInput,
+  metadata: CriteriaMetadataInput,
 ): Promise<{ key: string; updatedAt: string }> {
   return apiFetch<{ key: string; updatedAt: string }>(`/api/criteria/${key}`, {
     method: 'PUT',
-    body: JSON.stringify({ payload: { version: 1, items: serializeItems(payload.items) } }),
+    body: JSON.stringify(serializeCriteria(payload, metadata)),
   })
 }
 

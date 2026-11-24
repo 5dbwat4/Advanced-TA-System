@@ -2,8 +2,9 @@ import { randomBytes } from 'node:crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
-import { requireStaffRole, requireViewerOrStaff } from '../lib/class-access.js'
+import { myClassIds, requireStaffRole, requireViewerOrStaff } from '../lib/class-access.js'
 import { prisma } from '../lib/prisma.js'
+import { isStaff } from '../lib/roles.js'
 
 const criterionCardSchema = z.object({
   id: z.string().min(1),
@@ -37,20 +38,44 @@ const criteriaPayloadSchema = z.object({
 })
 
 const saveCriteriaSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  classId: z.string().trim().min(1).optional(),
+  visibility: z.enum(['private', 'public']).optional(),
   payload: criteriaPayloadSchema,
 })
 
 const KEY_PATTERN = /^[0-9a-f]{48}$/
 
 export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
-  /** 列出当前用户创建的全部评分标准 */
-  fastify.get('/', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
-
-    const { sub } = request.user as { sub: string }
+  /** public 对全部登录用户可见；private 仅所属课程 staff 可见 */
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { sub, role } = request.user as { sub: string; role: string }
+    const staff = isStaff(role)
+    const classIds = staff ? await myClassIds(request) : []
     const rows = await prisma.criteria.findMany({
-      where: { creatorId: sub },
+      where: {
+        OR: [
+          { visibility: 'public' },
+          ...(staff
+            ? [
+                { visibility: 'private', classId: { in: classIds } },
+                { visibility: 'private', classId: null, creatorId: sub },
+              ]
+            : []),
+        ],
+      },
       orderBy: { createdAt: 'desc' },
-      select: { key: true, payload: true, createdAt: true, updatedAt: true },
+      select: {
+        key: true,
+        name: true,
+        classId: true,
+        visibility: true,
+        creatorId: true,
+        payload: true,
+        createdAt: true,
+        updatedAt: true,
+        klass: { select: { name: true } },
+      },
     })
 
     const keys = rows.map((row) => row.key)
@@ -72,6 +97,11 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
             : undefined
         return {
           key: row.key,
+          name: row.name,
+          classId: row.classId,
+          className: row.klass?.name ?? null,
+          visibility: row.visibility,
+          canManage: staff && row.creatorId === sub,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
           cardCount: countCards(items),
@@ -90,24 +120,49 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { sub } = request.user as { sub: string }
+    const classIds = await myClassIds(request)
+    const classId = parsed.data.classId ?? classIds[0]
+    if (!classId) {
+      return reply.code(400).send({ error: 'CLASS_REQUIRED', message: '请先绑定课程后再保存评分标准' })
+    }
+    if (!classIds.includes(classId)) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: '只能为所属课程创建评分标准' })
+    }
+
     const key = randomBytes(24).toString('hex')
     const created = await prisma.criteria.create({
-      data: { key, payload: JSON.stringify(parsed.data.payload ?? null), creatorId: sub },
+      data: {
+        key,
+        name: parsed.data.name ?? '未命名评分标准',
+        classId,
+        visibility: parsed.data.visibility ?? 'private',
+        payload: JSON.stringify(parsed.data.payload),
+        creatorId: sub,
+      },
       select: { key: true, createdAt: true },
     })
     return reply.send({ key: created.key, createdAt: created.createdAt })
   })
 
-  /** 按分享码读取评分标准 */
+  /** 按分享码读取评分标准；可见性仅限制列表，不改变分享码访问方式 */
   fastify.get('/:key', { onRequest: [fastify.authenticate, requireViewerOrStaff] }, async (request, reply) => {
     const key = (request.params as { key?: string }).key ?? ''
     if (!KEY_PATTERN.test(key)) {
       return reply.code(400).send({ error: 'INVALID_KEY', message: '分享码格式不正确' })
     }
 
+    const { sub, role } = request.user as { sub: string; role: string }
     const record = await prisma.criteria.findUnique({
       where: { key },
-      select: { payload: true, createdAt: true },
+      select: {
+        name: true,
+        classId: true,
+        visibility: true,
+        creatorId: true,
+        payload: true,
+        createdAt: true,
+        klass: { select: { name: true } },
+      },
     })
     if (!record) {
       return reply.code(404).send({ error: 'CRITERIA_NOT_FOUND', message: '分享码不存在' })
@@ -121,10 +176,19 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
     } catch {
       payload = null
     }
-    return reply.send({ payload, createdAt: record.createdAt, usageCount })
+    return reply.send({
+      name: record.name,
+      classId: record.classId,
+      className: record.klass?.name ?? null,
+      visibility: record.visibility,
+      canManage: isStaff(role) && record.creatorId === sub,
+      payload,
+      createdAt: record.createdAt,
+      usageCount,
+    })
   })
 
-  /** 更新评分标准内容（仅创建者）：原地覆盖同一分享码，引用该分享码的批阅自动沿用 */
+  /** 更新评分标准内容及元数据（仅创建者），引用同一分享码的批阅自动沿用 */
   fastify.put('/:key', { onRequest: [fastify.authenticate, requireStaffRole] }, async (request, reply) => {
 
     const key = (request.params as { key?: string }).key ?? ''
@@ -140,7 +204,7 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
     const { sub } = request.user as { sub: string }
     const record = await prisma.criteria.findUnique({
       where: { key },
-      select: { creatorId: true },
+      select: { creatorId: true, classId: true },
     })
     if (!record) {
       return reply.code(404).send({ error: 'CRITERIA_NOT_FOUND', message: '分享码不存在' })
@@ -148,10 +212,21 @@ export const criteriaRoutes: FastifyPluginAsync = async (fastify) => {
     if (record.creatorId !== sub) {
       return reply.code(403).send({ error: 'FORBIDDEN', message: '只能编辑自己创建的评分标准' })
     }
+    if (parsed.data.classId && parsed.data.classId !== record.classId) {
+      const classIds = await myClassIds(request)
+      if (!classIds.includes(parsed.data.classId)) {
+        return reply.code(403).send({ error: 'FORBIDDEN', message: '只能将评分标准归属到所属课程' })
+      }
+    }
 
     const updated = await prisma.criteria.update({
       where: { key },
-      data: { payload: JSON.stringify(parsed.data.payload ?? null) },
+      data: {
+        name: parsed.data.name,
+        classId: parsed.data.classId,
+        visibility: parsed.data.visibility,
+        payload: JSON.stringify(parsed.data.payload),
+      },
       select: { key: true, updatedAt: true },
     })
     return reply.send({ key: updated.key, updatedAt: updated.updatedAt })

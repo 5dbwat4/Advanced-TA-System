@@ -51,35 +51,80 @@ function checkoffQueueRoom(classId: string): string {
   return `checkoff-queue:${classId}`
 }
 
-/** 验收在场信息（打开验收页的人：在线 + 当前正在验收的学生） */
+export type CheckoffActiveStudent = {
+  studentId: string
+  studentName: string
+}
+
+/** 验收在场信息；students 保留同一用户在多个群面 tab 中的全部学生 */
 export type CheckoffPeer = {
   userId: string
   name: string
   avatar: number | null
-  /** 当前正在验收的学生姓名，null 表示空闲 */
+  /** 兼容旧客户端：保留一个学生；完整列表见 students */
   studentName: string | null
-  /** 当前正在验收的学生 ID，null 表示空闲 */
   studentId: string | null
+  students: CheckoffActiveStudent[]
+  at: number
+}
+
+type CheckoffPresence = Omit<CheckoffPeer, 'students'> & {
+  presenceId: string
   /** 该学生的「正在验收」是否由本次开始自动写入队列 */
   markedCalled: boolean
   /** 取消本次「正在验收」时恢复的队列状态 */
   restoreStatus: 'waiting' | 'notified' | null
-  at: number
 }
 
-/** classId → (socketId → 在场信息) */
-const checkoffPresences = new Map<string, Map<string, CheckoffPeer>>()
+/** classId → (socketId:presenceId → 在场信息) */
+const checkoffPresences = new Map<string, Map<string, CheckoffPresence>>()
 
-/** 在场列表（按用户去重，取最新一条） */
+function presenceKey(socketId: string, presenceId: string): string {
+  return `${socketId}:${presenceId}`
+}
+
+/** 在场列表按用户聚合，不再让后上报的 tab 覆盖先前 tab */
 function checkoffPeers(classId: string): CheckoffPeer[] {
   const room = checkoffPresences.get(classId)
   if (!room) return []
   const byUser = new Map<string, CheckoffPeer>()
   for (const entry of room.values()) {
+    const student =
+      entry.studentId && entry.studentName
+        ? { studentId: entry.studentId, studentName: entry.studentName }
+        : null
     const current = byUser.get(entry.userId)
-    if (!current || entry.at > current.at) byUser.set(entry.userId, entry)
+    if (!current) {
+      byUser.set(entry.userId, {
+        userId: entry.userId,
+        name: entry.name,
+        avatar: entry.avatar,
+        studentName: entry.studentName,
+        studentId: entry.studentId,
+        students: student ? [student] : [],
+        at: entry.at,
+      })
+      continue
+    }
+    if (student && !current.students.some((item) => item.studentId === student.studentId)) {
+      current.students.push(student)
+    }
+    if (entry.at > current.at) {
+      current.studentName = entry.studentName
+      current.studentId = entry.studentId
+      current.at = entry.at
+    }
   }
-  return [...byUser.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+  const peers = [...byUser.values()]
+  for (const peer of peers) {
+    const legacy =
+      peer.students.find((student) => student.studentId === peer.studentId) ??
+      peer.students[0] ??
+      null
+    peer.studentId = legacy?.studentId ?? null
+    peer.studentName = legacy?.studentName ?? null
+  }
+  return peers.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
 }
 
 /** 向验收房间广播在场列表 */
@@ -90,12 +135,12 @@ function broadcastCheckoffPresence(classId: string): void {
 function otherPresenceActive(
   classId: string,
   studentId: string,
-  exceptSocketId: string,
+  exceptKey: string,
 ): boolean {
   const room = checkoffPresences.get(classId)
   if (!room) return false
-  for (const [socketId, peer] of room) {
-    if (socketId !== exceptSocketId && peer.studentId === studentId) return true
+  for (const [key, peer] of room) {
+    if (key !== exceptKey && peer.studentId === studentId) return true
   }
   return false
 }
@@ -177,33 +222,37 @@ async function unmarkQueueActive(
   if (changed) emitCheckoffQueueUpdate(classId, session.id)
 }
 
-/** socket 离开验收房间：移除在场并广播（幂等） */
+/** socket 离开验收房间：移除该连接的全部普通 / 群面在场项（幂等） */
 function removeCheckoffPresence(socket: Socket): void {
   const classId = socket.data.checkoffWatchClassId as string | undefined
   socket.data.checkoffWatchClassId = undefined
   if (typeof classId !== 'string') return
   const room = checkoffPresences.get(classId)
-  const entry = room?.get(socket.id)
-  if (!room || !entry) return
-  room.delete(socket.id)
-  if (room.size === 0) checkoffPresences.delete(classId)
-  if (
-    entry.markedCalled &&
-    entry.studentId &&
-    !otherPresenceActive(classId, entry.studentId, socket.id)
-  ) {
-    void unmarkQueueActive(
-      classId,
-      entry.studentId,
-      entry.restoreStatus ?? 'waiting',
-      false,
-    ).catch((error) => {
-      logQueueFailure('failed to restore checkoff queue after presence left', error, {
+  if (!room) return
+  const prefix = `${socket.id}:`
+  const removed = [...room].filter(([key]) => key.startsWith(prefix))
+  if (removed.length === 0) return
+  for (const [key, entry] of removed) {
+    room.delete(key)
+    if (
+      entry.markedCalled &&
+      entry.studentId &&
+      !otherPresenceActive(classId, entry.studentId, key)
+    ) {
+      void unmarkQueueActive(
         classId,
-        studentId: entry.studentId,
+        entry.studentId,
+        entry.restoreStatus ?? 'waiting',
+        false,
+      ).catch((error) => {
+        logQueueFailure('failed to restore checkoff queue after presence left', error, {
+          classId,
+          studentId: entry.studentId,
+        })
       })
-    })
+    }
   }
+  if (room.size === 0) checkoffPresences.delete(classId)
   broadcastCheckoffPresence(classId)
 }
 
@@ -589,15 +638,17 @@ export function createRealtime(fastify: FastifyInstance): Server {
         }
         await socket.join(watchRoom(classId))
         socket.data.checkoffWatchClassId = classId
-        const room = checkoffPresences.get(classId) ?? new Map<string, CheckoffPeer>()
+        const room = checkoffPresences.get(classId) ?? new Map<string, CheckoffPresence>()
         checkoffPresences.set(classId, room)
-        const previous = room.get(socket.id)
-        room.set(socket.id, previous ?? {
+        const key = presenceKey(socket.id, 'default')
+        const previous = room.get(key)
+        room.set(key, previous ?? {
           userId: user.sub,
           name: ctx.name,
           avatar: ctx.avatar,
           studentName: null,
           studentId: null,
+          presenceId: 'default',
           markedCalled: false,
           restoreStatus: null,
           at: Date.now(),
@@ -616,10 +667,11 @@ export function createRealtime(fastify: FastifyInstance): Server {
     socket.on(
       'checkoff:notify',
       async (
-        { classId, studentId: rawStudentId, studentName } = {} as {
+        { classId, studentId: rawStudentId, studentName, presenceId: requestedPresenceId } = {} as {
           classId?: string
           studentId?: string
           studentName?: string
+          presenceId?: string
         },
       ) => {
         const user = socket.data.user as { sub?: string } | undefined
@@ -629,6 +681,13 @@ export function createRealtime(fastify: FastifyInstance): Server {
         if (!name || !studentId) return
         const ctx = await loadBroadcastContext(user.sub)
         if (!ctx || !isStaff(ctx.role) || !ctx.classIds.includes(classId)) return
+        const presenceId =
+          typeof requestedPresenceId === 'string' &&
+          requestedPresenceId.length > 0 &&
+          requestedPresenceId.length <= 128
+            ? requestedPresenceId
+            : 'default'
+        const key = presenceKey(socket.id, presenceId)
         const payload: CheckoffStartedEvent = {
           classId,
           userName: ctx.name,
@@ -637,11 +696,24 @@ export function createRealtime(fastify: FastifyInstance): Server {
         }
         socket.to(watchRoom(classId)).emit('checkoff:started', payload)
 
-        const entry = checkoffPresences.get(classId)?.get(socket.id)
-        if (entry?.studentId && entry.studentId !== studentId) {
+        const room = checkoffPresences.get(classId) ?? new Map<string, CheckoffPresence>()
+        checkoffPresences.set(classId, room)
+        const entry: CheckoffPresence = room.get(key) ?? {
+          userId: user.sub,
+          name: ctx.name,
+          avatar: ctx.avatar,
+          studentName: null,
+          studentId: null,
+          presenceId,
+          markedCalled: false,
+          restoreStatus: null,
+          at: Date.now(),
+        }
+        room.set(key, entry)
+        if (entry.studentId && entry.studentId !== studentId) {
           if (
             entry.markedCalled &&
-            !otherPresenceActive(classId, entry.studentId, socket.id)
+            !otherPresenceActive(classId, entry.studentId, key)
           ) {
             await unmarkQueueActive(
               classId,
@@ -663,32 +735,43 @@ export function createRealtime(fastify: FastifyInstance): Server {
             previousStatus: 'waiting' as const,
           }
         })
-        if (entry) {
-          const sameStudent = entry.studentId === studentId
-          const restoreStatus =
-            result.marked &&
-            (result.previousStatus === 'waiting' || result.previousStatus === 'notified')
-              ? result.previousStatus
-              : null
-          entry.studentName = name
-          entry.studentId = studentId
-          entry.restoreStatus = sameStudent
-            ? (entry.restoreStatus ?? restoreStatus)
-            : restoreStatus
-          entry.markedCalled = sameStudent
-            ? entry.markedCalled || result.marked
-            : result.marked
-          entry.at = Date.now()
-          broadcastCheckoffPresence(classId)
-        }
+        const sameStudent = entry.studentId === studentId
+        const restoreStatus =
+          result.marked &&
+          (result.previousStatus === 'waiting' || result.previousStatus === 'notified')
+            ? result.previousStatus
+            : null
+        entry.studentName = name
+        entry.studentId = studentId
+        entry.restoreStatus = sameStudent
+          ? (entry.restoreStatus ?? restoreStatus)
+          : restoreStatus
+        entry.markedCalled = sameStudent
+          ? entry.markedCalled || result.marked
+          : result.marked
+        entry.at = Date.now()
+        broadcastCheckoffPresence(classId)
       },
     )
 
     socket.on(
       'checkoff:clear',
-      async ({ classId, finished } = {} as { classId?: string; finished?: boolean }) => {
+      async (
+        { classId, finished, presenceId: requestedPresenceId } = {} as {
+          classId?: string
+          finished?: boolean
+          presenceId?: string
+        },
+      ) => {
         if (typeof classId !== 'string') return
-        const entry = checkoffPresences.get(classId)?.get(socket.id)
+        const presenceId =
+          typeof requestedPresenceId === 'string' &&
+          requestedPresenceId.length > 0 &&
+          requestedPresenceId.length <= 128
+            ? requestedPresenceId
+            : 'default'
+        const key = presenceKey(socket.id, presenceId)
+        const entry = checkoffPresences.get(classId)?.get(key)
         if (!entry || entry.studentName === null) return
         const studentId = entry.studentId
         const markedCalled = entry.markedCalled
@@ -701,7 +784,7 @@ export function createRealtime(fastify: FastifyInstance): Server {
         if (
           markedCalled &&
           studentId &&
-          !otherPresenceActive(classId, studentId, socket.id)
+          !otherPresenceActive(classId, studentId, key)
         ) {
           await unmarkQueueActive(
             classId,

@@ -13,12 +13,21 @@ import Share2 from '~icons/lucide/share-2'
 import TriangleAlert from '~icons/lucide/triangle-alert'
 import { CriteriaEditor } from '@/components/criteria/CriteriaEditor'
 import { ImpactPreview } from '@/components/criteria/ImpactPreview'
+import { CriteriaMetadataForm } from '@/components/criteria/CriteriaMetadataForm'
+import { CriteriaPreview } from '@/components/criteria/CriteriaPreview'
 import { computeCriteriaImpact, type CriteriaImpactResult } from '@/components/criteria/impact'
 import type { CriterionItem } from '@/components/criteria/types'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { PendingButton } from '@/components/ui/PendingButton'
-import { fetchCriteria, fetchCriteriaImpact, saveCriteria, updateCriteria } from '@/lib/api'
+import {
+  fetchCriteria,
+  fetchCriteriaImpact,
+  saveCriteria,
+  updateCriteria,
+  type CriteriaVisibility,
+} from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
+import { useCurrentClass } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 function impactKey(item: { userId: string; experimentId: string }): string {
@@ -30,12 +39,18 @@ const SHARE_CODE_PATTERN = /^[0-9a-f]{48}$/i
 export default function ReportCriteria() {
   const { id, key } = useParams<{ id?: string; key?: string }>()
   const navigate = useNavigate()
+  const currentClass = useCurrentClass()
   const importState = useOverlayState()
   const overwriteState = useOverlayState()
   const impactState = useOverlayState()
 
   const [items, setItems] = useState<CriterionItem[]>([])
   const [shareKey, setShareKey] = useState<string | null>(key ?? null)
+  const [name, setName] = useState('')
+  const [classId, setClassId] = useState(currentClass?.id ?? '')
+  const [className, setClassName] = useState<string | null>(currentClass?.name ?? null)
+  const [visibility, setVisibility] = useState<CriteriaVisibility>('private')
+  const [canManage, setCanManage] = useState(!key)
   const [usageCount, setUsageCount] = useState(0)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -49,19 +64,39 @@ export default function ReportCriteria() {
   const editing = Boolean(key)
 
   useEffect(() => {
-    if (!key) return
     let cancelled = false
+    setItems([])
+    setShareKey(key ?? null)
+    setUsageCount(0)
+    if (!key) {
+      setLoading(false)
+      setCanManage(true)
+      setName('')
+      setVisibility('private')
+      setClassId(currentClass?.id ?? '')
+      setClassName(currentClass?.name ?? null)
+      return
+    }
+
+    setCanManage(false)
     setLoading(true)
     fetchCriteria(key)
       .then((res) => {
         if (cancelled) return
-        const payload = res.payload as { items?: CriterionItem[] } | null
-        if (!payload || !Array.isArray(payload.items)) {
+        const nextClassId = res.classId ?? currentClass?.id ?? ''
+        setName(res.name)
+        setClassId(nextClassId)
+        setClassName(
+          res.className ?? (nextClassId === currentClass?.id ? (currentClass?.name ?? null) : null),
+        )
+        setVisibility(res.visibility)
+        setCanManage(res.canManage)
+        if (!res.payload || !Array.isArray(res.payload.items)) {
           toast.error('评分标准内容无效')
           return
         }
-        setItems(payload.items)
-        setUsageCount(res.usageCount ?? 0)
+        setItems(res.payload.items)
+        setUsageCount(res.usageCount)
       })
       .catch((err) => {
         if (!cancelled) toast.error(getErrorMessage(err, '加载失败'))
@@ -72,21 +107,39 @@ export default function ReportCriteria() {
     return () => {
       cancelled = true
     }
-  }, [key])
+  }, [key, currentClass?.id, currentClass?.name])
 
   /** 保存：编辑模式原地覆盖（保留分享码），创建模式生成新分享码 */
   const persist = async (): Promise<string | null> => {
+    const trimmedName = name.trim()
+    if (!canManage) {
+      toast.error('只能编辑自己创建的评分标准')
+      return null
+    }
+    if (!trimmedName) {
+      toast.error('请填写评分标准名称')
+      return null
+    }
+    if (!classId) {
+      toast.error('请先绑定课程后再保存评分标准')
+      return null
+    }
+
     setSaving(true)
+    const metadata = { name: trimmedName, classId, visibility }
     try {
       if (key) {
-        const res = await updateCriteria(key, { version: 1, items })
+        const res = await updateCriteria(key, { version: 1, items }, metadata)
         setShareKey(res.key)
+        setName(trimmedName)
         toast.success('已保存评分标准')
         return res.key
       }
-      const res = await saveCriteria({ version: 1, items })
+      const res = await saveCriteria({ version: 1, items }, metadata)
       setShareKey(res.key)
+      setName(trimmedName)
       toast.success('已保存评分标准')
+      navigate(`/console/criteria/${res.key}/edit`)
       return res.key
     } catch (err) {
       toast.error(getErrorMessage(err, '保存失败'))
@@ -138,9 +191,20 @@ export default function ReportCriteria() {
 
   /** 另存为副本：生成新分享码并跳到新标准的编辑页 */
   const saveAsCopy = async () => {
+    if (!classId || !name.trim()) {
+      toast.error('请先填写名称并关联课程')
+      return
+    }
     setSaving(true)
     try {
-      const res = await saveCriteria({ version: 1, items })
+      const res = await saveCriteria(
+        { version: 1, items },
+        {
+          name: `${name.trim()}（副本）`.slice(0, 120),
+          classId,
+          visibility,
+        },
+      )
       toast.success('已另存为副本')
       navigate(`/console/criteria/${res.key}/edit`)
     } catch (err) {
@@ -165,7 +229,6 @@ export default function ReportCriteria() {
         return
       }
       setItems(payload.items)
-      setShareKey(code)
       importState.close()
       setImportCode('')
       toast.success('已导入评分标准')
@@ -176,7 +239,7 @@ export default function ReportCriteria() {
     }
   }
 
-  const backTo = editing ? '/console/criteria' : id ? `/console/reports/${id}` : '/console/reports'
+  const backTo = editing || !id ? '/console/criteria' : `/console/reports/${id}`
   const selectedImpact =
     impact?.items.find((item) => impactKey(item) === impactSelected) ?? impact?.items[0] ?? null
 
@@ -207,7 +270,7 @@ export default function ReportCriteria() {
           </span>
         )}
         <div className="flex shrink-0 items-center gap-2">
-          {editing && usageCount > 0 && (
+          {editing && canManage && usageCount > 0 && (
             <Button
               size="sm"
               variant="secondary"
@@ -218,11 +281,11 @@ export default function ReportCriteria() {
               查看受影响评分
             </Button>
           )}
-          <Button size="sm" variant="secondary" onPress={importState.open}>
+          <Button size="sm" variant="secondary" isDisabled={!canManage} onPress={importState.open}>
             <FileDown width={15} height={15} className="shrink-0" />
             导入
           </Button>
-          {editing && (
+          {editing && canManage && (
             <Button
               size="sm"
               variant="secondary"
@@ -240,7 +303,7 @@ export default function ReportCriteria() {
           <PendingButton
             size="sm"
             isPending={saving}
-            isDisabled={loading}
+            isDisabled={loading || !canManage || !classId || name.trim() === ''}
             icon={Save}
             onPress={requestSave}
           >
@@ -250,7 +313,29 @@ export default function ReportCriteria() {
       </header>
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-3xl p-4">
-          <CriteriaEditor items={items} onChange={setItems} />
+          {!loading && !canManage && (
+            <p className="mb-4 rounded-xl border border-line bg-sunken px-3 py-2 text-xs text-fg-muted">
+              当前账号只能预览此评分标准，只有创建者可以编辑。
+            </p>
+          )}
+          <CriteriaMetadataForm
+            name={name}
+            classId={classId}
+            className={className}
+            visibility={visibility}
+            disabled={loading || !canManage}
+            onNameChange={setName}
+            onVisibilityChange={setVisibility}
+          />
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Spinner size="lg" />
+            </div>
+          ) : canManage ? (
+            <CriteriaEditor items={items} onChange={setItems} />
+          ) : (
+            <CriteriaPreview items={items} />
+          )}
         </div>
       </div>
 

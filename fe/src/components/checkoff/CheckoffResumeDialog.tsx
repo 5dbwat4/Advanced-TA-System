@@ -3,11 +3,10 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import ClipboardCheck from '~icons/lucide/clipboard-check'
-import { fetchCheckoffSessions, updateCheckoffQueue } from '@/lib/api'
+import { updateCheckoffQueue, type CheckoffSession } from '@/lib/api'
 import type { CheckoffResumeSnapshot } from '@/lib/checkoff-resume'
 import { getErrorMessage } from '@/lib/error'
 import { formatLocaleDateTime } from '@/lib/format'
-import { useAsyncData } from '@/lib/request'
 
 const STEP_LABELS: Record<number, string> = {
   2: '展示 Demo',
@@ -23,23 +22,18 @@ function stepLabel(snapshot: CheckoffResumeSnapshot): string {
 
 export function CheckoffResumeDialog({
   state,
-  classId,
+  session,
   snapshot,
   onRestore,
   onDiscard,
 }: {
   state: ReturnType<typeof useOverlayState>
-  classId: string | null
+  session: CheckoffSession | null
   snapshot: CheckoffResumeSnapshot | null
   onRestore: () => void
   onDiscard: () => void
 }) {
   const [pendingAction, setPendingAction] = useState<'requeue' | 'finish' | null>(null)
-  const { data: sessionsData } = useAsyncData(
-    () => (classId && snapshot ? fetchCheckoffSessions(classId) : Promise.resolve(null)),
-    [classId, snapshot?.student.userId],
-  )
-  const session = sessionsData?.sessions[0] ?? null
   const queueEntry =
     session && !session.closedAt && snapshot
       ? (session.stats.entries.find((entry) => entry.userId === snapshot.student.userId) ??

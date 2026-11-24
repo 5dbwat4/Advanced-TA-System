@@ -169,12 +169,18 @@ function moveEntries(
   selected: Set<string>,
   direction: 'up' | 'down' | 'top',
 ) {
+  const fixed = entries.filter(
+    (entry) => entry.status === 'finished' || entry.status === 'called',
+  )
+  const waiting = entries.filter(
+    (entry) => entry.status !== 'finished' && entry.status !== 'called',
+  )
   if (direction === 'top') {
-    const picked = entries.filter((entry) => selected.has(entry.userId))
-    const rest = entries.filter((entry) => !selected.has(entry.userId))
-    return [...picked, ...rest]
+    const picked = waiting.filter((entry) => selected.has(entry.userId))
+    const rest = waiting.filter((entry) => !selected.has(entry.userId))
+    return [...fixed, ...picked, ...rest]
   }
-  const next = [...entries]
+  const next = [...waiting]
   if (direction === 'up') {
     for (let i = 1; i < next.length; i += 1) {
       if (selected.has(next[i].userId) && !selected.has(next[i - 1].userId)) {
@@ -188,7 +194,7 @@ function moveEntries(
       }
     }
   }
-  return next
+  return [...fixed, ...next]
 }
 
 function reorderEntries(entries: StoredQueueEntry[], userId: string, toIndex: number) {

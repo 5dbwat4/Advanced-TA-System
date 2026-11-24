@@ -175,11 +175,11 @@ export function orderQueueEntries<T extends CheckoffQueueEntry>(entries: T[]): T
       const bValue = Number.isNaN(bTime) ? Number.POSITIVE_INFINITY : bTime
       return aValue - bValue
     })
-  const current = entries.find((entry) => entry.status === 'called') ?? null
-  const rest = entries.filter(
-    (entry) => entry.status !== 'finished' && entry !== current,
+  const current = entries.filter((entry) => entry.status === 'called')
+  const waiting = entries.filter(
+    (entry) => entry.status !== 'finished' && entry.status !== 'called',
   )
-  return current ? [...finished, current, ...rest] : [...finished, ...rest]
+  return [...finished, ...current, ...waiting]
 }
 
 export function parseSessionStats(raw: string): CheckoffSessionStats {
