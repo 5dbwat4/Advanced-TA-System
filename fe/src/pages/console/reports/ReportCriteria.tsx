@@ -48,7 +48,6 @@ export default function ReportCriteria() {
   const [shareKey, setShareKey] = useState<string | null>(key ?? null)
   const [name, setName] = useState('')
   const [classId, setClassId] = useState(currentClass?.id ?? '')
-  const [className, setClassName] = useState<string | null>(currentClass?.name ?? null)
   const [visibility, setVisibility] = useState<CriteriaVisibility>('private')
   const [canManage, setCanManage] = useState(!key)
   const [usageCount, setUsageCount] = useState(0)
@@ -74,7 +73,6 @@ export default function ReportCriteria() {
       setName('')
       setVisibility('private')
       setClassId(currentClass?.id ?? '')
-      setClassName(currentClass?.name ?? null)
       return
     }
 
@@ -86,9 +84,6 @@ export default function ReportCriteria() {
         const nextClassId = res.classId ?? currentClass?.id ?? ''
         setName(res.name)
         setClassId(nextClassId)
-        setClassName(
-          res.className ?? (nextClassId === currentClass?.id ? (currentClass?.name ?? null) : null),
-        )
         setVisibility(res.visibility)
         setCanManage(res.canManage)
         if (!res.payload || !Array.isArray(res.payload.items)) {
@@ -320,8 +315,6 @@ export default function ReportCriteria() {
           )}
           <CriteriaMetadataForm
             name={name}
-            classId={classId}
-            className={className}
             visibility={visibility}
             disabled={loading || !canManage}
             onNameChange={setName}

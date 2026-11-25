@@ -324,11 +324,10 @@ export const checkoffRoutes: FastifyPluginAsync = async (fastify) => {
 
     let finishedSessionId: string | null = null
     try {
-      const { value: updated, session } = await withLatestQueueMutation(classId, async ({ tx, session, entries }) => {
+      const { value: updated, session } = await withLatestQueueMutation(classId, async ({ session, entries }) => {
         if (session.closedAt || !entries.some((entry) => entry.userId === userId)) return false
         const finishedAt = new Date().toISOString()
         await saveQueueOrder(
-          tx,
           entries.map((entry) =>
             entry.userId === userId
               ? { ...entry, status: 'finished' as const, finishedAt, missedAt: null }

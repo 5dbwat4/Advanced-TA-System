@@ -1,15 +1,14 @@
 import { Button, Modal, useOverlayState } from '@heroui/react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import ClipboardList from '~icons/lucide/clipboard-list'
-import Eye from '~icons/lucide/eye'
 import Plus from '~icons/lucide/plus'
 import { CriteriaPreview } from '@/components/criteria/CriteriaPreview'
+import { CriteriaRow } from '@/components/criteria/CriteriaRow'
 import type { CriterionItem } from '@/components/criteria/types'
 import { Card } from '@/components/ui/Card'
-import { IconAction } from '@/components/ui/IconAction'
 import { SkeletonList } from '@/components/ui/SkeletonList'
 import {
   fetchCriteria,
@@ -19,7 +18,6 @@ import {
 import { getErrorMessage } from '@/lib/error'
 import { useAsyncData } from '@/lib/request'
 import { useCurrentClass } from '@/lib/store'
-import { cn } from '@/lib/utils'
 
 export function CriteriaSection({
   index = 0,
@@ -35,7 +33,19 @@ export function CriteriaSection({
   const { data, loading, error } = useAsyncData(() => fetchCriteriaList(), [classId])
   const [preview, setPreview] = useState<CriterionItem[]>([])
   const [previewName, setPreviewName] = useState('评分标准预览')
-  const list = data?.criteria ?? []
+  const [expanded, setExpanded] = useState(false)
+  const list = useMemo(
+    () =>
+      (data?.criteria ?? []).filter(
+        (item) => item.classId === classId && item.visibility === 'private',
+      ),
+    [data, classId],
+  )
+  const visibleList = expanded ? list : list.slice(0, 5)
+
+  useEffect(() => {
+    setExpanded(false)
+  }, [classId])
 
   const openPreview = async (item: CriteriaSummary) => {
     try {
@@ -61,7 +71,7 @@ export function CriteriaSection({
           {data && <span className="tabular text-[11px] text-fg-subtle">共 {list.length} 项</span>}
           <div className="ms-auto flex items-center gap-2">
             <Button size="sm" variant="secondary" onPress={() => navigate('/console/criteria')}>
-              管理
+              查看全部
             </Button>
             <Button size="sm" onPress={() => navigate(createHref)}>
               <Plus width={15} height={15} className="shrink-0" />
@@ -80,40 +90,20 @@ export function CriteriaSection({
               暂无可见的评分标准
             </p>
           ) : (
-            <div className="flex max-h-80 flex-col gap-2 overflow-auto">
-              {list.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-sunken/40 px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{item.name}</span>
-                      <span
-                        className={cn(
-                          'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                          item.visibility === 'public'
-                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
-                            : 'bg-sunken text-fg-muted',
-                        )}
-                      >
-                        {item.visibility}
-                      </span>
-                    </div>
-                    <div className="mt-1 truncate text-[11px] text-fg-subtle">
-                      {item.className ?? '未关联课程'} · {item.classId ?? '历史记录'} ·{' '}
-                      {item.cardCount} 张卡片
-                    </div>
-                  </div>
-                  <IconAction
-                    label="预览"
-                    variant="secondary"
-                    onPress={() => void openPreview(item)}
-                  >
-                    <Eye width={15} height={15} className="shrink-0" />
-                  </IconAction>
-                </div>
+            <div className="flex flex-col gap-2">
+              {visibleList.map((item) => (
+                <CriteriaRow key={item.key} item={item} onView={openPreview} />
               ))}
+              {!expanded && list.length > 5 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="self-center"
+                  onPress={() => setExpanded(true)}
+                >
+                  查看更多
+                </Button>
+              )}
             </div>
           )}
         </div>

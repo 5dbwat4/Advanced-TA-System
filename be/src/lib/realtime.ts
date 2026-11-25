@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import { Server, type Socket } from 'socket.io'
 
 import {
+  invalidateQueueCache,
   saveQueueOrder,
   withLatestQueueMutation,
 } from './checkoff-queue.js'
@@ -154,7 +155,7 @@ async function markQueueActive(
   marked: boolean
   previousStatus: 'waiting' | 'notified' | 'called' | 'finished'
 }> {
-  const { value, session } = await withLatestQueueMutation(classId, async ({ tx, session, entries }) => {
+  const { value, session } = await withLatestQueueMutation(classId, async ({ session, entries }) => {
     if (session.closedAt) return { changed: false, result: { marked: false, previousStatus: 'waiting' as const } }
     const target = entries.find((entry) => entry.userId === studentId)
     if (!target) return { changed: false, result: { marked: false, previousStatus: 'waiting' as const } }
@@ -176,7 +177,6 @@ async function markQueueActive(
       target.missedAt !== null
     if (changed) {
       await saveQueueOrder(
-        tx,
         entries.map((entry) =>
           entry.userId === studentId
             ? { ...entry, status: 'called' as const, startedAt, checkedBy, finishedAt, missedAt: null }
@@ -199,12 +199,11 @@ async function unmarkQueueActive(
 ): Promise<void> {
   const { value: changed, session } = await withLatestQueueMutation(
     classId,
-    async ({ tx, session, entries }) => {
+    async ({ session, entries }) => {
       if (session.closedAt) return false
       const target = entries.find((entry) => entry.userId === studentId)
       if (!target || target.status !== 'called') return false
       await saveQueueOrder(
-        tx,
         entries.map((entry) =>
           entry.userId === studentId
             ? {
@@ -1009,6 +1008,7 @@ export type CheckoffQueueUpdateEvent = {
 
 /** 向指定班级广播验收排队更新 */
 export function emitCheckoffQueueUpdate(classId: string, sessionId: string): void {
+  invalidateQueueCache(classId, sessionId)
   io?.to(checkoffQueueRoom(classId)).emit('checkoff-queue:update', {
     classId,
     sessionId,

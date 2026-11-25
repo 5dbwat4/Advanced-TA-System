@@ -32,10 +32,9 @@ const idleRoutes: Record<string, string> = {
 
 const pending = new Map<string, Promise<unknown>>()
 let chain: Promise<unknown> = Promise.resolve()
-let blockedUntil = 0
 
 function allowed(): boolean {
-  if (Date.now() < blockedUntil || !navigator.onLine || document.visibilityState !== 'visible') return false
+  if (!navigator.onLine || document.visibilityState !== 'visible') return false
   const connection = (navigator as Navigator & {
     connection?: { saveData?: boolean; effectiveType?: string }
   }).connection
@@ -70,20 +69,10 @@ export function RoutePrefetch() {
       const url = new URL(anchor.href, window.location.href)
       if (url.origin === window.location.origin) void prefetchRoute(url.pathname)
     }
-    const onSwMessage = (event: MessageEvent) => {
-      const data = event.data as {
-        type?: string
-        diagnostic?: { kind?: string; until?: number }
-      }
-      if (data?.type !== 'SW_DIAGNOSTIC' || data.diagnostic?.kind !== 'cdn_circuit_open') return
-      blockedUntil = Math.max(blockedUntil, data.diagnostic.until ?? Date.now() + 30000)
-    }
-    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', onSwMessage)
     document.addEventListener('pointerover', onIntent, { passive: true })
     document.addEventListener('focusin', onIntent)
     document.addEventListener('touchstart', onIntent, { passive: true })
     return () => {
-      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onSwMessage)
       document.removeEventListener('pointerover', onIntent)
       document.removeEventListener('focusin', onIntent)
       document.removeEventListener('touchstart', onIntent)

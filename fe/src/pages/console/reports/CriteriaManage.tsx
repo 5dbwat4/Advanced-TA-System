@@ -11,11 +11,13 @@ import Pencil from '~icons/lucide/pencil'
 import Trash2 from '~icons/lucide/trash-2'
 import { CriteriaPreview } from '@/components/criteria/CriteriaPreview'
 import type { CriterionItem } from '@/components/criteria/types'
+import { AvatarImage } from '@/components/ui/AvatarImage'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconAction } from '@/components/ui/IconAction'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonList } from '@/components/ui/SkeletonList'
+import { UserCardTooltip } from '@/components/ui/UserCardTooltip'
 import { deleteCriteria, fetchCriteria, fetchCriteriaList, type CriteriaSummary } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { formatDateTime } from '@/lib/format'
@@ -88,11 +90,93 @@ export default function CriteriaManage() {
     }
   }
 
+  const privateList = list?.filter((item) => item.visibility === 'private') ?? []
+  const publicList = list?.filter((item) => item.visibility === 'public') ?? []
+
+  const renderCard = (item: CriteriaSummary, index: number) => {
+    const inUse = item.usageCount > 0
+    return (
+      <Card key={item.key} index={index}>
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-semibold">{item.name}</span>
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                  item.visibility === 'public'
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
+                    : 'bg-sunken text-fg-muted',
+                )}
+              >
+                {item.visibility}
+              </span>
+              {item.canManage && (
+                <span className="text-[10px] font-medium text-fg-subtle">我创建的</span>
+              )}
+            </div>
+            <div className="mt-1 text-[11px] text-fg-subtle">
+              更新于 {formatDateTime(item.updatedAt)} ·{' '}
+              <span className={cn(inUse && 'text-amber-600 dark:text-amber-400')}>
+                {inUse ? `使用中 ${item.usageCount} 处` : '未被使用'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <UserCardTooltip user={item.creator} label="创建者">
+              <AvatarImage
+                id={item.creator.avatar}
+                size={22}
+                fallback={item.creator.name.slice(0, 1)}
+              />
+            </UserCardTooltip>
+            {item.canManage && (
+              <IconAction
+                label="编辑"
+                variant="secondary"
+                onPress={() => navigate(`/console/criteria/${item.key}/edit`)}
+              >
+                <Pencil width={15} height={15} className="shrink-0" />
+              </IconAction>
+            )}
+            <IconAction
+              label="预览"
+              variant="secondary"
+              onPress={() => void openPreview(item.key)}
+            >
+              <Eye width={15} height={15} className="shrink-0" />
+            </IconAction>
+            <IconAction
+              label="复制分享码"
+              variant="secondary"
+              onPress={() => void copy(item.key)}
+            >
+              <Copy width={15} height={15} className="shrink-0" />
+            </IconAction>
+            {item.canManage && (
+              <IconAction
+                label="删除"
+                variant="secondary"
+                isDisabled={inUse}
+                tooltip={inUse ? '正被批阅使用，无法删除' : '删除'}
+                onPress={() => {
+                  setDeleteTarget(item)
+                  confirmState.open()
+                }}
+              >
+                <Trash2 width={15} height={15} className="shrink-0" />
+              </IconAction>
+            )}
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="评分标准管理"
-        subtitle="public 对所有登录用户可见；private 仅所属课程 staff 可见"
         actions={<Button onPress={() => navigate('/console/criteria/new')}>新建评分标准</Button>}
       />
 
@@ -106,82 +190,17 @@ export default function CriteriaManage() {
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {list.map((item, index) => {
-            const inUse = item.usageCount > 0
-            return (
-              <Card key={item.key} index={index}>
-                <div className="flex flex-wrap items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{item.name}</span>
-                      <span
-                        className={cn(
-                          'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                          item.visibility === 'public'
-                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-300'
-                            : 'bg-sunken text-fg-muted',
-                        )}
-                      >
-                        {item.visibility}
-                      </span>
-                      {item.canManage && (
-                        <span className="text-[10px] font-medium text-fg-subtle">我创建的</span>
-                      )}
-                    </div>
-                    <div className="mt-1 break-all text-xs text-fg-muted">
-                      {item.className ?? '未关联课程'} · {item.classId ?? '历史记录'}
-                    </div>
-                    <div className="tabular mt-1 break-all text-[11px] text-fg-subtle">{item.key}</div>
-                    <div className="mt-1 text-[11px] text-fg-subtle">
-                      更新于 {formatDateTime(item.updatedAt)} · {item.cardCount} 张卡片 ·{' '}
-                      <span className={cn(inUse && 'text-amber-600 dark:text-amber-400')}>
-                        {inUse ? `使用中 ${item.usageCount} 处` : '未被使用'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {item.canManage && (
-                      <IconAction
-                        label="编辑"
-                        variant="secondary"
-                        onPress={() => navigate(`/console/criteria/${item.key}/edit`)}
-                      >
-                        <Pencil width={15} height={15} className="shrink-0" />
-                      </IconAction>
-                    )}
-                    <IconAction
-                      label="预览"
-                      variant="secondary"
-                      onPress={() => void openPreview(item.key)}
-                    >
-                      <Eye width={15} height={15} className="shrink-0" />
-                    </IconAction>
-                    <IconAction
-                      label="复制分享码"
-                      variant="secondary"
-                      onPress={() => void copy(item.key)}
-                    >
-                      <Copy width={15} height={15} className="shrink-0" />
-                    </IconAction>
-                    {item.canManage && (
-                      <IconAction
-                        label="删除"
-                        variant="secondary"
-                        isDisabled={inUse}
-                        tooltip={inUse ? '正被批阅使用，无法删除' : '删除'}
-                        onPress={() => {
-                          setDeleteTarget(item)
-                          confirmState.open()
-                        }}
-                      >
-                        <Trash2 width={15} height={15} className="shrink-0" />
-                      </IconAction>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
+          {privateList.map((item, index) => renderCard(item, index))}
+          {publicList.length > 0 && (
+            <>
+              {privateList.length > 0 && (
+                <hr className="my-2 w-1/2 self-center border-t border-line/60" />
+              )}
+              {publicList.map((item, index) =>
+                renderCard(item, privateList.length + index),
+              )}
+            </>
+          )}
         </div>
       )}
 

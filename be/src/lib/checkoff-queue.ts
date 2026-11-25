@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client'
 import type { CheckoffQueueEntry as QueueEntryRecord, CheckoffSession } from '@prisma/client'
 
 import { prisma } from './prisma.js'
@@ -48,6 +47,75 @@ export type CheckoffSessionDto = {
   stats: CheckoffSessionStats
   closedAt: string | null
   createdAt: string
+}
+
+/**
+ * 队列只读副本缓存：进程内存中保留每个班级最新队列 / 每个会话的只读快照，
+ * 用于承接 checkoff-queue 的读请求。所有写操作提交后都会调用
+ * `invalidateQueueCache`（见 emitCheckoffQueueUpdate），保证读到最新数据。
+ * 缓存对象仅供读取，调用方不得修改。
+ */
+const QUEUE_CACHE_TTL_MS = 60_000
+
+type QueueCacheEntry = { dto: CheckoffSessionDto; expiresAt: number }
+
+const latestSessionCache = new Map<string, QueueCacheEntry>()
+const sessionCache = new Map<string, QueueCacheEntry>()
+
+type QueueListCacheEntry = { sessions: CheckoffSessionDto[]; expiresAt: number }
+
+const classSessionsCache = new Map<string, QueueListCacheEntry>()
+
+/**
+ * 班级最新会话 id 缓存。队列条目更新不会改变「最新会话」，
+ * 因此写路径（withLatestQueueMutation）可直接复用，省掉一次额外的会话查询。
+ */
+const latestSessionIdCache = new Map<string, string>()
+
+/** 新建会话后记录其 id，避免写路径回源查「最新会话」 */
+export function setLatestQueueSessionId(classId: string, sessionId: string): void {
+  latestSessionIdCache.set(classId, sessionId)
+}
+
+async function getLatestQueueSessionId(classId: string): Promise<string | null> {
+  const cached = latestSessionIdCache.get(classId)
+  if (cached) return cached
+  const row = await prisma.checkoffSession.findFirst({
+    where: { classId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  })
+  if (!row) return null
+  latestSessionIdCache.set(classId, row.id)
+  return row.id
+}
+
+function readQueueCache(
+  cache: Map<string, QueueCacheEntry>,
+  key: string,
+): CheckoffSessionDto | null {
+  const cached = cache.get(key)
+  if (!cached) return null
+  if (cached.expiresAt <= Date.now()) {
+    cache.delete(key)
+    return null
+  }
+  return cached.dto
+}
+
+function writeQueueCache(
+  cache: Map<string, QueueCacheEntry>,
+  key: string,
+  dto: CheckoffSessionDto,
+): void {
+  cache.set(key, { dto, expiresAt: Date.now() + QUEUE_CACHE_TTL_MS })
+}
+
+/** 队列写操作提交后使缓存失效，下一次读请求回源数据库 */
+export function invalidateQueueCache(classId: string, sessionId?: string): void {
+  latestSessionCache.delete(classId)
+  classSessionsCache.delete(classId)
+  if (sessionId !== undefined) sessionCache.delete(sessionId)
 }
 
 export class CheckoffQueueError extends Error {
@@ -232,15 +300,12 @@ export function toStoredQueueEntry(entry: QueueEntryRecord): StoredQueueEntry {
   return { ...toQueueEntryDto(entry), id: entry.id, position: entry.position }
 }
 
-async function migrateSession(
-  tx: Prisma.TransactionClient,
-  session: CheckoffSession,
-): Promise<CheckoffSession> {
+async function migrateSession(session: CheckoffSession): Promise<CheckoffSession> {
   if (session.queueMigratedAt) return session
 
   const legacy = parseSessionStats(session.stats)
   const migratedAt = new Date()
-  const claimed = await tx.checkoffSession.updateMany({
+  const claimed = await prisma.checkoffSession.updateMany({
     where: { id: session.id, queueMigratedAt: null },
     data: {
       queueMigratedAt: migratedAt,
@@ -248,7 +313,7 @@ async function migrateSession(
     },
   })
   if (claimed.count === 0) {
-    return tx.checkoffSession.findUniqueOrThrow({ where: { id: session.id } })
+    return prisma.checkoffSession.findUniqueOrThrow({ where: { id: session.id } })
   }
 
   const seen = new Set<string>()
@@ -258,7 +323,7 @@ async function migrateSession(
     return true
   })
   if (entries.length > 0) {
-    await tx.checkoffQueueEntry.createMany({
+    await prisma.checkoffQueueEntry.createMany({
       data: entries.map((entry, position) => ({
         sessionId: session.id,
         userId: entry.userId,
@@ -284,30 +349,21 @@ async function migrateSession(
   }
 }
 
-async function loadSession(
-  tx: Prisma.TransactionClient,
-  id: string,
-): Promise<CheckoffSession | null> {
-  const session = await tx.checkoffSession.findUnique({ where: { id } })
-  return session ? migrateSession(tx, session) : null
+async function loadSession(id: string): Promise<CheckoffSession | null> {
+  const session = await prisma.checkoffSession.findUnique({ where: { id } })
+  return session ? migrateSession(session) : null
 }
 
-async function loadEntries(
-  tx: Prisma.TransactionClient,
-  sessionId: string,
-): Promise<StoredQueueEntry[]> {
-  const rows = await tx.checkoffQueueEntry.findMany({
+async function loadEntries(sessionId: string): Promise<StoredQueueEntry[]> {
+  const rows = await prisma.checkoffQueueEntry.findMany({
     where: { sessionId },
     orderBy: { position: 'asc' },
   })
   return rows.map(toStoredQueueEntry)
 }
 
-async function buildSessionDto(
-  tx: Prisma.TransactionClient,
-  session: CheckoffSession,
-): Promise<CheckoffSessionDto> {
-  const entries = await loadEntries(tx, session.id)
+async function buildSessionDto(session: CheckoffSession): Promise<CheckoffSessionDto> {
+  const entries = await loadEntries(session.id)
   const closedAt = session.closedAt?.toISOString() ?? null
   return {
     id: session.id,
@@ -327,49 +383,87 @@ function toQueueEntryDtoFromStored(entry: StoredQueueEntry): CheckoffQueueEntry 
 }
 
 export async function toCheckoffSessionDto(
-  tx: Prisma.TransactionClient,
   session: CheckoffSession,
 ): Promise<CheckoffSessionDto> {
-  const migrated = await migrateSession(tx, session)
-  return buildSessionDto(tx, migrated)
+  const migrated = await migrateSession(session)
+  return buildSessionDto(migrated)
 }
 
-export async function getQueueSession(id: string): Promise<CheckoffSessionDto | null> {
-  return prisma.$transaction(async (tx) => {
-    const session = await loadSession(tx, id)
-    return session ? buildSessionDto(tx, session) : null
-  })
+export async function getQueueSession(
+  id: string,
+  options?: { fresh?: boolean },
+): Promise<CheckoffSessionDto | null> {
+  if (!options?.fresh) {
+    const cached = readQueueCache(sessionCache, id)
+    if (cached) return cached
+  }
+  const session = await loadSession(id)
+  const dto = session ? await buildSessionDto(session) : null
+  if (dto) writeQueueCache(sessionCache, id, dto)
+  return dto
 }
 
-export async function getLatestQueueSession(classId: string): Promise<CheckoffSessionDto | null> {
-  return prisma.$transaction(async (tx) => {
-    const row = await tx.checkoffSession.findFirst({
-      where: { classId },
-      orderBy: { createdAt: 'desc' },
-    })
-    if (!row) return null
-    const session = await migrateSession(tx, row)
-    return buildSessionDto(tx, session)
+export async function getLatestQueueSession(
+  classId: string,
+  options?: { fresh?: boolean },
+): Promise<CheckoffSessionDto | null> {
+  if (!options?.fresh) {
+    const cached = readQueueCache(latestSessionCache, classId)
+    if (cached) return cached
+  }
+  const row = await prisma.checkoffSession.findFirst({
+    where: { classId },
+    orderBy: { createdAt: 'desc' },
   })
+  if (!row) return null
+  const session = await migrateSession(row)
+  const dto = await buildSessionDto(session)
+  if (dto) {
+    writeQueueCache(latestSessionCache, classId, dto)
+    setLatestQueueSessionId(classId, dto.id)
+  }
+  return dto
+}
+
+/** 班级最近排队的只读列表（最多 20 条），带进程内缓存 */
+export async function getQueueSessions(
+  classId: string,
+  options?: { fresh?: boolean },
+): Promise<CheckoffSessionDto[]> {
+  if (!options?.fresh) {
+    const cached = classSessionsCache.get(classId)
+    if (cached) {
+      if (cached.expiresAt > Date.now()) return cached.sessions
+      classSessionsCache.delete(classId)
+    }
+  }
+  const rows = await prisma.checkoffSession.findMany({
+    where: { classId },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
+  const sessions: CheckoffSessionDto[] = []
+  for (const row of rows) sessions.push(await toCheckoffSessionDto(row))
+  classSessionsCache.set(classId, {
+    sessions,
+    expiresAt: Date.now() + QUEUE_CACHE_TTL_MS,
+  })
+  return sessions
 }
 
 export async function migrateClassSessions(
-  tx: Prisma.TransactionClient,
   classId: string,
 ): Promise<CheckoffSession[]> {
-  const rows = await tx.checkoffSession.findMany({ where: { classId } })
+  const rows = await prisma.checkoffSession.findMany({ where: { classId } })
   const result: CheckoffSession[] = []
-  for (const row of rows) result.push(await migrateSession(tx, row))
+  for (const row of rows) result.push(await migrateSession(row))
   return result
 }
 
-export async function saveQueueOrder(
-  tx: Prisma.TransactionClient,
-  entries: StoredQueueEntry[],
-): Promise<void> {
+export async function saveQueueOrder(entries: StoredQueueEntry[]): Promise<void> {
   const ordered = orderQueueEntries(entries)
   for (const [position, entry] of ordered.entries()) {
-    await tx.checkoffQueueEntry.update({
+    await prisma.checkoffQueueEntry.update({
       where: { id: entry.id },
       data: {
         position,
@@ -388,7 +482,7 @@ export async function saveQueueOrder(
 }
 
 export type QueueMutationContext = {
-  tx: Prisma.TransactionClient
+  db: typeof prisma
   session: CheckoffSession
   entries: StoredQueueEntry[]
 }
@@ -397,33 +491,23 @@ export async function withQueueMutation<T>(
   sessionId: string,
   mutate: (context: QueueMutationContext) => Promise<T>,
 ): Promise<{ value: T; session: CheckoffSessionDto }> {
-  return prisma.$transaction(async (tx) => {
-    const session = await loadSession(tx, sessionId)
-    if (!session) throw queueError(404, 'SESSION_NOT_FOUND', '当前没有进行中的排队')
+  const session = await loadSession(sessionId)
+  if (!session) throw queueError(404, 'SESSION_NOT_FOUND', '当前没有进行中的排队')
 
-    const locked = await tx.checkoffSession.updateMany({
-      where: { id: session.id, revision: session.revision },
-      data: { revision: { increment: 1 } },
-    })
-    if (locked.count !== 1) {
-      throw queueError(409, 'QUEUE_CONFLICT', '队列已被其他人更新，请刷新后重试')
-    }
-
-    const entries = await loadEntries(tx, sessionId)
-    const value = await mutate({ tx, session, entries })
-    const fresh = await tx.checkoffSession.findUniqueOrThrow({ where: { id: sessionId } })
-    const dto = await buildSessionDto(tx, fresh)
-    return { value, session: dto }
-  })
+  const entries = await loadEntries(sessionId)
+  const value = await mutate({ db: prisma, session, entries })
+  const fresh = await prisma.checkoffSession.findUniqueOrThrow({ where: { id: sessionId } })
+  const dto = await buildSessionDto(fresh)
+  return { value, session: dto }
 }
 
 export async function withLatestQueueMutation<T>(
   classId: string,
   mutate: (context: QueueMutationContext) => Promise<T>,
 ): Promise<{ value: T; session: CheckoffSessionDto }> {
-  const latest = await getLatestQueueSession(classId)
-  if (!latest) throw queueError(404, 'SESSION_NOT_FOUND', '当前没有进行中的排队')
-  return withQueueMutation(latest.id, mutate)
+  const latestId = await getLatestQueueSessionId(classId)
+  if (!latestId) throw queueError(404, 'SESSION_NOT_FOUND', '当前没有进行中的排队')
+  return withQueueMutation(latestId, mutate)
 }
 
 export function assertQueueOpen(session: CheckoffSession): void {
@@ -431,18 +515,11 @@ export function assertQueueOpen(session: CheckoffSession): void {
 }
 
 export async function closeQueueSession(id: string): Promise<CheckoffSessionDto> {
-  return prisma.$transaction(async (tx) => {
-    const session = await loadSession(tx, id)
-    if (!session) throw queueError(404, 'SESSION_NOT_FOUND', '排队不存在')
-    if (session.closedAt) return buildSessionDto(tx, session)
+  const session = await loadSession(id)
+  if (!session) throw queueError(404, 'SESSION_NOT_FOUND', '排队不存在')
+  if (session.closedAt) return buildSessionDto(session)
 
-    const updated = await tx.checkoffSession.updateMany({
-      where: { id, revision: session.revision },
-      data: { closedAt: new Date(), revision: { increment: 1 } },
-    })
-    if (updated.count !== 1) {
-      throw queueError(409, 'QUEUE_CONFLICT', '队列已被其他人更新，请刷新后重试')
-    }
-    return buildSessionDto(tx, { ...session, closedAt: new Date() })
-  })
+  const closedAt = new Date()
+  await prisma.checkoffSession.update({ where: { id }, data: { closedAt } })
+  return buildSessionDto({ ...session, closedAt })
 }

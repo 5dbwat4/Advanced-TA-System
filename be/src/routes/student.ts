@@ -16,6 +16,7 @@ import {
   type StoredQueueEntry,
 } from '../lib/checkoff-queue.js'
 import { prisma } from '../lib/prisma.js'
+import { checkoffQueueUpdateLimit } from '../lib/rate-limit.js'
 import {
   emitCheckoffNotifiedCanceled,
   emitCheckoffQueueUpdate,
@@ -250,7 +251,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     })
   })
 
-  fastify.post('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
+  fastify.post('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole, checkoffQueueUpdateLimit] }, async (request, reply) => {
     const parsed = joinQueueSchema.safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -268,7 +269,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'NO_CLASS', message: '当前账号未绑定班级' })
     }
 
-    const { value: entry, session } = await withLatestQueueMutation(user.classId, async ({ tx, session, entries }) => {
+    const { value: entry, session } = await withLatestQueueMutation(user.classId, async ({ db, session, entries }) => {
       assertQueueOpen(session)
       const settings = parseSessionSettings(session.settings)
       const startTime = Date.parse(settings.startAt)
@@ -294,7 +295,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const position = entries.reduce((max, item) => Math.max(max, item.position + 1), 0)
-      const created = await tx.checkoffQueueEntry.create({
+      const created = await db.checkoffQueueEntry.create({
         data: {
           sessionId: session.id,
           userId: user.id,
@@ -304,7 +305,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
           status: 'waiting',
         },
       })
-      await saveQueueOrder(tx, [...entries, toStoredQueueEntry(created)])
+      await saveQueueOrder([...entries, toStoredQueueEntry(created)])
       return toQueueEntryDto(created)
     })
 
@@ -312,7 +313,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true, entry })
   })
 
-  fastify.patch('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
+  fastify.patch('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole, checkoffQueueUpdateLimit] }, async (request, reply) => {
     const parsed = patchQueueSchema.safeParse(request.body)
     if (!parsed.success) {
       return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
@@ -330,7 +331,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'NO_CLASS', message: '当前账号未绑定班级' })
     }
 
-    const { value: canceledEntry, session } = await withLatestQueueMutation(user.classId, async ({ tx, session, entries }) => {
+    const { value: canceledEntry, session } = await withLatestQueueMutation(user.classId, async ({ session, entries }) => {
       assertQueueOpen(session)
       const settings = parseSessionSettings(session.settings)
       const target = entries.find((entry) => entry.userId === user.id)
@@ -354,7 +355,6 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
           taId = action.taId
         }
         await saveQueueOrder(
-          tx,
           entries.map((entry) =>
             entry.userId === user.id ? { ...entry, experimentId: action.experimentId, taId } : entry,
           ),
@@ -379,7 +379,6 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       await saveQueueOrder(
-        tx,
         reordered.entries.map((entry) => {
           if (entry.userId !== user.id) return entry
           return {
@@ -401,7 +400,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true })
   })
 
-  fastify.delete('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole] }, async (request, reply) => {
+  fastify.delete('/checkoff-queue', { onRequest: [fastify.authenticate, requireStudentRole, checkoffQueueUpdateLimit] }, async (request, reply) => {
     const { sub } = request.user as { sub: string }
     const user = await prisma.user.findUnique({
       where: { id: sub },
@@ -414,7 +413,7 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({ error: 'NO_CLASS', message: '当前账号未绑定班级' })
     }
 
-    const { value: removed, session } = await withLatestQueueMutation(user.classId, async ({ tx, session, entries }) => {
+    const { value: removed, session } = await withLatestQueueMutation(user.classId, async ({ db, session, entries }) => {
       assertQueueOpen(session)
       const removed = entries.find((entry) => entry.userId === user.id)
       if (!removed) throw queueError(404, 'ENTRY_NOT_FOUND', '你不在队列中')
@@ -424,8 +423,8 @@ export const studentRoutes: FastifyPluginAsync = async (fastify) => {
       if (removed.status === 'called') {
         throw queueError(403, 'IN_PROGRESS', '正在验收，无法退出排队')
       }
-      await tx.checkoffQueueEntry.delete({ where: { id: removed.id } })
-      await saveQueueOrder(tx, entries.filter((entry) => entry.userId !== user.id))
+      await db.checkoffQueueEntry.delete({ where: { id: removed.id } })
+      await saveQueueOrder(entries.filter((entry) => entry.userId !== user.id))
       return removed
     })
 

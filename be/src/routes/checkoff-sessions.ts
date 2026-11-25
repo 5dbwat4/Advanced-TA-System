@@ -6,16 +6,19 @@ import {
   assertQueueOpen,
   closeQueueSession,
   getQueueSession,
+  getQueueSessions,
   migrateClassSessions,
   orderQueueEntries,
   parseSessionSettings,
   queueError,
   saveQueueOrder,
+  setLatestQueueSessionId,
   toCheckoffSessionDto,
   withQueueMutation,
   type StoredQueueEntry,
 } from '../lib/checkoff-queue.js'
 import { prisma } from '../lib/prisma.js'
+import { checkoffQueueUpdateLimit } from '../lib/rate-limit.js'
 import { emitCheckoffQueueUpdate } from '../lib/realtime.js'
 
 const idListSchema = z.array(z.string().trim().min(1)).max(5000)
@@ -228,16 +231,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(403).send({ error: 'FORBIDDEN', message: '无权访问该班级' })
       }
 
-      const sessions = await prisma.$transaction(async (tx) => {
-        const rows = await tx.checkoffSession.findMany({
-          where: { classId: parsed.data.classId },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        })
-        const result = []
-        for (const row of rows) result.push(await toCheckoffSessionDto(tx, row))
-        return result
-      })
+      const sessions = await getQueueSessions(parsed.data.classId)
 
       return reply.send({ sessions })
     },
@@ -262,26 +256,25 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_SETTINGS', message: normalized.message })
       }
 
-      const session = await prisma.$transaction(async (tx) => {
-        await tx.class.update({
-          where: { id: parsed.data.classId },
-          data: { updatedAt: new Date() },
-        })
-        const existing = await migrateClassSessions(tx, parsed.data.classId)
-        if (existing.some((item) => !item.closedAt)) {
-          throw queueError(409, 'ACTIVE_SESSION_EXISTS', '当前已有未结束的排队，请先结束旧排队')
-        }
-        const created = await tx.checkoffSession.create({
-          data: {
-            classId: parsed.data.classId,
-            settings: JSON.stringify(normalized.settings),
-            stats: JSON.stringify({ entries: [] }),
-            queueMigratedAt: new Date(),
-          },
-        })
-        return toCheckoffSessionDto(tx, created)
+      await prisma.class.update({
+        where: { id: parsed.data.classId },
+        data: { updatedAt: new Date() },
       })
+      const existing = await migrateClassSessions(parsed.data.classId)
+      if (existing.some((item) => !item.closedAt)) {
+        throw queueError(409, 'ACTIVE_SESSION_EXISTS', '当前已有未结束的排队，请先结束旧排队')
+      }
+      const created = await prisma.checkoffSession.create({
+        data: {
+          classId: parsed.data.classId,
+          settings: JSON.stringify(normalized.settings),
+          stats: JSON.stringify({ entries: [] }),
+          queueMigratedAt: new Date(),
+        },
+      })
+      const session = await toCheckoffSessionDto(created)
 
+      setLatestQueueSessionId(parsed.data.classId, session.id)
       emitCheckoffQueueUpdate(parsed.data.classId, session.id)
       return reply.code(201).send({ session })
     },
@@ -297,7 +290,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const existing = await getQueueSession(params.data.id)
+      const existing = await getQueueSession(params.data.id, { fresh: true })
       if (!existing) {
         return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '排队不存在' })
       }
@@ -314,9 +307,9 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_SETTINGS', message: normalized.message })
       }
 
-      const { session } = await withQueueMutation(params.data.id, async ({ tx, session }) => {
+      const { session } = await withQueueMutation(params.data.id, async ({ db, session }) => {
         assertQueueOpen(session)
-        await tx.checkoffSession.update({
+        await db.checkoffSession.update({
           where: { id: session.id },
           data: { settings: JSON.stringify(normalized.settings) },
         })
@@ -328,7 +321,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.patch(
     '/:id/queue',
-    { onRequest: [fastify.authenticate, requireStaffRole] },
+    { onRequest: [fastify.authenticate, requireStaffRole, checkoffQueueUpdateLimit] },
     async (request, reply) => {
       const params = z.object({ id: z.string().min(1) }).safeParse(request.params)
       const parsed = queueActionSchema.safeParse(request.body)
@@ -336,7 +329,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const existing = await getQueueSession(params.data.id)
+      const existing = await getQueueSession(params.data.id, { fresh: true })
       if (!existing) {
         return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '排队不存在' })
       }
@@ -347,7 +340,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const action = parsed.data
       const { sub } = request.user as { sub: string }
-      const { session } = await withQueueMutation(params.data.id, async ({ tx, session, entries: current }) => {
+      const { session } = await withQueueMutation(params.data.id, async ({ db, session, entries: current }) => {
         assertQueueOpen(session)
         const selected = new Set(
           action.action === 'reorder' || action.action === 'requeue' || action.action === 'finish'
@@ -360,14 +353,14 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
 
         let notifiedByName: string | null = null
         if (action.action === 'precall' && action.called) {
-          const me = await tx.user.findUnique({ where: { id: sub }, select: { name: true } })
+          const me = await db.user.findUnique({ where: { id: sub }, select: { name: true } })
           notifiedByName = me?.name ?? null
         }
 
         let entries = current
         if (action.action === 'remove') {
           entries = entries.filter((entry) => !selected.has(entry.userId))
-          await tx.checkoffQueueEntry.deleteMany({
+          await db.checkoffQueueEntry.deleteMany({
             where: { sessionId: session.id, userId: { in: [...selected] } },
           })
         } else if (action.action === 'precall') {
@@ -447,7 +440,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
           entries = movable.size > 0 ? moveEntries(entries, movable, action.direction) : entries
         }
 
-        await saveQueueOrder(tx, entries)
+        await saveQueueOrder(entries)
       })
 
       emitCheckoffQueueUpdate(session.classId, session.id)
@@ -464,7 +457,7 @@ export const checkoffSessionsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: 'INVALID_BODY', message: '请求参数不正确' })
       }
 
-      const existing = await getQueueSession(params.data.id)
+      const existing = await getQueueSession(params.data.id, { fresh: true })
       if (!existing) {
         return reply.code(404).send({ error: 'SESSION_NOT_FOUND', message: '排队不存在' })
       }

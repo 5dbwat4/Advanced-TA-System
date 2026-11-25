@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import Icons from 'unplugin-icons/vite'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 
 import { createAssetRouting } from './plugins/asset-routing.ts'
 import { buildInfo } from './plugins/build-info.ts'
@@ -20,9 +20,8 @@ function packageChunkName(moduleId: string): string | null {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '')
-  const routing = createAssetRouting(env.ASSETS_CDN, env.ASSETS_ORIGIN_MAX_BYTES)
+export default defineConfig(() => {
+  const routing = createAssetRouting()
 
   return {
     plugins: [
@@ -30,9 +29,8 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       Icons({ compiler: 'jsx', jsx: 'react', autoInstall: false }),
       buildInfo(),
-      routing.plugin(),
       bootProgress(routing),
-      serviceWorker(routing),
+      serviceWorker(),
       htmlMinify(),
     ],
     resolve: {

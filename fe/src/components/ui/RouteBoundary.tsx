@@ -25,7 +25,7 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
           <div className="max-w-md text-center">
             <h2 className="text-lg font-semibold">此页面暂时无法加载</h2>
             <p className="mt-2 text-sm text-fg-muted">
-              可能是网络超时或资源版本变化。重试只刷新当前标签页，不会影响其他页面。
+              可能是网络超时或资源版本变化。
             </p>
             <Button className="mt-5" onPress={() => window.location.reload()}>
               刷新当前页重试

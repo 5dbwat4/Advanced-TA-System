@@ -67,6 +67,12 @@ export type CriteriaSummary = {
   classId: string | null
   className: string | null
   visibility: CriteriaVisibility
+  creator: {
+    id: string
+    name: string
+    username: string | null
+    avatar: number | null
+  }
   canManage: boolean
   createdAt: string
   updatedAt: string

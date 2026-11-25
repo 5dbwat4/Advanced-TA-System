@@ -2,11 +2,7 @@ const VERSION = '__BUILD_VERSION__'
 const STATIC_CACHE = 'tasaas-static'
 const SCOPE = self.registration.scope
 const ASSETS_PATH = new URL('assets/', SCOPE).pathname
-const CDN_ASSET_PREFIX = '__CDN_ASSET_PREFIX__'
-const LEGACY_CDN_ASSET_PREFIX = CDN_ASSET_PREFIX
-const CDN_TIMEOUT_MS = 8000
 const ORIGIN_TIMEOUT_MS = 8000
-const CDN_CIRCUIT_MS = 30000
 const MAX_CACHE_ENTRIES = 600
 const MAX_PRELOAD_ASSETS = 8
 const API_PREFIXES = ['/api', '/socket.io', '/mcp']
@@ -14,24 +10,13 @@ const GRADE_TAG = 'tasaas-grade-updates'
 
 const inFlight = new Map()
 const diagnosticTimes = new Map()
-let cdnFailures = 0
-let cdnCircuitUntil = 0
 let originActive = 0
 const originQueue = []
 let cacheWrites = 0
 let preloadState = { done: 0, total: 0, failed: 0, complete: true }
 
-function cdnPrefix(url) {
-  if (CDN_ASSET_PREFIX && url.href.startsWith(CDN_ASSET_PREFIX)) return CDN_ASSET_PREFIX
-  if (LEGACY_CDN_ASSET_PREFIX && url.href.startsWith(LEGACY_CDN_ASSET_PREFIX)) {
-    return LEGACY_CDN_ASSET_PREFIX
-  }
-  return null
-}
-
-function managedRoute(url) {
-  if (url.origin === self.location.origin && url.pathname.startsWith(ASSETS_PATH)) return 'origin'
-  return cdnPrefix(url) ? 'cdn' : null
+function isManagedAsset(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith(ASSETS_PATH)
 }
 
 function isCacheable(response, url) {
@@ -103,76 +88,23 @@ function releaseOriginSlot() {
   if (next) next()
 }
 
-async function fetchOrigin(request, url, prefix) {
-  const relative = url.href.slice(prefix.length)
-  const fallbackUrl = new URL(relative, SCOPE).href
-  const fallbackRequest = new Request(fallbackUrl, request)
+async function fetchOrigin(request) {
   await acquireOriginSlot()
   try {
-    return await fetchWithTimeout(fallbackRequest, ORIGIN_TIMEOUT_MS)
+    return await fetchWithTimeout(request, ORIGIN_TIMEOUT_MS)
   } finally {
     releaseOriginSlot()
   }
 }
 
-async function fetchCdn(request, url) {
-  if (Date.now() < cdnCircuitUntil) throw new Error('CDN_CIRCUIT_OPEN')
-  try {
-    const corsRequest = new Request(request, { mode: 'cors', credentials: 'omit' })
-    const response = await fetchWithTimeout(corsRequest, CDN_TIMEOUT_MS)
-    if (!response.ok) {
-      await response.body?.cancel()
-      throw new Error('CDN_HTTP_' + response.status)
-    }
-    if (!isCacheable(response, url)) {
-      await response.body?.cancel()
-      throw new Error('CDN_INVALID_RESPONSE')
-    }
-    cdnFailures = 0
-    cdnCircuitUntil = 0
-    return response
-  } catch (error) {
-    cdnFailures += 1
-    if (cdnFailures >= 2) {
-      cdnCircuitUntil = Date.now() + CDN_CIRCUIT_MS
-      diagnostic('cdn_circuit_open', { url: request.url, until: cdnCircuitUntil })
-    } else {
-      diagnostic('cdn_resource_failed', { url: request.url, message: String(error) })
-    }
-    throw error
-  }
-}
-
-async function loadAsset(request, url, cache, route, event) {
-  let response
-  let usedOriginFallback = false
-  const prefix = route === 'cdn' ? cdnPrefix(url) : null
-  if (route === 'cdn' && prefix) {
-    try {
-      response = await fetchCdn(request, url)
-    } catch (cdnError) {
-      try {
-        response = await fetchOrigin(request, url, prefix)
-        usedOriginFallback = true
-      } catch (originError) {
-        diagnostic('resource_load_failed', {
-          url: request.url,
-          cdnError: String(cdnError),
-          originError: String(originError),
-        })
-        throw originError
-      }
-    }
-  } else {
-    response = await fetchWithTimeout(request, ORIGIN_TIMEOUT_MS)
-  }
+async function loadAsset(request, url, cache, event) {
+  const response = await fetchOrigin(request)
 
   if (!isCacheable(response, url)) {
     await response.body?.cancel()
     diagnostic('resource_response_rejected', { url: request.url, status: response.status })
     throw new Error('INVALID_ASSET_RESPONSE')
   }
-  if (usedOriginFallback) diagnostic('origin_fallback_success', { url: request.url }, 300000)
 
   const write = (async () => {
     await cache.put(request, response.clone())
@@ -188,8 +120,7 @@ async function loadAsset(request, url, cache, route, event) {
 
 async function serveAsset(request, event) {
   const url = new URL(request.url)
-  const route = managedRoute(url)
-  if (!route) return fetch(request)
+  if (!isManagedAsset(url)) return fetch(request)
   const cache = await caches.open(STATIC_CACHE)
   const cached = await readCache(cache, request, url)
   if (cached) return cached
@@ -197,7 +128,7 @@ async function serveAsset(request, event) {
   let task = inFlight.get(request.url)
   const owner = !task
   if (!task) {
-    task = loadAsset(request, url, cache, route, event)
+    task = loadAsset(request, url, cache, event)
     inFlight.set(request.url, task)
   }
   try {
@@ -211,18 +142,13 @@ async function serveAsset(request, event) {
 async function preload(urls) {
   const selected = [...new Set(urls)].filter((raw) => {
     try {
-      return managedRoute(new URL(raw, SCOPE)) !== null
+      return isManagedAsset(new URL(raw, SCOPE))
     } catch {
       return false
     }
   }).slice(0, MAX_PRELOAD_ASSETS)
   preloadState = { done: 0, total: selected.length, failed: 0, complete: selected.length === 0 }
   for (const raw of selected) {
-    if (Date.now() < cdnCircuitUntil) {
-      preloadState.failed += 1
-      preloadState.done += 1
-      continue
-    }
     try {
       const request = new Request(new URL(raw, SCOPE).href, { credentials: 'same-origin' })
       const response = await serveAsset(request, null)
@@ -293,7 +219,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin && API_PREFIXES.some((prefix) =>
     url.pathname === prefix || url.pathname.startsWith(prefix + '/'),
   )) return
-  if (!managedRoute(url)) return
+  if (!isManagedAsset(url)) return
   event.respondWith(serveAsset(request, event))
 })
 

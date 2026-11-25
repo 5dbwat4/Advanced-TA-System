@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { minifySync } from 'vite'
 import type { Plugin } from 'vite'
 
-import { joinUrl, type AssetRouting } from './asset-routing.ts'
+import { joinUrl } from './asset-routing.ts'
 
 const swDir = fileURLToPath(new URL('./service-worker', import.meta.url))
 const SW_FILE = 'sw.js'
@@ -50,7 +50,7 @@ function listPublicFiles(dir: string): Array<{ rel: string; size: number }> {
   return files
 }
 
-export function serviceWorker(routing: AssetRouting): Plugin {
+export function serviceWorker(): Plugin {
   let base = '/'
   let publicDir = ''
   let emitted = false
@@ -76,15 +76,12 @@ export function serviceWorker(routing: AssetRouting): Plugin {
 
         const bundle = (ctx.bundle || {}) as Record<string, unknown>
         const seen = new Set<string>()
-        const assets: Array<{ u: string; s: number | null; r: 'cdn' | 'origin' }> = []
-        const addAsset = (filename: string, size: number | null, route?: 'cdn' | 'origin') => {
-          const resolvedRoute = route ?? routing.routeForSize(size)
-          const url = resolvedRoute === 'cdn'
-            ? joinUrl(routing.assetsCdn, filename)
-            : joinUrl(base, filename)
+        const assets: Array<{ u: string; s: number | null }> = []
+        const addAsset = (filename: string, size: number | null) => {
+          const url = joinUrl(base, filename)
           if (seen.has(url)) return
           seen.add(url)
-          assets.push({ u: url, s: size, r: resolvedRoute })
+          assets.push({ u: url, s: size })
         }
 
         for (const key of Object.keys(bundle)) {
@@ -96,24 +93,24 @@ export function serviceWorker(routing: AssetRouting): Plugin {
           ) continue
           addAsset(key, bundleSize(bundle, key))
         }
-        for (const file of listPublicFiles(publicDir)) addAsset(file.rel, file.size, 'origin')
+        for (const file of listPublicFiles(publicDir)) addAsset(file.rel, file.size)
 
         const runtimeSource = fs.readFileSync(path.join(swDir, 'runtime-bootstrap.js'), 'utf8')
         const version = hash(JSON.stringify({ assets, html, runtimeSource }), 16)
         const swSource = fs
           .readFileSync(path.join(swDir, SW_FILE), 'utf8')
           .replace(/__BUILD_VERSION__/g, () => version)
-          .replace(/__CDN_ASSET_PREFIX__/g, () => routing.cdnAssetPrefix)
 
-        this.emitFile({ type: 'asset', fileName: SW_FILE, source: minify(SW_FILE, swSource) })
-        this.emitFile({
+        const context = this as unknown as {
+          emitFile: (asset: { type: 'asset'; fileName: string; source: string }) => void
+        }
+        context.emitFile({ type: 'asset', fileName: SW_FILE, source: minify(SW_FILE, swSource) })
+        context.emitFile({
           type: 'asset',
           fileName: MANIFEST_FILE,
           source: JSON.stringify({
             v: version,
             base,
-            cdnAssetPrefix: routing.cdnAssetPrefix || null,
-            originMaxBytes: routing.originMaxBytes,
             assets,
           }),
         })

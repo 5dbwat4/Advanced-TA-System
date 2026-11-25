@@ -30,13 +30,12 @@ function bundleSize(entry: BundleEntry): number {
   return Buffer.byteLength(typeof source === 'string' ? source : Buffer.from(source))
 }
 
-function criticalHrefs(html: string, cdnAssetPrefix: string): {
+function criticalHrefs(html: string): {
   entry: string | null
   styles: string[]
   preloads: string[]
 } {
-  const managed = (url: string) =>
-    !/^https?:\/\//i.test(url) || Boolean(cdnAssetPrefix && url.startsWith(cdnAssetPrefix))
+  const managed = (url: string) => !/^https?:\/\//i.test(url)
   let entry: string | null = null
   const styles: string[] = []
   const preloads: string[] = []
@@ -75,11 +74,11 @@ export function bootProgress(routing: AssetRouting): Plugin {
       order: 'post',
       handler(html, ctx) {
         const bundle = (ctx.bundle || {}) as Record<string, BundleEntry>
-        const { entry, styles, preloads } = criticalHrefs(html, routing.cdnAssetPrefix)
+        const { entry, styles, preloads } = criticalHrefs(html)
 
         const keyByUrl = new Map<string, string>()
         for (const key of Object.keys(bundle)) {
-          keyByUrl.set(routing.urlForFile(base, key, bundleSize(bundle[key])), key)
+          keyByUrl.set(routing.urlForFile(base, key), key)
         }
 
         const assets: Array<{ u: string; s: number }> = []
@@ -91,7 +90,7 @@ export function bootProgress(routing: AssetRouting): Plugin {
           if (!output) return
           seen.add(key)
           const size = bundleSize(output)
-          assets.push({ u: routing.urlForFile(base, key, size), s: size })
+          assets.push({ u: routing.urlForFile(base, key), s: size })
           if (output.type === 'chunk') {
             for (const imported of output.imports ?? []) addKey(imported)
             for (const css of output.viteMetadata?.importedCss ?? []) addKey(css)
@@ -110,7 +109,7 @@ export function bootProgress(routing: AssetRouting): Plugin {
 
         if (assets.length === 0) return html
 
-        const entryUrl = entryKey ? routing.urlForFile(base, entryKey, bundleSize(bundle[entryKey])) : ''
+        const entryUrl = entryKey ? routing.urlForFile(base, entryKey) : ''
         const data = JSON.stringify(assets).replace(/</g, '\\u003c')
         const entryData = JSON.stringify(entryUrl).replace(/</g, '\\u003c')
         const script = `<script>window.__BOOT_ASSETS__=${data};window.__BOOT_ENTRY__=${entryData}</script>`

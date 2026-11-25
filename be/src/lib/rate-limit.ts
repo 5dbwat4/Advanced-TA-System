@@ -2,6 +2,8 @@
  * 极简内存级滑动窗口限流（按 key，如 token id、IP）。
  * 单实例部署足够；多实例需换成共享存储。
  */
+import type { FastifyReply, FastifyRequest } from 'fastify'
+
 type Bucket = { count: number; resetAt: number }
 
 const DEFAULT_WINDOW_MS = 60_000
@@ -43,3 +45,26 @@ export function checkRateLimit(
 
 /** 登录类接口限流预设：每 key 每分钟 10 次 */
 export const loginRateLimit = (key: string) => checkRateLimit(key, { windowMs: 60_000, max: 10 })
+
+/**
+ * checkoff 队列更新限流：仅学生身份生效，5 秒内至多一次；
+ * 助教 / 教师等其他角色不限制。
+ */
+export async function checkoffQueueUpdateLimit(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<FastifyReply | void> {
+  const { sub, role } = (request.user ?? {}) as { sub?: string; role?: string }
+  if (role !== 'STUDENT' || !sub) return
+
+  const { ok, retryAfterSec } = checkRateLimit(`checkoff-queue:update:${sub}`, {
+    windowMs: 5_000,
+    max: 1,
+  })
+  if (!ok) {
+    return reply
+      .code(429)
+      .header('Retry-After', String(retryAfterSec))
+      .send({ error: 'RATE_LIMITED', message: '操作过于频繁，请稍后再试' })
+  }
+}

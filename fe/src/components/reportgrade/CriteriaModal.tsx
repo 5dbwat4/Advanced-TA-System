@@ -1,13 +1,15 @@
 import { Button, Input, Modal, useOverlayState } from '@heroui/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import ClipboardList from '~icons/lucide/clipboard-list'
 import FileDown from '~icons/lucide/file-down'
 import { CriteriaPreview } from '@/components/criteria/CriteriaPreview'
+import { CriteriaRow } from '@/components/criteria/CriteriaRow'
 import type { CriterionItem } from '@/components/criteria/types'
 import { PendingButton } from '@/components/ui/PendingButton'
-import { fetchCriteria } from '@/lib/api'
+import { SkeletonList } from '@/components/ui/SkeletonList'
+import { fetchCriteria, fetchCriteriaList, type CriteriaSummary } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 
 import { saveLocalDefaultRule, type LocalDefaultRule } from './default-rule'
@@ -33,9 +35,33 @@ export function CriteriaModal({
   const [loading, setLoading] = useState(false)
   const [loadedCriteria, setLoadedCriteria] = useState<CriterionItem[] | null>(null)
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const [list, setList] = useState<CriteriaSummary[]>([])
+  const [listLoading, setListLoading] = useState(false)
 
-  const loadCriteria = async () => {
-    const code = shareCode.trim().toLowerCase()
+  useEffect(() => {
+    if (!state.isOpen) return
+    setShareCode('')
+    setLoadedCriteria(null)
+    setLoadedKey(null)
+    let cancelled = false
+    setListLoading(true)
+    fetchCriteriaList()
+      .then((res) => {
+        if (!cancelled) setList(res.criteria)
+      })
+      .catch(() => {
+        if (!cancelled) setList([])
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [state.isOpen])
+
+  const loadCriteria = async (rawCode?: string) => {
+    const code = (rawCode ?? shareCode).trim().toLowerCase()
     if (!/^[0-9a-f]{48}$/.test(code)) {
       toast.error('分享码格式不正确')
       return
@@ -59,6 +85,11 @@ export function CriteriaModal({
     } finally {
       setLoading(false)
     }
+  }
+
+  const selectCriteria = (item: CriteriaSummary) => {
+    setShareCode(item.key)
+    void loadCriteria(item.key)
   }
 
   const confirmCriteria = () => {
@@ -110,6 +141,26 @@ export function CriteriaModal({
                   加载
                 </PendingButton>
               </div>
+              {shareCode.trim() === '' && (
+                <div className="flex max-h-[45vh] min-h-0 flex-col gap-2 overflow-auto">
+                  {listLoading ? (
+                    <SkeletonList rows={3} className="h-14 rounded-xl" />
+                  ) : list.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-line py-6 text-center text-xs text-fg-subtle">
+                      暂无可见的评分标准
+                    </p>
+                  ) : (
+                    list.map((item) => (
+                      <CriteriaRow
+                        key={item.key}
+                        item={item}
+                        onSelect={selectCriteria}
+                        onView={selectCriteria}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
               {loadedCriteria && (
                 <>
                   <CriteriaPreview items={loadedCriteria} />
